@@ -18,10 +18,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!credentials?.email || !credentials?.password) {
           return null
         }
+        
+        const normalizedEmail = (credentials.email as string).toLowerCase()
 
         const user = await db.user.findUnique({
           where: {
-            email: credentials.email as string
+            email: normalizedEmail
           }
         })
 
