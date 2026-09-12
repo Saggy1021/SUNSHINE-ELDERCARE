@@ -20,6 +20,7 @@ model User {
   image         String?
   passwordHash  String?
   role          String    @default("USER") // USER or ADMIN
+  sessionVersion Int      @default(0)
   accounts      Account[]
   sessions      Session[]
   subscriptions Subscription[]

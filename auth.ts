@@ -45,13 +45,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: user.email,
           name: user.name,
           role: user.role,
+          sessionVersion: user.sessionVersion,
         }
       }
     })
   ],
   callbacks: {
     async session({ session, token }) {
-      if (token.sub && session.user) {
+      if (token.sub && session.user && token.role) {
         session.user.id = token.sub
         session.user.role = token.role as string
       }
@@ -60,7 +61,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         token.role = user.role
+        token.sessionVersion = (user as any).sessionVersion
       }
+
+      // Authoritative DB lookup to prevent stale roles and enforce password-reset invalidation
+      if (token.sub) {
+        const dbUser = await db.user.findUnique({
+          where: { id: token.sub },
+          select: { role: true, sessionVersion: true }
+        })
+
+        // Invalidate session if user deleted or sessionVersion incremented (e.g., password reset)
+        if (!dbUser || dbUser.sessionVersion !== token.sessionVersion) {
+          // Returning an empty token effectively revokes the session
+          return {} as any
+        }
+
+        // Sync with authoritative role
+        token.role = dbUser.role
+      }
+
       return token
     }
   },

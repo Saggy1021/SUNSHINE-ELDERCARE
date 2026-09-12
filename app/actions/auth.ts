@@ -142,7 +142,10 @@ export async function resetPassword(formData: FormData) {
 
     await db.user.update({
       where: { email },
-      data: { passwordHash }
+      data: { 
+        passwordHash,
+        sessionVersion: { increment: 1 } 
+      }
     })
 
     await db.verificationToken.delete({
