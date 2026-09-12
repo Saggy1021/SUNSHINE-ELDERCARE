@@ -1,0 +1,250 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Auth.js Models ---
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  role          String    @default("USER") // USER or ADMIN
+  accounts      Account[]
+  sessions      Session[]
+  subscriptions Subscription[]
+  orders        Order[]
+  invoices      Invoice[]
+  elders        Elder[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?  @db.Text
+  access_token       String?  @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?  @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// --- Domain Models ---
+
+model Plan {
+  id                String   @id @default(cuid())
+  name              String
+  slug              String   @unique
+  description       String?
+  price             Float
+  currency          String   @default("INR")
+  billingType       String   @default("RECURRING") // RECURRING or ONE_TIME
+  billingInterval   String?  // MONTHLY, ANNUAL, etc.
+  taxClassification String?  // e.g., EXEMPT, STANDARD_GST
+  active            Boolean  @default(true)
+  metadata          Json?
+  
+  addOns            PlanAddOn[]
+  subscriptions     Subscription[]
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model AddOn {
+  id                String   @id @default(cuid())
+  name              String
+  description       String?
+  price             Float
+  pricingType       String   @default("RECURRING") // RECURRING or ONE_TIME
+  taxClassification String?
+  active            Boolean  @default(true)
+  
+  plans             PlanAddOn[]
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model PlanAddOn {
+  id               String   @id @default(cuid())
+  planId           String
+  addOnId          String
+  
+  plan             Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  addOn            AddOn    @relation(fields: [addOnId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, addOnId])
+}
+
+model TaxRule {
+  id               String   @id @default(cuid())
+  taxCode          String   @unique // e.g., STANDARD_GST_18
+  taxName          String
+  rate             Float    // e.g., 18.0
+  taxType          String   // e.g., GST
+  applicability    String   // e.g., ALL, INTRA_STATE, INTER_STATE
+  active           Boolean  @default(true)
+  effectiveFrom    DateTime?
+  effectiveUntil   DateTime?
+  
+  metadata         Json?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Elder {
+  id               String   @id @default(cuid())
+  userId           String   // The Customer/Payer
+  firstName        String
+  lastName         String
+  dateOfBirth      DateTime?
+  gender           String?
+  medicalNotes     String?  @db.Text
+  address          String?  @db.Text
+  city             String?
+  
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model CareAssessment {
+  id               String   @id @default(cuid())
+  customerName     String
+  customerPhone    String
+  customerEmail    String
+  elderName        String?
+  city             String?
+  requirements     String   @db.Text
+  preferredService String?
+  urgency          String?
+  notes            String?  @db.Text
+  status           String   @default("NEW") // NEW, REVIEWING, QUOTED, CLOSED
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Invoice {
+  id               String   @id @default(cuid())
+  invoiceNumber    String   @unique
+  userId           String
+  planId           String?
+  
+  subtotal         Float
+  taxAmount        Float
+  total            Float
+  currency         String   @default("INR")
+  
+  status           String   @default("DRAFT") // DRAFT, ISSUED, PAID, VOID
+  paymentStatus    String   @default("UNPAID") // UNPAID, PAID, FAILED
+  
+  issueDate        DateTime @default(now())
+  dueDate          DateTime?
+  paidDate         DateTime?
+  
+  paymentReference String?
+  
+  user             User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  
+  lineItems        InvoiceLineItem[]
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model InvoiceLineItem {
+  id                String   @id @default(cuid())
+  invoiceId         String
+  
+  description       String
+  quantity          Int      @default(1)
+  unitPrice         Float
+  discount          Float    @default(0)
+  taxClassification String?
+  taxRateApplied    Float    @default(0)
+  taxAmount         Float    @default(0)
+  lineTotal         Float
+  
+  invoice           Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+model Subscription {
+  id               String   @id @default(cuid())
+  userId           String
+  planId           String
+  status           String   @default("PENDING") // PENDING, ACTIVE, CANCELLED
+  providerSubId    String?  @unique // Provider-independent external reference
+  currentPeriodEnd DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Order {
+  id              String   @id @default(cuid())
+  userId          String
+  amount          Float
+  status          String   @default("PENDING") // PENDING, SUCCESS, FAILED
+  providerOrderId String?  @unique // Provider-independent external reference
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Inquiry {
+  id        String   @id @default(cuid())
+  fullName  String
+  phone     String
+  email     String
+  city      String?
+  message   String   @db.Text
+  status    String   @default("NEW") // NEW, IN_PROGRESS, RESOLVED
+
+  createdAt DateTime @default(now())
+}

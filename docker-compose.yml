@@ -1,0 +1,40 @@
+# docker-compose.yml — Local Development Database Only
+#
+# This file is for LOCAL DEVELOPMENT ONLY.
+# Do NOT use this for production deployment.
+# Production must use a managed PostgreSQL provider (e.g., Neon, RDS, Supabase).
+#
+# Usage:
+#   docker compose up -d        # Start the database in the background
+#   docker compose down         # Stop the database
+#   docker compose down -v      # Stop and remove all data (clean slate)
+#
+# After starting, run:
+#   npx prisma migrate deploy   # Apply migrations
+#   npx prisma db seed          # Seed development data (optional)
+
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sunshine_eldercare_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sankalp
+      POSTGRES_PASSWORD: localdevpassword
+      POSTGRES_DB: sankalp
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sankalp -d sankalp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  postgres_data:
+    driver: local
