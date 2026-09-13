@@ -1,8 +1,16 @@
 import { db } from '@/lib/db'
 import { PricingCalculationResult } from '../pricing'
-import { TaxCalculationResult } from '../tax'
+import { TaxCalculationResult, CarePlanTaxResult } from '../tax'
+import { CarePlanLookupResult } from '../care-plans'
+import { Prisma } from '@prisma/client'
 
 export class InvoiceService {
+  private generateUniqueInvoiceNumber(): string {
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    return `INV-${timestamp}-${random}`;
+  }
+
   /**
    * Creates an immutable invoice from calculated pricing and tax results.
    * This locks the price and tax so historical changes don't affect it.
@@ -13,39 +21,109 @@ export class InvoiceService {
     tax: TaxCalculationResult,
     planId?: string
   ) {
-    const invoiceNumber = `INV-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const maxRetries = 3;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const invoiceNumber = this.generateUniqueInvoiceNumber();
 
-    const invoice = await db.invoice.create({
-      data: {
-        invoiceNumber,
-        userId,
-        planId,
-        subtotal: tax.subtotal,
-        taxAmount: tax.taxAmount,
-        total: tax.total,
-        currency: pricing.currency,
-        status: 'DRAFT',
-        paymentStatus: 'UNPAID',
-        lineItems: {
-          create: pricing.lineItems.map(item => ({
-            description: item.description,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            lineTotal: item.total,
-            // In a real app, each line item might have its own calculated tax.
-            // For simplicity here, we distribute the total tax or mark it on the main plan.
-            taxClassification: item.taxClassification || tax.taxClassification,
-            taxRateApplied: tax.taxRateApplied,
-            taxAmount: (item.total / pricing.subtotal) * tax.taxAmount // Pro-rated tax
-          }))
+        const invoice = await db.invoice.create({
+          data: {
+            invoiceNumber,
+            userId,
+            planId,
+            subtotal: tax.subtotal,
+            taxAmount: tax.taxAmount,
+            total: tax.total,
+            currency: pricing.currency,
+            status: 'DRAFT',
+            paymentStatus: 'UNPAID',
+            lineItems: {
+              create: pricing.lineItems.map(item => ({
+                description: item.description,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                lineTotal: item.total,
+                taxClassification: item.taxClassification || tax.taxClassification,
+                taxRateApplied: tax.taxRateApplied,
+                taxAmount: (item.total / pricing.subtotal) * tax.taxAmount
+              }))
+            }
+          },
+          include: {
+            lineItems: true
+          }
+        });
+
+        return invoice;
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002' && attempt < maxRetries - 1) {
+          continue;
         }
-      },
-      include: {
-        lineItems: true
+        throw error;
       }
-    });
+    }
+    throw new Error('Failed to generate a unique invoice number after maximum retries');
+  }
 
-    return invoice;
+  /**
+   * Creates an immutable invoice from authoritative CarePlan pricing and tax data.
+   * Completely ignores client submissions for prices.
+   */
+  async createCarePlanInvoice(
+    userId: string,
+    pricing: CarePlanLookupResult,
+    tax: CarePlanTaxResult,
+  ) {
+    const maxRetries = 3;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const invoiceNumber = this.generateUniqueInvoiceNumber();
+
+        const invoice = await db.invoice.create({
+          data: {
+            invoiceNumber,
+            userId,
+            planId: pricing.planSlug,
+            subtotal: tax.subtotal !== null ? new Prisma.Decimal(tax.subtotal) : null,
+            taxAmount: tax.taxAmount !== null ? new Prisma.Decimal(tax.taxAmount) : null,
+            total: new Prisma.Decimal(tax.total),
+            currency: 'INR',
+            status: 'DRAFT',
+            paymentStatus: 'UNPAID',
+            lineItems: {
+              create: [{
+                description: `${pricing.planName} - ${pricing.variantType} (${pricing.months} Month${pricing.months > 1 ? 's' : ''})`,
+                planName: pricing.planName,
+                variantType: pricing.variantType,
+                durationMonths: pricing.months,
+                discountNote: pricing.discountNote,
+                quantity: 1,
+                unitPrice: new Prisma.Decimal(tax.subtotal ?? tax.total),
+                discount: new Prisma.Decimal(0),
+                taxClassification: 'CARE_PLAN_GST',
+                taxRateApplied: tax.taxRateApplied !== null ? new Prisma.Decimal(tax.taxRateApplied) : new Prisma.Decimal(0),
+                taxAmount: tax.taxAmount !== null ? new Prisma.Decimal(tax.taxAmount) : null,
+                lineTotal: new Prisma.Decimal(tax.total)
+              }]
+            }
+          },
+          include: {
+            lineItems: true
+          }
+        });
+
+        return invoice;
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002' && attempt < maxRetries - 1) {
+          // Collision on unique constraint (invoiceNumber). Retry.
+          continue;
+        }
+        throw error;
+      }
+    }
+    
+    throw new Error('Failed to generate a unique invoice number after maximum retries');
   }
 }
 

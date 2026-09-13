@@ -1,5 +1,13 @@
 import { db } from '@/lib/db'
 import { PricingCalculationResult } from '../pricing'
+import { CarePlanLookupResult } from '../care-plans'
+
+export interface CarePlanTaxResult {
+  subtotal: number | null;
+  taxAmount: number | null;
+  total: number;
+  taxRateApplied: number | null;
+}
 
 export interface TaxCalculationResult {
   subtotal: number;
@@ -48,6 +56,31 @@ export class TaxService {
       total,
       taxClassification: taxRule.taxCode,
       taxRateApplied,
+    };
+  }
+
+  /**
+   * Applies tax rules to CarePlan packages based strictly on documented values.
+   * - 1-month packages have explicit Base + GST.
+   * - 3/6/12-month packages have only a Total, so subtotal and taxAmount are null.
+   */
+  async calculateCarePlanTax(pricingResult: CarePlanLookupResult): Promise<CarePlanTaxResult> {
+    if (pricingResult.months === 1) {
+      return {
+        subtotal: pricingResult.monthlyBasePrice,
+        taxAmount: pricingResult.monthlyGst,
+        total: pricingResult.monthlyTotal,
+        taxRateApplied: 18.0, // Known from the catalog explicitly
+      };
+    }
+
+    // For 3, 6, and 12-month packages, the source document provides the package total.
+    // It does not explicitly separate GST, so we do NOT fabricate it.
+    return {
+      subtotal: null,
+      taxAmount: null,
+      total: pricingResult.documentedTotal,
+      taxRateApplied: null,
     };
   }
 }
