@@ -69,6 +69,56 @@ model VerificationToken {
 
 // --- Domain Models ---
 
+// --- Care Plan Catalog (Source of Truth: Sunshine Elder Care Package) ---
+
+model CarePlan {
+  id          String            @id @default(cuid())
+  slug        String            @unique // e.g. shield-shine, semi-shield-shine, life-line-care
+  name        String            // exact name from source document
+  active      Boolean           @default(true)
+  sortOrder   Int               @default(0)
+  variants    CarePlanVariant[]
+
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+model CarePlanVariant {
+  id               String             @id @default(cuid())
+  carePlanId       String
+  variantType      String             // SINGLE or COUPLE
+  monthlyBasePrice Float              // exact documented monthly base price (ex-GST)
+  monthlyGst       Float              // exact documented monthly GST amount
+  monthlyTotal     Float              // exact documented monthly total
+  durations        CarePlanDuration[]
+  services         CarePlanService[]
+  carePlan         CarePlan           @relation(fields: [carePlanId], references: [id], onDelete: Cascade)
+
+  @@unique([carePlanId, variantType])
+}
+
+model CarePlanDuration {
+  id              String          @id @default(cuid())
+  variantId       String
+  months          Int             // 1, 3, 6, or 12
+  documentedTotal Float           // exact total from source document — never recalculated
+  hasDiscount     Boolean         @default(false)
+  discountNote    String?         // e.g. "After 7.5% discount"
+  variant         CarePlanVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([variantId, months])
+}
+
+model CarePlanService {
+  id          String          @id @default(cuid())
+  variantId   String
+  serviceName String          // exact service name from source document
+  serviceNote String?         // e.g. "4 x Out door visit per months (Total 10 Hrs/Month)"
+  sortOrder   Int             @default(0)
+  variant     CarePlanVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+}
+
+
 model Plan {
   id                String   @id @default(cuid())
   name              String
