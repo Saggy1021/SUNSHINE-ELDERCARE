@@ -3,6 +3,11 @@ export interface SendEmailRequest {
   subject: string;
   text?: string;
   html?: string;
+  attachments?: {
+    filename: string;
+    content: Uint8Array;
+    contentType: string;
+  }[];
 }
 
 export interface EmailProviderAdapter {
@@ -12,8 +17,9 @@ export interface EmailProviderAdapter {
 // Mock Adapter for Development
 class MockEmailAdapter implements EmailProviderAdapter {
   async sendEmail(request: SendEmailRequest): Promise<boolean> {
-    console.log('[MockEmail] Sending email:', request);
-    return true;
+    console.log(`[MockEmail] Delivery suppressed. Email Provider not configured. (To: ${request.to}, Subject: ${request.subject})`);
+    // Return false to indicate no actual delivery occurred when using Mock
+    return false;
   }
 }
 
@@ -61,6 +67,19 @@ Requirements:
 ${assessmentData.requirements}
 
 Please review in the admin dashboard.`
+    });
+  }
+
+  async sendInvoiceReceipt(invoice: any, customerEmail: string, pdfBytes: Uint8Array): Promise<boolean> {
+    return this.sendEmail({
+      to: customerEmail,
+      subject: `Your Receipt for Invoice ${invoice.invoiceNumber}`,
+      text: `Dear Customer,\n\nThank you for choosing Sunshine Elder Care. Please find attached the receipt for your recent subscription payment.\n\nInvoice: ${invoice.invoiceNumber}\nAmount: ₹${Number(invoice.total).toLocaleString('en-IN')}\n\nRegards,\nSunshine Elder Care`,
+      attachments: [{
+        filename: `invoice-${invoice.invoiceNumber}.pdf`,
+        content: pdfBytes,
+        contentType: 'application/pdf'
+      }]
     });
   }
 }

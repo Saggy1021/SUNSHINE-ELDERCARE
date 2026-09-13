@@ -6,20 +6,34 @@ import type { CarePlanCatalogEntry, CarePlanLookupResult } from '@/lib/services/
 import Link from 'next/link'
 import { ArrowLeft, CheckCircle } from 'lucide-react'
 
+import { createCarePlanInvoiceAction } from '@/app/actions/invoices'
+import { useRouter } from 'next/navigation'
+
 interface PriceCalculatorProps {
   plan: CarePlanCatalogEntry
+  isAuthenticated?: boolean
 }
 
 function formatINR(amount: number): string {
   return `₹${amount.toLocaleString('en-IN')}`
 }
 
-export function PriceCalculator({ plan }: PriceCalculatorProps) {
+export function PriceCalculator({ plan, isAuthenticated }: PriceCalculatorProps) {
+  const router = useRouter()
   const [variantType, setVariantType] = useState<'SINGLE' | 'COUPLE'>('SINGLE')
   const [months, setMonths] = useState<number>(1)
   const [result, setResult] = useState<CarePlanLookupResult | null>(null)
   const [loading, setLoading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  // Idempotency key to strictly prevent duplicate invoice creation on rapid double-clicks
+  const [idempotencyKey, setIdempotencyKey] = useState<string>('')
+
+  useEffect(() => {
+    // Generate a new key whenever the commercial configuration changes
+    setIdempotencyKey(crypto.randomUUID())
+  }, [variantType, months, plan.slug])
 
   const selectedVariant = plan.variants.find((v) => v.variantType === variantType)
   const availableDurations = selectedVariant?.durations.map((d) => d.months) ?? [1]
@@ -42,6 +56,33 @@ export function PriceCalculator({ plan }: PriceCalculatorProps) {
       setError(response.error ?? 'Unable to retrieve pricing.')
     }
     setLoading(false)
+  }
+
+  const handleSubscribe = async () => {
+    if (!isAuthenticated) return
+
+    setIsSubmitting(true)
+    setError(null)
+    
+    try {
+      const formData = new FormData()
+      formData.set('planSlug', plan.slug)
+      formData.set('variantType', variantType)
+      formData.set('months', String(months))
+      formData.set('idempotencyKey', idempotencyKey)
+      
+      const res = await createCarePlanInvoiceAction(formData)
+      if (res.success) {
+        router.push(`/checkout/${res.invoiceId}`)
+      } else {
+        // Safe check for error handling
+        setError('Failed to create invoice.')
+      }
+    } catch (e: any) {
+      setError(e.message || 'An error occurred during subscription.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -169,12 +210,22 @@ export function PriceCalculator({ plan }: PriceCalculatorProps) {
             ))}
           </ul>
 
-          <Link
-            href="/login"
-            className="mt-6 block w-full rounded-xl bg-gold px-6 py-3 text-center text-sm font-semibold text-brown transition-opacity hover:opacity-90"
-          >
-            Subscribe Now
-          </Link>
+          {isAuthenticated ? (
+            <button
+              onClick={handleSubscribe}
+              disabled={isSubmitting}
+              className="mt-6 block w-full rounded-xl bg-gold px-6 py-3 text-center text-sm font-semibold text-brown transition-opacity hover:opacity-90 disabled:opacity-60"
+            >
+              {isSubmitting ? 'Creating Invoice...' : 'Subscribe Now'}
+            </button>
+          ) : (
+            <Link
+              href={`/login?callbackUrl=${encodeURIComponent(`/membership/${plan.slug}`)}`}
+              className="mt-6 block w-full rounded-xl bg-gold px-6 py-3 text-center text-sm font-semibold text-brown transition-opacity hover:opacity-90"
+            >
+              Subscribe Now
+            </Link>
+          )}
         </div>
       )}
     </div>

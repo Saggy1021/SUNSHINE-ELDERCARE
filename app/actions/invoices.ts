@@ -18,6 +18,8 @@ export async function createCarePlanInvoiceAction(formData: FormData) {
     variantType: formData.get('variantType'),
     months: Number(formData.get('months'))
   }
+  
+  const idempotencyKey = formData.get('idempotencyKey') as string | null
 
   // 1. Validate identifiers ONLY
   const parsed = carePlanLookupSchema.safeParse(rawData)
@@ -35,7 +37,8 @@ export async function createCarePlanInvoiceAction(formData: FormData) {
   const invoice = await invoiceService.createCarePlanInvoice(
     session.user.id,
     pricingResult,
-    taxResult
+    taxResult,
+    idempotencyKey
   )
 
   return { success: true, invoiceId: invoice.id }

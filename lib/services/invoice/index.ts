@@ -73,6 +73,7 @@ export class InvoiceService {
     userId: string,
     pricing: CarePlanLookupResult,
     tax: CarePlanTaxResult,
+    idempotencyKey?: string | null
   ) {
     const maxRetries = 3;
     
@@ -85,6 +86,7 @@ export class InvoiceService {
             invoiceNumber,
             userId,
             planId: pricing.planSlug,
+            idempotencyKey: idempotencyKey || null,
             subtotal: tax.subtotal !== null ? new Prisma.Decimal(tax.subtotal) : null,
             taxAmount: tax.taxAmount !== null ? new Prisma.Decimal(tax.taxAmount) : null,
             total: new Prisma.Decimal(tax.total),
@@ -115,9 +117,20 @@ export class InvoiceService {
 
         return invoice;
       } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002' && attempt < maxRetries - 1) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          // If the collision was on the idempotencyKey, return the existing invoice safely (Concurrency Safe!)
+          if (error.meta?.target && (error.meta.target as string[]).includes('idempotencyKey') && idempotencyKey) {
+            const existing = await db.invoice.findUnique({
+              where: { idempotencyKey },
+              include: { lineItems: true }
+            });
+            if (existing) return existing;
+          }
+          
           // Collision on unique constraint (invoiceNumber). Retry.
-          continue;
+          if (attempt < maxRetries - 1) {
+            continue;
+          }
         }
         throw error;
       }

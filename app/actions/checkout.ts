@@ -42,3 +42,21 @@ export async function initiateCheckout(planId: string, addOnIds: string[] = []) 
 
   redirect(response.checkoutUrl)
 }
+
+export async function initiatePaymentAction(formData: FormData) {
+  const session = await auth()
+  const invoiceId = formData.get('invoiceId') as string
+  
+  if (!session?.user?.id) {
+    redirect(`/login?callbackUrl=/checkout/${invoiceId}`)
+  }
+
+  const response = await paymentService.createCheckoutSession({
+    userId: session.user.id,
+    invoiceId: invoiceId,
+    successUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/dashboard?success=true`,
+    cancelUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/checkout/${invoiceId}`
+  })
+
+  redirect(response.checkoutUrl)
+}

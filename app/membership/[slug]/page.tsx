@@ -5,6 +5,7 @@ import { Reveal } from '@/components/yoga/reveal'
 import { Eyebrow } from '@/components/yoga/ornaments'
 import { CheckCircle } from 'lucide-react'
 import Link from 'next/link'
+import { auth } from '@/auth'
 import type { Metadata } from 'next'
 
 // Force dynamic rendering — this page reads from the database on every request.
@@ -28,6 +29,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function CarePlanDetailPage({ params }: Props) {
   const { slug } = await params
+  const session = await auth()
+  const isAuthenticated = !!session?.user?.id
   const catalog = await carePricingService.getCatalog()
   const plan = catalog.find((p) => p.slug === slug)
 
@@ -151,7 +154,7 @@ export default async function CarePlanDetailPage({ params }: Props) {
 
             {/* Price Calculator */}
             <Reveal delay={150}>
-              <PriceCalculator plan={plan} />
+              <PriceCalculator plan={plan} isAuthenticated={isAuthenticated} />
             </Reveal>
           </div>
         </div>

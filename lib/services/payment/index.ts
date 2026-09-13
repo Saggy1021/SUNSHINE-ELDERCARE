@@ -23,14 +23,14 @@ class MockPaymentAdapter implements PaymentProviderAdapter {
   async createCheckoutSession(request: any): Promise<PaymentCheckoutResponse> {
     console.log('[MockPayment] Creating checkout session for', request);
     return {
-      checkoutUrl: `/checkout/mock-success?orderId=mock_${Date.now()}`,
-      providerOrderId: `mock_order_${Date.now()}`
+      checkoutUrl: `/checkout/pending`,
+      providerOrderId: `pending_config_${Date.now()}`
     };
   }
 
   async verifyWebhook(payload: any, signature: string, secret: string): Promise<boolean> {
-    console.log('[MockPayment] Verifying webhook');
-    return true;
+    console.log('[MockPayment] Webhook verification denied. Payment provider not configured.');
+    return false;
   }
 }
 

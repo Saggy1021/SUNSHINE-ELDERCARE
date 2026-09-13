@@ -234,6 +234,7 @@ model Invoice {
   paidDate  DateTime?
 
   paymentReference String?
+  idempotencyKey   String? @unique
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
