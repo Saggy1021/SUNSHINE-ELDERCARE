@@ -1,13 +1,20 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 
 export function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // Validate callback url to prevent open redirects
+  const rawCallback = searchParams.get('callbackUrl')
+  const callbackUrl = rawCallback && rawCallback.startsWith('/') && !rawCallback.startsWith('//')
+    ? rawCallback
+    : '/dashboard'
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -28,7 +35,7 @@ export function LoginForm() {
       if (result?.error) {
         setError("Invalid email or password.")
       } else {
-        router.push('/dashboard')
+        router.push(callbackUrl)
         router.refresh()
       }
     } catch (err) {

@@ -4,6 +4,7 @@ import { Cinzel, Cormorant_Garamond, Forum, Inter } from 'next/font/google'
 import './globals.css'
 import { Navbar } from "@/components/yoga/navbar"
 import { Footer } from "@/components/yoga/footer"
+import { auth } from "@/auth"
 
 const cinzel = Cinzel({
   variable: '--font-cinzel',
@@ -36,18 +37,19 @@ export const viewport: Viewport = {
   themeColor: '#3A2618',
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const session = await auth()
   return (
     <html
       lang="en"
       className={`${cinzel.variable} ${cormorant.variable} ${forum.variable} ${inter.variable} bg-background`}
     >
       <body className="font-sans antialiased">
-        <Navbar />
+        <Navbar isAuthenticated={!!session?.user} />
         {children}
         <Footer />
         {process.env.NODE_ENV === 'production' && <Analytics />}

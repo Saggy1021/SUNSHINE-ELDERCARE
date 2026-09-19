@@ -1,12 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { getCarePlanPrice } from '@/app/actions/care-plans'
 import type { CarePlanCatalogEntry, CarePlanLookupResult } from '@/lib/services/care-plans'
 import Link from 'next/link'
 import { ArrowLeft, CheckCircle } from 'lucide-react'
 
-import { createCarePlanInvoiceAction } from '@/app/actions/invoices'
 import { useRouter } from 'next/navigation'
 
 interface PriceCalculatorProps {
@@ -22,6 +21,7 @@ export function PriceCalculator({ plan, isAuthenticated }: PriceCalculatorProps)
   const router = useRouter()
   const [variantType, setVariantType] = useState<'SINGLE' | 'COUPLE'>('SINGLE')
   const [months, setMonths] = useState<number>(1)
+  const [selectedAddOns, setSelectedAddOns] = useState<string[]>([])
   const [result, setResult] = useState<CarePlanLookupResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -47,6 +47,7 @@ export function PriceCalculator({ plan, isAuthenticated }: PriceCalculatorProps)
     formData.set('planSlug', plan.slug)
     formData.set('variantType', variantType)
     formData.set('months', String(months))
+    selectedAddOns.forEach(id => formData.append('addOns', id))
 
     const response = await getCarePlanPrice(formData)
 
@@ -61,28 +62,9 @@ export function PriceCalculator({ plan, isAuthenticated }: PriceCalculatorProps)
   const handleSubscribe = async () => {
     if (!isAuthenticated) return
 
-    setIsSubmitting(true)
-    setError(null)
-    
-    try {
-      const formData = new FormData()
-      formData.set('planSlug', plan.slug)
-      formData.set('variantType', variantType)
-      formData.set('months', String(months))
-      formData.set('idempotencyKey', idempotencyKey)
-      
-      const res = await createCarePlanInvoiceAction(formData)
-      if (res.success) {
-        router.push(`/checkout/${res.invoiceId}`)
-      } else {
-        // Safe check for error handling
-        setError('Failed to create invoice.')
-      }
-    } catch (e: any) {
-      setError(e.message || 'An error occurred during subscription.')
-    } finally {
-      setIsSubmitting(false)
-    }
+    // Phase 7 explicitly prohibits creating an invoice from the public page.
+    // The authenticated user is routed to the future checkout/dashboard flow.
+    router.push('/dashboard')
   }
 
   return (
@@ -141,6 +123,33 @@ export function PriceCalculator({ plan, isAuthenticated }: PriceCalculatorProps)
           </div>
         </div>
 
+        {/* Add-Ons */}
+        <div>
+          <label className="block text-sm font-semibold text-foreground/80 mb-2">Optional Add-Ons (Placeholder)</label>
+          <div className="space-y-3">
+            {[
+              { id: 'care_visit_plus', name: 'Care Visit Plus', price: 0 },
+              { id: 'doctor_consultation', name: 'Doctor Consultation', price: 0 },
+              { id: 'wellness_support', name: 'Wellness Support', price: 0 },
+            ].map(addon => (
+              <label key={addon.id} className={`flex items-center justify-between rounded-xl border px-4 py-3 cursor-pointer transition-colors ${selectedAddOns.includes(addon.id) ? 'border-gold bg-gold/5' : 'border-border hover:border-gold/50'}`}>
+                <div className="flex items-center gap-3">
+                  <input type="checkbox" className="accent-gold h-4 w-4 rounded border-gray-300 text-gold focus:ring-gold" checked={selectedAddOns.includes(addon.id)} onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedAddOns([...selectedAddOns, addon.id])
+                    } else {
+                      setSelectedAddOns(selectedAddOns.filter(id => id !== addon.id))
+                    }
+                    setResult(null)
+                  }} />
+                  <span className="text-sm font-medium text-foreground">{addon.name}</span>
+                </div>
+                <span className="text-sm font-semibold text-gold">₹{addon.price}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
         <button
           onClick={handleCalculate}
           disabled={loading}
@@ -178,6 +187,13 @@ export function PriceCalculator({ plan, isAuthenticated }: PriceCalculatorProps)
               )}
             </div>
           </div>
+          
+          {selectedAddOns.length > 0 && (
+            <div className="mt-4 border-t border-gold/20 pt-4 flex justify-between items-center text-sm">
+              <span className="text-foreground/70">Add-Ons Total</span>
+              <span className="font-semibold text-gold">₹0</span>
+            </div>
+          )}
 
           {result.months === 1 && (
             <div className="mt-4 border-t border-gold/20 pt-4 grid grid-cols-3 gap-4 text-center text-sm">

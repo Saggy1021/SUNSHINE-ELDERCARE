@@ -1,4 +1,5 @@
 import { Metadata } from "next"
+import { Suspense } from "react"
 import { SignupForm } from "./signup-form"
 
 export const metadata: Metadata = {
@@ -16,7 +17,9 @@ export default function SignupPage() {
             Create an account to access our care portal.
           </p>
         </div>
-        <SignupForm />
+        <Suspense fallback={<div className="h-40 animate-pulse bg-gold/10 rounded-xl" />}>
+          <SignupForm />
+        </Suspense>
       </div>
     </main>
   )

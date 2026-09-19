@@ -14,7 +14,7 @@ const links = [
   { label: 'FAQs', href: '/faqs' },
 ]
 
-export function Navbar() {
+export function Navbar({ isAuthenticated = false }: { isAuthenticated?: boolean }) {
   const [scrolled, setScrolled] = useState(false)
   const [open, setOpen] = useState(false)
 
@@ -64,12 +64,29 @@ export function Navbar() {
               {l.label}
             </a>
           ))}
-          <a
-            href="/contact-us"
-            className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-transform hover:-translate-y-0.5"
-          >
-            Contact Us
-          </a>
+          {isAuthenticated ? (
+            <a
+              href="/dashboard"
+              className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-transform hover:-translate-y-0.5"
+            >
+              My Portal
+            </a>
+          ) : (
+            <div className="flex items-center gap-4">
+              <a
+                href="/login"
+                className="text-sm font-medium tracking-wide text-gold/90 transition-all hover:text-gold hover:underline hover:underline-offset-4"
+              >
+                Sign In
+              </a>
+              <a
+                href="/signup"
+                className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-transform hover:-translate-y-0.5"
+              >
+                Sign Up
+              </a>
+            </div>
+          )}
         </div>
 
         <button
@@ -97,13 +114,32 @@ export function Navbar() {
                 {l.label}
               </a>
             ))}
-            <a
-              href="/contact-us"
-              onClick={() => setOpen(false)}
-              className="mt-2 rounded-full bg-primary px-5 py-2.5 text-center text-sm font-medium text-primary-foreground"
-            >
-              Contact Us
-            </a>
+            {isAuthenticated ? (
+              <a
+                href="/dashboard"
+                onClick={() => setOpen(false)}
+                className="mt-2 rounded-full bg-primary px-5 py-2.5 text-center text-sm font-medium text-primary-foreground"
+              >
+                My Portal
+              </a>
+            ) : (
+              <div className="flex flex-col gap-3 mt-2">
+                <a
+                  href="/login"
+                  onClick={() => setOpen(false)}
+                  className="rounded-full border border-gold/50 px-5 py-2.5 text-center text-sm font-medium text-gold transition-colors hover:bg-gold/10"
+                >
+                  Sign In
+                </a>
+                <a
+                  href="/signup"
+                  onClick={() => setOpen(false)}
+                  className="rounded-full bg-primary px-5 py-2.5 text-center text-sm font-medium text-primary-foreground"
+                >
+                  Sign Up
+                </a>
+              </div>
+            )}
           </div>
         </div>
       )}

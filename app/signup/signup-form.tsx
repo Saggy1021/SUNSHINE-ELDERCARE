@@ -1,14 +1,21 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { registerUser } from '@/app/actions/auth'
 import { signIn } from 'next-auth/react'
 
 export function SignupForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // Validate callback url to prevent open redirects
+  const rawCallback = searchParams.get('callbackUrl')
+  const callbackUrl = rawCallback && rawCallback.startsWith('/') && !rawCallback.startsWith('//')
+    ? rawCallback
+    : '/dashboard'
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -37,9 +44,9 @@ export function SignupForm() {
 
       if (signInResult?.error) {
         // Fallback to login page if auto-login fails
-        router.push('/login')
+        router.push(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`)
       } else {
-        router.push('/dashboard')
+        router.push(callbackUrl)
         router.refresh()
       }
     } catch (err) {
