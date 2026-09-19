@@ -1,56 +1,114 @@
-import { Metadata } from "next"
+import { getUserSubscription } from "@/app/actions/membership"
 import { auth } from "@/auth"
-import { db } from "@/lib/db"
-
-export const metadata: Metadata = {
-  title: "Dashboard | Sunshine Elder Care",
-}
+import Link from "next/link"
+import { Shield, Clock, CalendarDays, CheckCircle2 } from "lucide-react"
 
 export default async function DashboardPage() {
   const session = await auth()
-  
-  if (!session?.user?.email) return null
-
-  const dbUser = await db.user.findUnique({
-    where: { email: session.user.email },
-    include: { subscriptions: { include: { plan: true } } }
-  })
-
-  const activeSubscription = dbUser?.subscriptions.find(s => s.status === 'ACTIVE')
+  const subscription = await getUserSubscription()
 
   return (
-    <div className="max-w-4xl space-y-8">
+    <div className="space-y-8">
       <div>
-        <h1 className="font-display text-3xl font-bold">Dashboard</h1>
-        <p className="mt-2 text-foreground/70">Welcome to your Sunshine Elder Care member portal.</p>
+        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+          Welcome, {session?.user?.name || "Member"}
+        </h1>
+        <p className="text-slate-600 mt-2">
+          Manage your Sunshine Elder Care membership and services.
+        </p>
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-2">
-        <div className="rounded-2xl border border-gold/30 bg-card p-6 shadow-sm">
-          <h2 className="font-display text-xl font-semibold">Current Plan</h2>
-          {activeSubscription ? (
-            <div className="mt-4">
-              <p className="text-2xl font-bold text-primary">{activeSubscription.plan.name}</p>
-              <p className="mt-1 text-sm text-muted-foreground">Status: Active</p>
+      {!subscription ? (
+        <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm text-center">
+          <Shield className="h-12 w-12 text-slate-300 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-slate-900 mb-2">No Active Membership</h2>
+          <p className="text-slate-600 mb-6">Your membership has not been activated yet.</p>
+          <Link 
+            href="/dashboard/renew" 
+            className="inline-flex justify-center rounded-lg bg-amber-500 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-amber-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 transition-colors"
+          >
+            Choose a Membership
+          </Link>
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-slate-900 px-6 py-4 flex justify-between items-center">
+            <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+              <Shield className="h-5 w-5 text-amber-500" />
+              {subscription.carePlan?.name || "Unknown Plan"}
+            </h2>
+            <span className={`px-3 py-1 rounded-full text-xs font-medium tracking-wide
+              ${subscription.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-400' : 
+                subscription.status === 'PENDING' ? 'bg-amber-500/10 text-amber-400' :
+                subscription.status === 'EXPIRED' ? 'bg-red-500/10 text-red-400' :
+                'bg-slate-500/10 text-slate-300'}`}
+            >
+              {subscription.status}
+            </span>
+          </div>
+
+          <div className="p-6">
+            <div className="grid sm:grid-cols-2 gap-6 mb-8">
+              <div>
+                <p className="text-sm font-medium text-slate-500 mb-1">Variant</p>
+                <p className="text-slate-900 font-semibold">{subscription.variantType}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-500 mb-1">Duration</p>
+                <p className="text-slate-900 font-semibold">{subscription.durationMonths} Months</p>
+              </div>
+              
+              {subscription.startDate && (
+                <div>
+                  <p className="text-sm font-medium text-slate-500 mb-1 flex items-center gap-1">
+                    <CalendarDays className="h-4 w-4" /> Start Date
+                  </p>
+                  <p className="text-slate-900 font-semibold">
+                    {subscription.startDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
+                  </p>
+                </div>
+              )}
+
+              {subscription.endDate && (
+                <div>
+                  <p className="text-sm font-medium text-slate-500 mb-1 flex items-center gap-1">
+                    <Clock className="h-4 w-4" /> End Date
+                  </p>
+                  <p className="text-slate-900 font-semibold">
+                    {subscription.endDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
+                  </p>
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="mt-4 space-y-4">
-              <p className="text-foreground/70">You don't have an active membership plan yet.</p>
-              <a href="/membership" className="inline-block rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground">
-                View Plans
-              </a>
+
+            {subscription.addOns.length > 0 && (
+              <div className="border-t border-slate-100 pt-6">
+                <h3 className="text-sm font-medium text-slate-900 mb-3">Selected Add-ons</h3>
+                <ul className="space-y-2">
+                  {subscription.addOns.map(sa => (
+                    <li key={sa.id} className="flex items-start gap-2 text-sm text-slate-600">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+                      {sa.addOn.name}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          
+          {subscription.status === 'EXPIRED' && (
+            <div className="bg-red-50 px-6 py-4 border-t border-red-100 flex justify-between items-center">
+              <p className="text-sm text-red-800 font-medium">Your membership has expired.</p>
+              <Link 
+                href="/dashboard/renew"
+                className="text-sm font-semibold text-white bg-red-600 hover:bg-red-700 px-4 py-2 rounded-md transition-colors"
+              >
+                Renew Membership
+              </Link>
             </div>
           )}
         </div>
-
-        <div className="rounded-2xl border border-gold/30 bg-card p-6 shadow-sm">
-          <h2 className="font-display text-xl font-semibold">Need Assistance?</h2>
-          <p className="mt-4 text-foreground/70">Our dedicated support team is available 24/7 for emergency response and medical coordination.</p>
-          <a href="/contact-us" className="mt-4 inline-block rounded-full border border-primary px-5 py-2 text-sm font-medium text-primary hover:bg-primary hover:text-primary-foreground transition-colors">
-            Contact Support
-          </a>
-        </div>
-      </div>
+      )}
     </div>
   )
 }

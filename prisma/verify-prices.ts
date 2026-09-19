@@ -240,9 +240,9 @@ async function main() {
   assert(invalidDuration === null, 'Unsupported duration (24mo) returns null')
 
   // ── 9. No add-ons seeded ──────────────────────────────────────────────────
-  console.log('\n[ 9. Add-Ons (should be empty) ]')
+  console.log('\n[ 9. Add-Ons (Placeholders) ]')
   const addOnCount = await prisma.addOn.count()
-  assert(addOnCount === 0, 'No add-ons seeded (source document contains none)')
+  assert(addOnCount === 3, '3 Placeholder add-ons seeded')
 
   // ── Summary ───────────────────────────────────────────────────────────────
   console.log(`\n${'='.repeat(60)}`)

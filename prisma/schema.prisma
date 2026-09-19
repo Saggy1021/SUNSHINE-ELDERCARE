@@ -27,6 +27,9 @@ model User {
   orders         Order[]
   invoices       Invoice[]
   elders         Elder[]
+  emergencyContact EmergencyContact?
+  feedback       Feedback[]
+  renewalRequests RenewalRequest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -78,6 +81,8 @@ model CarePlan {
   active    Boolean           @default(true)
   sortOrder Int               @default(0)
   variants  CarePlanVariant[]
+  subscriptions Subscription[]
+  renewalRequests RenewalRequest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -148,6 +153,8 @@ model AddOn {
   active            Boolean @default(true)
 
   plans PlanAddOn[]
+  subscriptionAddOns SubscriptionAddOn[]
+  renewalRequestAddOns RenewalRequestAddOn[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -270,13 +277,101 @@ model InvoiceLineItem {
 model Subscription {
   id               String    @id @default(cuid())
   userId           String
-  planId           String
-  status           String    @default("PENDING") // PENDING, ACTIVE, CANCELLED
+  planId           String?
+  carePlanId       String?
+  variantType      String?
+  durationMonths   Int?
+  startDate        DateTime?
+  endDate          DateTime?
+  
+  status           String    @default("PENDING") // PENDING, APPROVED, SCHEDULED, ACTIVE, EXPIRING, EXPIRED, SUSPENDED, CANCELLED
   providerSubId    String?   @unique // Provider-independent external reference
   currentPeriodEnd DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan Plan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  plan Plan? @relation(fields: [planId], references: [id], onDelete: Restrict)
+  carePlan CarePlan? @relation(fields: [carePlanId], references: [id], onDelete: Restrict)
+
+  addOns           SubscriptionAddOn[]
+  renewalRequests  RenewalRequest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SubscriptionAddOn {
+  id             String       @id @default(cuid())
+  subscriptionId String
+  addOnId        String
+  
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  addOn          AddOn        @relation(fields: [addOnId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+}
+
+model RenewalRequest {
+  id                    String   @id @default(cuid())
+  userId                String
+  currentSubscriptionId String?
+  carePlanId            String
+  variantType           String
+  durationMonths        Int
+  requestedStartDate    DateTime
+  calculatedEndDate     DateTime
+  status                String   @default("SUBMITTED") // SUBMITTED, PENDING_PAYMENT, APPROVED, REJECTED, CANCELLED
+
+  // Immutable commercial snapshot
+  planName              String
+  documentedTotal       Decimal
+
+  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentSubscription Subscription? @relation(fields: [currentSubscriptionId], references: [id], onDelete: SetNull)
+  carePlan            CarePlan      @relation(fields: [carePlanId], references: [id], onDelete: Restrict)
+
+  addOns RenewalRequestAddOn[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model RenewalRequestAddOn {
+  id               String         @id @default(cuid())
+  renewalRequestId String
+  addOnId          String
+  
+  renewalRequest   RenewalRequest @relation(fields: [renewalRequestId], references: [id], onDelete: Cascade)
+  addOn            AddOn          @relation(fields: [addOnId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+}
+
+model EmergencyContact {
+  id             String  @id @default(cuid())
+  userId         String  @unique
+  fullName       String
+  relationship   String
+  phone          String
+  alternatePhone String?
+  email          String?
+  address        String? @db.Text
+  notes          String? @db.Text
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Feedback {
+  id       String @id @default(cuid())
+  userId   String
+  category String
+  rating   Int
+  message  String @db.Text
+  status   String @default("SUBMITTED") // SUBMITTED, UNDER_REVIEW, RESPONDED, RESOLVED
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
