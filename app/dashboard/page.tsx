@@ -27,7 +27,7 @@ export default async function DashboardPage() {
             href="/dashboard/renew" 
             className="inline-flex justify-center rounded-lg bg-amber-500 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-amber-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 transition-colors"
           >
-            Choose a Membership
+            Choose Membership
           </Link>
         </div>
       ) : (
@@ -40,6 +40,7 @@ export default async function DashboardPage() {
             <span className={`px-3 py-1 rounded-full text-xs font-medium tracking-wide
               ${subscription.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-400' : 
                 subscription.status === 'PENDING' ? 'bg-amber-500/10 text-amber-400' :
+                subscription.status === 'SCHEDULED' ? 'bg-blue-500/10 text-blue-400' :
                 subscription.status === 'EXPIRED' ? 'bg-red-500/10 text-red-400' :
                 'bg-slate-500/10 text-slate-300'}`}
             >
