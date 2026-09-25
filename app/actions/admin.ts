@@ -39,7 +39,8 @@ export async function getAdminDashboardMetrics() {
     expiringMemberships,
     expiredMemberships,
     newInquiries,
-    unresolvedFeedback
+    unresolvedFeedback,
+    pendingPayments
   ] = await Promise.all([
     db.user.count(),
     db.subscription.count({ where: { status: "ACTIVE" } }),
@@ -49,6 +50,7 @@ export async function getAdminDashboardMetrics() {
     db.subscription.count({ where: { status: "EXPIRED" } }),
     db.inquiry.count({ where: { status: "NEW" } }),
     db.feedback.count({ where: { status: { in: ["SUBMITTED", "UNDER_REVIEW"] } } }),
+    db.payment.count({ where: { status: "VERIFICATION_PENDING" } })
   ])
 
   return {
@@ -59,7 +61,8 @@ export async function getAdminDashboardMetrics() {
     expiringMemberships,
     expiredMemberships,
     newInquiries,
-    unresolvedFeedback
+    unresolvedFeedback,
+    pendingPayments
   }
 }
 
@@ -86,7 +89,14 @@ export async function getNeedsAttentionQueue() {
     take: 5
   })
 
-  return { pendingRenewals, newInquiries, unresolvedFeedback }
+  const pendingPayments = await db.payment.findMany({
+    where: { status: "VERIFICATION_PENDING" },
+    include: { user: { select: { name: true, email: true } }, invoice: true },
+    orderBy: { createdAt: 'desc' },
+    take: 5
+  })
+
+  return { pendingRenewals, newInquiries, unresolvedFeedback, pendingPayments }
 }
 
 // --- Members ---
@@ -225,4 +235,20 @@ export async function getAuditLogs() {
     include: { actor: { select: { name: true, email: true } } },
     orderBy: { createdAt: 'desc' }
   })
+}
+
+import { adminVerifyPayment, adminRejectPayment } from "@/lib/services/payment"
+
+export async function verifyPayment(paymentId: string) {
+  const adminId = await requireAdmin()
+  await adminVerifyPayment(paymentId, adminId)
+  revalidatePath('/admin/payments')
+  revalidatePath('/admin')
+}
+
+export async function rejectPayment(paymentId: string, reason: string) {
+  const adminId = await requireAdmin()
+  await adminRejectPayment(paymentId, adminId, reason)
+  revalidatePath('/admin/payments')
+  revalidatePath('/admin')
 }

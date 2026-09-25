@@ -1,0 +1,50 @@
+"use server"
+
+import { auth } from "@/auth"
+import { db } from "@/lib/db"
+import { submitOfflinePayment } from "@/lib/services/payment"
+import { revalidatePath } from "next/cache"
+import { redirect } from "next/navigation"
+
+export async function processOfflinePayment(
+  invoiceId: string, 
+  renewalRequestId: string, 
+  amount: number, 
+  reference: string
+) {
+  const session = await auth()
+  if (!session?.user?.id) {
+    throw new Error("Unauthorized")
+  }
+
+  // Submit offline payment
+  await submitOfflinePayment(
+    session.user.id,
+    invoiceId,
+    renewalRequestId,
+    amount,
+    reference
+  )
+
+  // Redirect to success page or dashboard
+  revalidatePath("/dashboard")
+  redirect("/dashboard?payment=submitted")
+}
+
+// Admin Server Actions for Payment Verification
+export async function getPendingPayments() {
+  const session = await auth()
+  if (!session?.user?.id || session.user.role !== "ADMIN") {
+    throw new Error("Unauthorized")
+  }
+
+  return db.payment.findMany({
+    where: { status: "VERIFICATION_PENDING" },
+    include: {
+      user: { select: { name: true, email: true } },
+      invoice: true,
+      renewalRequest: { select: { planName: true, variantType: true, durationMonths: true } }
+    },
+    orderBy: { createdAt: 'desc' }
+  })
+}

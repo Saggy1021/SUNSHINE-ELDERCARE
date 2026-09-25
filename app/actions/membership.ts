@@ -163,3 +163,28 @@ export async function getFeedbackHistory() {
     orderBy: { createdAt: 'desc' }
   })
 }
+export async function getUserRenewalState() {
+  const session = await auth()
+  if (!session?.user?.id) return null
+
+  const pendingRenewal = await db.renewalRequest.findFirst({
+    where: { 
+      userId: session.user.id,
+      status: { in: ['SUBMITTED', 'APPROVED'] }
+    },
+    orderBy: { createdAt: 'desc' }
+  })
+
+  if (!pendingRenewal) return null
+
+  // Check if there is a payment attempt for this renewal
+  const payment = await db.payment.findFirst({
+    where: { renewalRequestId: pendingRenewal.id },
+    orderBy: { createdAt: 'desc' }
+  })
+
+  return {
+    renewal: pendingRenewal,
+    payment: payment
+  }
+}

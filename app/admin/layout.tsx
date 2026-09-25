@@ -2,7 +2,7 @@ import { ReactNode } from "react"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import { Shield, Users, RefreshCw, MessageSquare, ClipboardList, Package, Activity, LogOut } from "lucide-react"
+import { Shield, Users, RefreshCw, MessageSquare, ClipboardList, Package, Activity, LogOut, Receipt } from "lucide-react"
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const session = await auth()
@@ -19,6 +19,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     { name: "Dashboard", href: "/admin", icon: Activity },
     { name: "Members", href: "/admin/members", icon: Users },
     { name: "Renewals", href: "/admin/renewals", icon: RefreshCw },
+    { name: "Payments", href: "/admin/payments", icon: Receipt },
     { name: "Inquiries", href: "/admin/inquiries", icon: ClipboardList },
     { name: "Feedback", href: "/admin/feedback", icon: MessageSquare },
     { name: "Add-ons", href: "/admin/add-ons", icon: Package },

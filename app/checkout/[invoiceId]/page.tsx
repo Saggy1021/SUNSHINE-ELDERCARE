@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic'
 
 interface Props {
   params: Promise<{ invoiceId: string }>
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
 
 function formatINR(amount: any): string {
@@ -17,8 +18,10 @@ function formatINR(amount: any): string {
   return `₹${Number(amount).toLocaleString('en-IN')}`
 }
 
-export default async function InvoiceReviewPage({ params }: Props) {
+export default async function InvoiceReviewPage({ params, searchParams }: Props) {
   const { invoiceId } = await params
+  const { renewal } = await searchParams
+  const renewalId = typeof renewal === 'string' ? renewal : ''
   const session = await auth()
 
   if (!session?.user?.id) {
@@ -122,16 +125,62 @@ export default async function InvoiceReviewPage({ params }: Props) {
                   </div>
                 </div>
 
-                <div className="pt-6">
-                  <form action={initiatePaymentAction}>
-                    <input type="hidden" name="invoiceId" value={invoice.id} />
-                    <button 
-                      type="submit"
-                      className="w-full rounded-xl bg-gold px-6 py-4 text-center text-sm font-bold text-brown transition-opacity hover:opacity-90 shadow-md"
-                    >
-                      Proceed to Payment
-                    </button>
-                  </form>
+                <div className="pt-6 space-y-4">
+                  
+                  {/* Online Payment (Mock or configured provider) */}
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <h4 className="font-semibold text-slate-900 mb-2">Online Payment</h4>
+                    <form action={initiatePaymentAction}>
+                      <input type="hidden" name="invoiceId" value={invoice.id} />
+                      <button 
+                        type="submit"
+                        className="w-full rounded-xl bg-gold px-6 py-3 text-center text-sm font-bold text-brown transition-opacity hover:opacity-90 shadow-sm"
+                      >
+                        Pay Online Now
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Offline Payment */}
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-4">
+                    <h4 className="font-semibold text-slate-900 mb-2">Offline Transfer (NEFT/RTGS)</h4>
+                    <p className="text-xs text-slate-600 mb-4">
+                      Transfer the amount to our bank account and provide the UTR/Reference number below. 
+                      Your membership will be activated after admin verification.
+                    </p>
+                    <form action={async (formData) => {
+                      "use server"
+                      const { processOfflinePayment } = await import('@/app/actions/payment')
+                      
+                      const ref = formData.get("reference") as string
+                      const reqId = formData.get("renewalId") as string
+                      const invId = formData.get("invoiceId") as string
+                      const amt = Number(formData.get("amount"))
+                      
+                      if (reqId && invId && amt) {
+                        await processOfflinePayment(invId, reqId, amt, ref)
+                      }
+                    }} className="space-y-3">
+                      <input type="hidden" name="renewalId" value={renewalId} />
+                      <input type="hidden" name="invoiceId" value={invoice.id} />
+                      <input type="hidden" name="amount" value={invoice.total.toString()} />
+                      
+                      <input 
+                        type="text" 
+                        name="reference" 
+                        placeholder="Enter UTR or Reference Number" 
+                        required
+                        className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
+                      />
+                      <button 
+                        type="submit"
+                        className="w-full rounded-md bg-slate-900 px-4 py-2 text-center text-sm font-semibold text-white transition-opacity hover:opacity-90 shadow-sm"
+                      >
+                        Submit Verification Request
+                      </button>
+                    </form>
+                  </div>
+
                   <p className="text-center text-xs text-foreground/50 mt-4">
                     By proceeding, you agree to our Terms of Service and Privacy Policy.
                   </p>

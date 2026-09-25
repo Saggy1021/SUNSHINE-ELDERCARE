@@ -10,7 +10,7 @@ export default async function AdminDashboardPage() {
     { name: "Total Members", value: metrics.totalMembers, icon: Users, color: "text-blue-600", bg: "bg-blue-100" },
     { name: "Active Memberships", value: metrics.activeMembers, icon: Activity, color: "text-emerald-600", bg: "bg-emerald-100" },
     { name: "Pending Renewals", value: metrics.pendingRenewals, icon: RefreshCw, color: "text-amber-600", bg: "bg-amber-100" },
-    { name: "New Inquiries", value: metrics.newInquiries, icon: ClipboardList, color: "text-purple-600", bg: "bg-purple-100" },
+    { name: "Pending Payments", value: metrics.pendingPayments, icon: ClipboardList, color: "text-purple-600", bg: "bg-purple-100" },
   ]
 
   return (
@@ -59,6 +59,28 @@ export default async function AdminDashboardPage() {
                         <p className="text-xs text-slate-500">{req.planName} - {req.durationMonths}m</p>
                       </div>
                       <Link href={`/admin/renewals`} className="text-xs font-semibold text-amber-600 hover:text-amber-700 bg-amber-100 px-3 py-1.5 rounded-md">
+                        Review
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* Pending Payments */}
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-3">Pending Payments ({queue.pendingPayments.length})</h3>
+              {queue.pendingPayments.length === 0 ? (
+                <p className="text-sm text-slate-500">No pending payments.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {queue.pendingPayments.map(payment => (
+                    <li key={payment.id} className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-100">
+                      <div>
+                        <p className="font-semibold text-slate-900 text-sm">{payment.user.name || payment.user.email}</p>
+                        <p className="text-xs text-slate-500">₹{payment.amount.toString()} - {payment.paymentMethod}</p>
+                      </div>
+                      <Link href={`/admin/payments`} className="text-xs font-semibold text-purple-600 hover:text-purple-700 bg-purple-100 px-3 py-1.5 rounded-md">
                         Review
                       </Link>
                     </li>

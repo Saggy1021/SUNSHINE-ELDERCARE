@@ -1,11 +1,13 @@
-import { getUserSubscription } from "@/app/actions/membership"
+import { getUserSubscription, getUserRenewalState } from "@/app/actions/membership"
 import { auth } from "@/auth"
 import Link from "next/link"
-import { Shield, Clock, CalendarDays, CheckCircle2 } from "lucide-react"
+import { Shield, Clock, CalendarDays, CheckCircle2, Receipt, AlertCircle } from "lucide-react"
+import { initiateRenewalCheckout } from "@/app/actions/checkout"
 
 export default async function DashboardPage() {
   const session = await auth()
   const subscription = await getUserSubscription()
+  const renewalState = await getUserRenewalState()
 
   return (
     <div className="space-y-8">
@@ -97,7 +99,7 @@ export default async function DashboardPage() {
             )}
           </div>
           
-          {subscription.status === 'EXPIRED' && (
+          {subscription.status === 'EXPIRED' && !renewalState && (
             <div className="bg-red-50 px-6 py-4 border-t border-red-100 flex justify-between items-center">
               <p className="text-sm text-red-800 font-medium">Your membership has expired.</p>
               <Link 
@@ -108,6 +110,73 @@ export default async function DashboardPage() {
               </Link>
             </div>
           )}
+        </div>
+      )}
+
+      {renewalState && (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+          <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+            <Receipt className="h-5 w-5 text-indigo-500" /> 
+            Membership Renewal Status
+          </h2>
+          
+          <div className="bg-slate-50 border border-slate-100 rounded-lg p-4">
+            <p className="font-semibold text-slate-900">{renewalState.renewal.planName}</p>
+            <p className="text-sm text-slate-500 mb-4">{renewalState.renewal.durationMonths} Months • {renewalState.renewal.variantType}</p>
+            
+            {!renewalState.payment && renewalState.renewal.status === 'SUBMITTED' && (
+              <div className="flex items-center gap-2 text-amber-600 bg-amber-50 px-3 py-2 rounded-md font-medium text-sm border border-amber-100">
+                <Clock className="h-4 w-4" /> Awaiting Admin Approval
+              </div>
+            )}
+
+            {!renewalState.payment && renewalState.renewal.status === 'APPROVED' && (
+              <div>
+                <div className="flex items-center gap-2 text-blue-700 bg-blue-50 px-3 py-2 rounded-md font-medium text-sm border border-blue-100 mb-4">
+                  <AlertCircle className="h-4 w-4" /> Payment Required
+                </div>
+                <form action={async () => {
+                  "use server"
+                  await initiateRenewalCheckout(renewalState.renewal.id)
+                }}>
+                  <button type="submit" className="bg-gold px-4 py-2 rounded-md font-bold text-brown text-sm hover:opacity-90 transition-opacity">
+                    Proceed to Checkout
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {renewalState.payment && renewalState.payment.status === 'VERIFICATION_PENDING' && (
+              <div className="flex items-center gap-2 text-indigo-700 bg-indigo-50 px-3 py-2 rounded-md font-medium text-sm border border-indigo-100">
+                <Clock className="h-4 w-4" /> Payment Pending Verification
+              </div>
+            )}
+
+            {renewalState.payment && renewalState.payment.status === 'VERIFIED' && (
+              <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 px-3 py-2 rounded-md font-medium text-sm border border-emerald-100">
+                <CheckCircle2 className="h-4 w-4" /> Payment Verified
+              </div>
+            )}
+
+            {renewalState.payment && renewalState.payment.status === 'REJECTED' && (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2 text-red-700 bg-red-50 px-3 py-2 rounded-md font-medium text-sm border border-red-100">
+                  <AlertCircle className="h-4 w-4" /> Payment Verification Rejected
+                </div>
+                {renewalState.payment.notes && (
+                  <p className="text-xs text-red-600 ml-1">Reason: {renewalState.payment.notes}</p>
+                )}
+                <form action={async () => {
+                  "use server"
+                  await initiateRenewalCheckout(renewalState.renewal.id)
+                }} className="mt-2">
+                  <button type="submit" className="bg-slate-900 px-4 py-2 rounded-md font-bold text-white text-sm hover:opacity-90 transition-opacity">
+                    Retry Payment
+                  </button>
+                </form>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

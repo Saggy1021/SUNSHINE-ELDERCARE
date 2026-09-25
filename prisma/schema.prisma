@@ -30,6 +30,8 @@ model User {
   emergencyContact EmergencyContact?
   feedback       Feedback[]
   renewalRequests RenewalRequest[]
+  payments       Payment[]
+  verifiedPayments Payment[] @relation("PaymentVerifiedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -247,6 +249,7 @@ model Invoice {
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   lineItems InvoiceLineItem[]
+  payments  Payment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -331,6 +334,7 @@ model RenewalRequest {
   carePlan            CarePlan      @relation(fields: [carePlanId], references: [id], onDelete: Restrict)
 
   addOns RenewalRequestAddOn[]
+  payments Payment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -414,4 +418,30 @@ model AuditLog {
   actor       User     @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
   
   createdAt   DateTime @default(now())
+}
+
+model Payment {
+  id               String          @id @default(cuid())
+  userId           String
+  invoiceId        String?
+  renewalRequestId String?
+  amount           Decimal
+  currency         String          @default("INR")
+  paymentMethod    String          // "OFFLINE", "MOCK_ONLINE"
+  status           String          @default("PENDING") // PENDING, VERIFICATION_PENDING, VERIFIED, REJECTED, CANCELLED
+  provider         String          @default("SYSTEM")
+  providerRef      String?         @unique
+  reference        String?         
+  notes            String?         @db.Text
+  verifiedAt       DateTime?
+  verifiedById     String?
+  metadata         Json?
+  
+  user           User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  invoice        Invoice?        @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  renewalRequest RenewalRequest? @relation(fields: [renewalRequestId], references: [id], onDelete: SetNull)
+  verifiedBy     User?           @relation("PaymentVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
