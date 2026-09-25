@@ -33,6 +33,7 @@ model User {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  auditLogs      AuditLog[]
 }
 
 model Account {
@@ -400,4 +401,17 @@ model Inquiry {
   status   String  @default("NEW") // NEW, IN_PROGRESS, RESOLVED
 
   createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String
+  action      String
+  entityType  String
+  entityId    String
+  metadata    Json?
+  
+  actor       User     @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  
+  createdAt   DateTime @default(now())
 }
