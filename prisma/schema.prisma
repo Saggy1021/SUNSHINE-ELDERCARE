@@ -39,6 +39,10 @@ model User {
   memberProfile  MemberProfile?
   employee       Employee?
   userRoles      UserRole[]
+
+  customPlansReceived CustomPlanAgreement[] @relation("CustomPlanMember")
+  customPlansCreated  CustomPlanAgreement[] @relation("CustomPlanCreator")
+  customPlansAuth     CustomPlanAgreement[] @relation("CustomPlanAuthorizer")
 }
 
 model Account {
@@ -286,6 +290,7 @@ model Subscription {
   userId           String
   planId           String?
   carePlanId       String?
+  customPlanId     String?
   variantType      String?
   durationMonths   Int?
   startDate        DateTime?
@@ -298,6 +303,7 @@ model Subscription {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   plan Plan? @relation(fields: [planId], references: [id], onDelete: Restrict)
   carePlan CarePlan? @relation(fields: [carePlanId], references: [id], onDelete: Restrict)
+  customPlan CustomPlanAgreement? @relation(fields: [customPlanId], references: [id], onDelete: Restrict)
 
   addOns           SubscriptionAddOn[]
   renewalRequests  RenewalRequest[]
@@ -428,6 +434,7 @@ model Payment {
   userId           String
   invoiceId        String?
   renewalRequestId String?
+  customPlanId     String?
   amount           Decimal
   currency         String          @default("INR")
   paymentMethod    String          // "OFFLINE", "MOCK_ONLINE"
@@ -443,6 +450,7 @@ model Payment {
   user           User            @relation(fields: [userId], references: [id], onDelete: Restrict)
   invoice        Invoice?        @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   renewalRequest RenewalRequest? @relation(fields: [renewalRequestId], references: [id], onDelete: SetNull)
+  customPlan     CustomPlanAgreement? @relation(fields: [customPlanId], references: [id], onDelete: SetNull)
   verifiedBy     User?           @relation("PaymentVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
@@ -610,3 +618,34 @@ model UserRole {
   @@id([userId, roleId])
 }
 
+model CustomPlanAgreement {
+  id                 String   @id @default(cuid())
+  userId             String   // The member receiving it
+  createdByUserId    String   // The admin who created it
+  authorizedByUserId String?  // Admin who approved it
+  
+  name               String
+  description        String?  @db.Text
+  
+  amount             Decimal
+  currency           String   @default("INR")
+  
+  durationType       String   // DAYS, MONTHS, YEARS
+  durationValue      Int
+  
+  startDate          DateTime?
+  calculatedEndDate  DateTime?
+  
+  status             String   @default("DRAFT") // DRAFT, APPROVED, CANCELLED, CONVERTED
+  metadata           Json?
+
+  user               User     @relation("CustomPlanMember", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy          User     @relation("CustomPlanCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  authorizedBy       User?    @relation("CustomPlanAuthorizer", fields: [authorizedByUserId], references: [id], onDelete: Restrict)
+
+  subscriptions      Subscription[]
+  payments           Payment[]
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
