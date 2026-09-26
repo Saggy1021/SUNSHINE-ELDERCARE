@@ -36,6 +36,9 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   auditLogs      AuditLog[]
+  memberProfile  MemberProfile?
+  employee       Employee?
+  userRoles      UserRole[]
 }
 
 model Account {
@@ -445,3 +448,165 @@ model Payment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+model EmailNotification {
+  id              String   @id @default(cuid())
+  eventType       String
+  entityType      String
+  entityId        String
+  recipientEmail  String
+  idempotencyKey  String
+  status          String   @default("PENDING")
+  attemptCount    Int      @default(0)
+  lastAttemptAt   DateTime?
+  sentAt          DateTime?
+  failedAt        DateTime?
+  error           String?  @db.Text
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([idempotencyKey, recipientEmail])
+  @@index([entityType, entityId])
+  @@index([status])
+}
+
+model MemberProfile {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  memberId             String?  @unique // Business Member ID (e.g. SEC/S/1001/SAKR)
+  
+  // Section A: Member Details
+  firstName            String
+  lastName             String
+  idProofType          String?  // e.g., Aadhar, PAN, Voter ID
+  idProofNumber        String?  // Sensitive
+  dateOfBirth          DateTime?
+  gender               String?  // "Male", "Female", "Other"
+  serviceAddress       String?  @db.Text
+  nearestLandmark      String?
+  mobileNumber         String?
+  alternateNumber      String?
+  email                String?
+
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  sponsor              Sponsor?
+  insuranceDetails     InsuranceDetails?
+  medicalAuth          MedicalAuthorization?
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model Sponsor {
+  id                   String   @id @default(cuid())
+  memberProfileId      String   @unique
+  fullName             String
+  relationship         String
+  mobileNumber         String
+  alternateNumber      String?
+  email                String?
+
+  memberProfile        MemberProfile @relation(fields: [memberProfileId], references: [id], onDelete: Cascade)
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model InsuranceDetails {
+  id                   String   @id @default(cuid())
+  memberProfileId      String   @unique
+  providerName         String
+  policyNumber         String   // Sensitive
+  coverageAmount       String?
+
+  memberProfile        MemberProfile @relation(fields: [memberProfileId], references: [id], onDelete: Cascade)
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model MedicalAuthorization {
+  id                   String   @id @default(cuid())
+  memberProfileId      String   @unique
+  hospitalForSos       String?
+  nomineeLocalContact  String?
+  shiftAuthorization   Boolean  @default(false)
+
+  memberProfile        MemberProfile @relation(fields: [memberProfileId], references: [id], onDelete: Cascade)
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model MemberSequence {
+  id      String @id @default("MEMBER_SEQ")
+  current Int    @default(1001)
+}
+
+model Employee {
+  id              String   @id @default(cuid())
+  employeeId      String   @unique // e.g. SEC/101/SAKA
+  firstName       String
+  lastName        String
+  photoReference  String?  @db.Text
+  designation     String
+  contactNumber   String?
+  email           String?
+  status          String   @default("ACTIVE") // ACTIVE, INACTIVE
+  
+  userId          String?  @unique
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model EmployeeSequence {
+  id      String @id @default("EMP_SEQ")
+  current Int    @default(100)
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  code        String   @unique // e.g., MEMBER_VIEW, PAYMENT_VERIFY
+  description String?
+  roles       RolePermission[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique // e.g., "Member Manager"
+  description String?
+  
+  permissions RolePermission[]
+  users       UserRole[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model UserRole {
+  userId String
+  roleId String
+
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+

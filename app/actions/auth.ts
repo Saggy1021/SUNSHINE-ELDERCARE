@@ -7,21 +7,23 @@ import bcrypt from 'bcryptjs'
 import { ROLES } from '@/lib/auth/roles'
 import { generateEmailVerificationToken, generatePasswordResetToken, hashToken } from '@/lib/auth/tokens'
 
-const signupSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-})
+import { memberRegistrationSchema } from '@/lib/validations/member'
 
 export async function registerUser(formData: FormData) {
   try {
-    const data = {
-      name: formData.get('name') as string,
-      email: formData.get('email') as string,
-      password: formData.get('password') as string,
+    const data = Object.fromEntries(formData.entries());
+    // Convert string 'on' to boolean for shiftAuthorization if present
+    if (data.shiftAuthorization === 'on' || data.shiftAuthorization === 'true') {
+      data.shiftAuthorization = true as any;
+    } else {
+      data.shiftAuthorization = false as any;
     }
 
-    const validatedData = signupSchema.parse(data)
+    const validationResult = memberRegistrationSchema.safeParse(data)
+    if (!validationResult.success) {
+      return { success: false, error: validationResult.error.errors[0].message }
+    }
+    const validatedData = validationResult.data
     const normalizedEmail = validatedData.email.toLowerCase()
 
     const existingUser = await db.user.findUnique({
@@ -34,17 +36,92 @@ export async function registerUser(formData: FormData) {
 
     const passwordHash = await bcrypt.hash(validatedData.password, 10)
 
-    await db.user.create({
-      data: {
-        name: validatedData.name,
-        email: normalizedEmail,
-        passwordHash,
-        role: ROLES.USER,
+    // Run in a transaction to ensure atomic creation
+    const user = await db.$transaction(async (tx) => {
+      const newUser = await tx.user.create({
+        data: {
+          name: `${validatedData.firstName} ${validatedData.lastName}`,
+          email: normalizedEmail,
+          passwordHash,
+          role: ROLES.USER,
+        }
+      })
+
+      const profile = await tx.memberProfile.create({
+        data: {
+          userId: newUser.id,
+          firstName: validatedData.firstName,
+          lastName: validatedData.lastName,
+          idProofType: validatedData.idProofType || null,
+          idProofNumber: validatedData.idProofNumber || null,
+          dateOfBirth: new Date(validatedData.dateOfBirth),
+          gender: validatedData.gender,
+          serviceAddress: validatedData.serviceAddress,
+          nearestLandmark: validatedData.nearestLandmark || null,
+          mobileNumber: validatedData.mobileNumber,
+          alternateNumber: validatedData.alternateNumber || null,
+          email: normalizedEmail,
+        }
+      })
+
+      await tx.emergencyContact.create({
+        data: {
+          userId: newUser.id,
+          fullName: validatedData.emergencyContactName,
+          relationship: validatedData.emergencyContactRelationship,
+          phone: validatedData.emergencyContactMobile,
+          alternatePhone: validatedData.emergencyContactOther || null,
+          email: validatedData.emergencyContactEmail || null,
+        }
+      })
+
+      await tx.sponsor.create({
+        data: {
+          memberProfileId: profile.id,
+          fullName: validatedData.sponsorName,
+          relationship: validatedData.sponsorRelationship,
+          mobileNumber: validatedData.sponsorMobile,
+          alternateNumber: validatedData.sponsorOther || null,
+          email: validatedData.sponsorEmail || null,
+        }
+      })
+
+      if (validatedData.insuranceProvider || validatedData.policyNumber) {
+        await tx.insuranceDetails.create({
+          data: {
+            memberProfileId: profile.id,
+            providerName: validatedData.insuranceProvider || '',
+            policyNumber: validatedData.policyNumber || '',
+            coverageAmount: validatedData.coverageAmount || null,
+          }
+        })
       }
+
+      await tx.medicalAuthorization.create({
+        data: {
+          memberProfileId: profile.id,
+          hospitalForSos: validatedData.hospitalForSos || null,
+          nomineeLocalContact: validatedData.nomineeLocalContact || null,
+          shiftAuthorization: validatedData.shiftAuthorization,
+        }
+      })
+
+      return newUser
     })
 
     // Phase 2: Generate email verification token (email provider will be connected later)
     await generateEmailVerificationToken(normalizedEmail)
+
+    // Audit log
+    await db.auditLog.create({
+      data: {
+        actorUserId: user.id,
+        action: 'MEMBER_REGISTERED',
+        entityType: 'USER',
+        entityId: user.id,
+        metadata: { message: 'Member registration successful' }
+      }
+    })
 
     return { success: true }
   } catch (error) {

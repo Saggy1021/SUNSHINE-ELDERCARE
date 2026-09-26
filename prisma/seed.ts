@@ -21,8 +21,6 @@ const CARE_PLANS = [
         monthlyGst: 864,
         monthlyTotal: 5664,
         durations: [
-          // 1-month is a CONFIRMED valid service/purchase option (business owner confirmed).
-          // documentedTotal equals the exact documented monthly total from source document.
           { months: 1, documentedTotal: 5664, hasDiscount: false, discountNote: null },
           { months: 3, documentedTotal: 16992, hasDiscount: false, discountNote: null },
           { months: 6, documentedTotal: 33984, hasDiscount: false, discountNote: null },
@@ -33,26 +31,26 @@ const CARE_PLANS = [
           { serviceName: '24/7 Emergency Assistant', serviceNote: null, sortOrder: 2 },
           { serviceName: 'Daily Wellness Calls', serviceNote: null, sortOrder: 3 },
           { serviceName: 'Monthly Senior Staff Visit', serviceNote: null, sortOrder: 4 },
-          { serviceName: 'Out door visit', serviceNote: '4 x Out door visit per months (Total 10 Hrs/Month)', sortOrder: 5 },
+          { serviceName: '4 x Out door visit per months (Total 10 Hrs/Month)', serviceNote: null, sortOrder: 5 },
         ],
       },
       {
         variantType: 'COUPLE',
-        monthlyBasePrice: 5600,
-        monthlyGst: 1008,
-        monthlyTotal: 6608,
+        monthlyBasePrice: 6000,
+        monthlyGst: 1080,
+        monthlyTotal: 7080,
         durations: [
-          { months: 1, documentedTotal: 6608, hasDiscount: false, discountNote: null },
-          { months: 3, documentedTotal: 19824, hasDiscount: false, discountNote: null },
-          { months: 6, documentedTotal: 39648, hasDiscount: false, discountNote: null },
-          { months: 12, documentedTotal: 73349, hasDiscount: true, discountNote: 'After 7.5% discount' },
+          { months: 1, documentedTotal: 7080, hasDiscount: false, discountNote: null },
+          { months: 3, documentedTotal: 21240, hasDiscount: false, discountNote: null },
+          { months: 6, documentedTotal: 42480, hasDiscount: false, discountNote: null },
+          { months: 12, documentedTotal: 78588, hasDiscount: true, discountNote: 'After 7.5% discount' },
         ],
         services: [
           { serviceName: 'Comprehensive Care Service', serviceNote: null, sortOrder: 1 },
           { serviceName: '24/7 Emergency Assistant', serviceNote: null, sortOrder: 2 },
           { serviceName: 'Daily Wellness Calls', serviceNote: null, sortOrder: 3 },
           { serviceName: 'Monthly Senior Staff Visit', serviceNote: null, sortOrder: 4 },
-          { serviceName: 'Out door visit', serviceNote: '4 x Out door visit per months (Total 10 Hrs/Month)', sortOrder: 5 },
+          { serviceName: '4 x Out door visit per months (Total 10 Hrs/Month)', serviceNote: null, sortOrder: 5 },
         ],
       },
     ],
@@ -78,26 +76,26 @@ const CARE_PLANS = [
           { serviceName: '24/7 Emergency Assistant', serviceNote: null, sortOrder: 2 },
           { serviceName: 'Daily Wellness Calls', serviceNote: null, sortOrder: 3 },
           { serviceName: 'Monthly Senior Staff Visit', serviceNote: null, sortOrder: 4 },
-          { serviceName: 'Out door visit', serviceNote: '2 x Out door visit per months (Total 5 Hrs/Month)', sortOrder: 5 },
+          { serviceName: '2 x Out door visit per months (Total 5 Hrs/Month)', serviceNote: null, sortOrder: 5 },
         ],
       },
       {
         variantType: 'COUPLE',
-        monthlyBasePrice: 5300,
-        monthlyGst: 954,
-        monthlyTotal: 6254,
+        monthlyBasePrice: 5500,
+        monthlyGst: 990,
+        monthlyTotal: 6490,
         durations: [
-          { months: 1, documentedTotal: 6254, hasDiscount: false, discountNote: null },
-          { months: 3, documentedTotal: 18762, hasDiscount: false, discountNote: null },
-          { months: 6, documentedTotal: 37524, hasDiscount: false, discountNote: null },
-          { months: 12, documentedTotal: 69419, hasDiscount: true, discountNote: 'After 7.5% discount' },
+          { months: 1, documentedTotal: 6490, hasDiscount: false, discountNote: null },
+          { months: 3, documentedTotal: 19470, hasDiscount: false, discountNote: null },
+          { months: 6, documentedTotal: 38940, hasDiscount: false, discountNote: null },
+          { months: 12, documentedTotal: 72039, hasDiscount: true, discountNote: 'After 7.5% discount' },
         ],
         services: [
           { serviceName: 'Comprehensive Care Service', serviceNote: null, sortOrder: 1 },
           { serviceName: '24/7 Emergency Assistant', serviceNote: null, sortOrder: 2 },
           { serviceName: 'Daily Wellness Calls', serviceNote: null, sortOrder: 3 },
           { serviceName: 'Monthly Senior Staff Visit', serviceNote: null, sortOrder: 4 },
-          { serviceName: 'Out door visit', serviceNote: '2 x Out door visit per months (Total 5 Hrs/Month)', sortOrder: 5 },
+          { serviceName: '2 x Out door visit per months (Total 5 Hrs/Month)', serviceNote: null, sortOrder: 5 },
         ],
       },
     ],
@@ -115,10 +113,8 @@ const CARE_PLANS = [
         durations: [
           { months: 1, documentedTotal: 2714, hasDiscount: false, discountNote: null },
           { months: 3, documentedTotal: 8142, hasDiscount: false, discountNote: null },
-          // CRITICAL: Source document shows "Life Line Care Couple 06 Months" label here but
-          // this is the SINGLE variant. Preserving documentedTotal exactly as written: 16284
           { months: 6, documentedTotal: 16284, hasDiscount: false, discountNote: null },
-          { months: 12, documentedTotal: 32568, hasDiscount: false, discountNote: null },
+          { months: 12, documentedTotal: 30940, hasDiscount: true, discountNote: 'After 5% discount' },
         ],
         services: [
           { serviceName: 'Comprehensive Care Service', serviceNote: null, sortOrder: 1 },
@@ -129,16 +125,14 @@ const CARE_PLANS = [
       },
       {
         variantType: 'COUPLE',
-        monthlyBasePrice: 2750,
-        monthlyGst: 495,
-        monthlyTotal: 3245,
+        monthlyBasePrice: 3300,
+        monthlyGst: 594,
+        monthlyTotal: 3894,
         durations: [
-          { months: 1, documentedTotal: 3245, hasDiscount: false, discountNote: null },
-          { months: 3, documentedTotal: 9735, hasDiscount: false, discountNote: null },
-          // PRESERVED EXACTLY: Source document states "Life Line Care Couple 06 Months – Rs. 19470/-"
-          // This value is the source of truth. It is NOT recalculated, NOT corrected.
-          { months: 6, documentedTotal: 19470, hasDiscount: false, discountNote: null },
-          { months: 12, documentedTotal: 38940, hasDiscount: false, discountNote: null },
+          { months: 1, documentedTotal: 3894, hasDiscount: false, discountNote: null },
+          { months: 3, documentedTotal: 11682, hasDiscount: false, discountNote: null },
+          { months: 6, documentedTotal: 23364, hasDiscount: false, discountNote: null },
+          { months: 12, documentedTotal: 44392, hasDiscount: true, discountNote: 'After 5% discount' },
         ],
         services: [
           { serviceName: 'Comprehensive Care Service', serviceNote: null, sortOrder: 1 },
@@ -213,6 +207,13 @@ async function main() {
 
     console.log(`  ✓ ${plan.name} seeded (${plan.variants.length} variants)`)
   }
+
+  // Seed MemberSequence
+  await prisma.memberSequence.upsert({
+    where: { id: "MEMBER_SEQ" },
+    update: {},
+    create: { id: "MEMBER_SEQ", current: 1000 },
+  })
 
   console.log('Seed completed successfully.')
 }

@@ -36,7 +36,7 @@ async function runTests() {
       calculatedEndDate: new Date(),
       status: "SUBMITTED",
       planName: "Life Line Care",
-      documentedTotal: 19470,
+      documentedTotal: 23364,
       currentSubscriptionId: sub.id
     }
   })

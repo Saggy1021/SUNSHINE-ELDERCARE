@@ -14,7 +14,7 @@ async function assert(condition: boolean, message: string) {
 async function verifyInvoices() {
   console.log('Starting Phase 5 Invoice Verification...')
 
-  // Clean up any test users from previous runs
+  await db.invoice.deleteMany({ where: { user: { email: { in: ['test-invoice1@example.com', 'test-invoice2@example.com'] } } } })
   await db.user.deleteMany({ where: { email: { in: ['test-invoice1@example.com', 'test-invoice2@example.com'] } } })
 
   const user1 = await db.user.create({
@@ -70,7 +70,7 @@ async function verifyInvoices() {
   const pricing12m = await carePricingService.lookupPrice({ planSlug: 'shield-shine', variantType: 'COUPLE', months: 12 })
   const tax12m = await taxService.calculateCarePlanTax(pricing12m)
   
-  assert(tax12m.total === 73349, '12-month Total must exactly match 73349')
+  assert(tax12m.total === 78588, '12-month Total must exactly match 78588')
   assert(tax12m.subtotal === null, '12-month subtotal must be null')
   assert(tax12m.taxAmount === null, '12-month GST must be null')
 
@@ -78,7 +78,7 @@ async function verifyInvoices() {
   console.log('Testing Life Line Care Couple 6m...')
   const pricingLife = await carePricingService.lookupPrice({ planSlug: 'life-line-care', variantType: 'COUPLE', months: 6 })
   const taxLife = await taxService.calculateCarePlanTax(pricingLife)
-  assert(taxLife.total === 19470, 'Life Line Care Couple 6m must strictly be 19470')
+  assert(taxLife.total === 23364, 'Life Line Care Couple 6m must strictly be 23364')
 
   // Invoice Number Uniqueness and Client Independence
   console.log('Testing invoice identity...')

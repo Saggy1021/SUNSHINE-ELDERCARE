@@ -4,13 +4,16 @@ import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
+import { notificationService } from "@/lib/services/notification"
+import { AuthorizationService } from "@/lib/services/authorization"
 
 // --- Authorization Helper ---
-async function requireAdmin() {
+async function requirePermission(permission: string) {
   const session = await auth()
-  if (!session?.user?.id || session.user.role !== "ADMIN") {
-    throw new Error("Unauthorized access. Admin role required.")
+  if (!session?.user?.id) {
+    throw new Error("Unauthorized access.")
   }
+  await AuthorizationService.require(session.user.id, permission)
   return session.user.id
 }
 
@@ -29,7 +32,7 @@ async function logAudit(actorId: string, action: string, entityType: string, ent
 
 // --- Dashboard & Metrics ---
 export async function getAdminDashboardMetrics() {
-  await requireAdmin()
+  await requirePermission("MEMBER_VIEW") // Any basic admin view permission
 
   const [
     totalMembers,
@@ -67,7 +70,7 @@ export async function getAdminDashboardMetrics() {
 }
 
 export async function getNeedsAttentionQueue() {
-  await requireAdmin()
+  await requirePermission("MEMBER_VIEW")
 
   const pendingRenewals = await db.renewalRequest.findMany({
     where: { status: "SUBMITTED" },
@@ -101,7 +104,7 @@ export async function getNeedsAttentionQueue() {
 
 // --- Members ---
 export async function getMembers() {
-  await requireAdmin()
+  await requirePermission("MEMBER_VIEW")
   
   return db.user.findMany({
     include: {
@@ -115,11 +118,21 @@ export async function getMembers() {
 }
 
 export async function getMemberDetails(userId: string) {
-  await requireAdmin()
+  const sessionUser = await requirePermission("MEMBER_VIEW")
 
-  return db.user.findUnique({
+  // Check if they have sensitive view
+  const hasSensitiveView = await AuthorizationService.can(sessionUser, "MEMBER_SENSITIVE_VIEW");
+
+  const user = await db.user.findUnique({
     where: { id: userId },
     include: {
+      memberProfile: {
+        include: {
+          sponsor: true,
+          insuranceDetails: true,
+          medicalAuth: true,
+        }
+      },
       subscriptions: {
         include: { carePlan: true, addOns: { include: { addOn: true } } },
         orderBy: { createdAt: 'desc' }
@@ -133,11 +146,30 @@ export async function getMemberDetails(userId: string) {
       }
     }
   })
+
+  if (user && !hasSensitiveView) {
+    if (user.memberProfile) {
+      user.memberProfile.idProofNumber = null;
+    }
+    if (user.memberProfile?.insuranceDetails) {
+      user.memberProfile.insuranceDetails.policyNumber = "HIDDEN";
+      user.memberProfile.insuranceDetails.coverageAmount = "HIDDEN";
+    }
+    if (user.memberProfile?.medicalAuth) {
+      user.memberProfile.medicalAuth.hospitalForSos = "HIDDEN";
+    }
+    if (user.emergencyContact) {
+      user.emergencyContact.phone = "HIDDEN";
+      user.emergencyContact.alternatePhone = "HIDDEN";
+    }
+  }
+
+  return user;
 }
 
 // --- Renewal Requests ---
 export async function getRenewalRequests() {
-  await requireAdmin()
+  await requirePermission("RENEWAL_VIEW")
 
   return db.renewalRequest.findMany({
     include: { user: { select: { name: true, email: true } } },
@@ -146,7 +178,7 @@ export async function getRenewalRequests() {
 }
 
 export async function approveRenewalRequest(requestId: string) {
-  const adminId = await requireAdmin()
+  const adminId = await requirePermission("RENEWAL_APPROVE")
 
   const request = await db.renewalRequest.findUnique({ where: { id: requestId } })
   if (!request) throw new Error("Renewal request not found")
@@ -158,19 +190,17 @@ export async function approveRenewalRequest(requestId: string) {
     data: { status: "APPROVED" }
   })
 
-  // IMPORTANT: Do NOT touch the existing Subscription or simulate payment.
-  // Phase 9 strictly sets the boundary here. Phase 10 will handle payment -> activation.
-
   await logAudit(adminId, "RENEWAL_APPROVED", "RenewalRequest", requestId, { 
     planName: request.planName, 
     variant: request.variantType 
   })
   
   revalidatePath('/admin/renewals')
+  notificationService.onRenewalApproved(request).catch(() => {})
 }
 
 export async function rejectRenewalRequest(requestId: string) {
-  const adminId = await requireAdmin()
+  const adminId = await requirePermission("RENEWAL_APPROVE")
 
   const request = await db.renewalRequest.findUnique({ where: { id: requestId } })
   if (!request) throw new Error("Renewal request not found")
@@ -184,16 +214,17 @@ export async function rejectRenewalRequest(requestId: string) {
   await logAudit(adminId, "RENEWAL_REJECTED", "RenewalRequest", requestId)
   
   revalidatePath('/admin/renewals')
+  notificationService.onRenewalRejected(request).catch(() => {})
 }
 
 // --- Inquiries ---
 export async function getInquiries() {
-  await requireAdmin()
+  await requirePermission("INQUIRY_VIEW")
   return db.inquiry.findMany({ orderBy: { createdAt: 'desc' } })
 }
 
 export async function updateInquiryStatus(id: string, status: string) {
-  const adminId = await requireAdmin()
+  const adminId = await requirePermission("INQUIRY_MANAGE")
   await db.inquiry.update({ where: { id }, data: { status } })
   await logAudit(adminId, "INQUIRY_STATUS_CHANGED", "Inquiry", id, { status })
   revalidatePath('/admin/inquiries')
@@ -201,7 +232,7 @@ export async function updateInquiryStatus(id: string, status: string) {
 
 // --- Feedback ---
 export async function getFeedback() {
-  await requireAdmin()
+  await requirePermission("FEEDBACK_VIEW")
   return db.feedback.findMany({
     include: { user: { select: { name: true, email: true } } },
     orderBy: { createdAt: 'desc' }
@@ -209,7 +240,7 @@ export async function getFeedback() {
 }
 
 export async function updateFeedbackStatus(id: string, status: string) {
-  const adminId = await requireAdmin()
+  const adminId = await requirePermission("FEEDBACK_MANAGE")
   await db.feedback.update({ where: { id }, data: { status } })
   await logAudit(adminId, "FEEDBACK_STATUS_CHANGED", "Feedback", id, { status })
   revalidatePath('/admin/feedback')
@@ -217,12 +248,12 @@ export async function updateFeedbackStatus(id: string, status: string) {
 
 // --- Add-Ons ---
 export async function getAddOns() {
-  await requireAdmin()
+  await requirePermission("PLAN_VIEW")
   return db.addOn.findMany({ orderBy: { createdAt: 'desc' } })
 }
 
 export async function toggleAddOnStatus(id: string, active: boolean) {
-  const adminId = await requireAdmin()
+  const adminId = await requirePermission("PLAN_MANAGE")
   await db.addOn.update({ where: { id }, data: { active } })
   await logAudit(adminId, "ADDON_STATUS_CHANGED", "AddOn", id, { active })
   revalidatePath('/admin/add-ons')
@@ -230,7 +261,7 @@ export async function toggleAddOnStatus(id: string, active: boolean) {
 
 // --- Audit Log ---
 export async function getAuditLogs() {
-  await requireAdmin()
+  await requirePermission("AUDIT_VIEW")
   return db.auditLog.findMany({
     include: { actor: { select: { name: true, email: true } } },
     orderBy: { createdAt: 'desc' }
@@ -240,14 +271,14 @@ export async function getAuditLogs() {
 import { adminVerifyPayment, adminRejectPayment } from "@/lib/services/payment"
 
 export async function verifyPayment(paymentId: string) {
-  const adminId = await requireAdmin()
+  const adminId = await requirePermission("PAYMENT_VERIFY")
   await adminVerifyPayment(paymentId, adminId)
   revalidatePath('/admin/payments')
   revalidatePath('/admin')
 }
 
 export async function rejectPayment(paymentId: string, reason: string) {
-  const adminId = await requireAdmin()
+  const adminId = await requirePermission("PAYMENT_VERIFY")
   await adminRejectPayment(paymentId, adminId, reason)
   revalidatePath('/admin/payments')
   revalidatePath('/admin')

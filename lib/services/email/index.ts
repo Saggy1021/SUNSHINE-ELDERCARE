@@ -1,87 +1,106 @@
-export interface SendEmailRequest {
-  to: string | string[];
-  subject: string;
-  text?: string;
-  html?: string;
-  attachments?: {
-    filename: string;
-    content: Uint8Array;
-    contentType: string;
-  }[];
-}
+/**
+ * EmailService — Provider-independent email delivery.
+ *
+ * Architecture:
+ *   Application → NotificationService → EmailService → Provider Adapter
+ *
+ * The EmailService is the single delivery gateway.
+ * It never decides WHAT to send — it only handles HOW.
+ *
+ * Provider selection is determined by EMAIL_PROVIDER env var.
+ * When no real provider is configured, the MockEmailAdapter is used,
+ * which logs intent without claiming delivery.
+ */
 
-export interface EmailProviderAdapter {
-  sendEmail(request: SendEmailRequest): Promise<boolean>;
-}
-
-// Mock Adapter for Development
-class MockEmailAdapter implements EmailProviderAdapter {
-  async sendEmail(request: SendEmailRequest): Promise<boolean> {
-    console.log(`[MockEmail] Delivery suppressed. Email Provider not configured. (To: ${request.to}, Subject: ${request.subject})`);
-    // Return false to indicate no actual delivery occurred when using Mock
-    return false;
-  }
-}
+import { logger } from '@/lib/logger'
+import { getEmailConfig, isEmailProviderConfigured } from './config'
+import { SendEmailRequest, SendEmailResult, EmailProviderAdapter } from './types'
+import { MockEmailAdapter } from './adapters/mock'
 
 export class EmailService {
-  private adapter: EmailProviderAdapter;
+  private adapter: EmailProviderAdapter
+  private configured: boolean
 
   constructor() {
-    const provider = process.env.EMAIL_PROVIDER || 'mock';
-    
-    switch (provider.toLowerCase()) {
+    const config = getEmailConfig()
+    this.configured = isEmailProviderConfigured()
+
+    switch (config.provider.toLowerCase()) {
       case 'resend':
-        // this.adapter = new ResendAdapter();
-        console.warn('Resend adapter not fully implemented yet, falling back to mock');
-        this.adapter = new MockEmailAdapter();
-        break;
+        // Future: import and instantiate ResendAdapter
+        logger.warn('Resend adapter not implemented, falling back to mock')
+        this.adapter = new MockEmailAdapter()
+        this.configured = false
+        break
       case 'smtp':
-        // this.adapter = new SmtpAdapter();
-        console.warn('SMTP adapter not fully implemented yet, falling back to mock');
-        this.adapter = new MockEmailAdapter();
-        break;
+        // Future: import and instantiate SmtpAdapter
+        logger.warn('SMTP adapter not implemented, falling back to mock')
+        this.adapter = new MockEmailAdapter()
+        this.configured = false
+        break
       case 'mock':
       default:
-        this.adapter = new MockEmailAdapter();
-        break;
+        this.adapter = new MockEmailAdapter()
+        this.configured = false
+        break
     }
   }
 
-  async sendEmail(request: SendEmailRequest): Promise<boolean> {
-    return this.adapter.sendEmail(request);
-  }
+  /**
+   * Send an email through the configured provider adapter.
+   * Returns a result object — never throws on delivery failure.
+   */
+  async send(request: SendEmailRequest): Promise<SendEmailResult> {
+    const config = getEmailConfig()
 
-  async sendCareAssessmentNotification(assessmentData: any): Promise<boolean> {
-    return this.sendEmail({
-      to: process.env.CONTACT_EMAIL_RECIPIENT || 'admin@sankalpeldercare.com',
-      subject: `New Care Assessment Request - ${assessmentData.customerName}`,
-      text: `A new care assessment request has been submitted by ${assessmentData.customerName}.
+    // Inject default from/replyTo if not provided
+    const enrichedRequest: SendEmailRequest = {
+      ...request,
+      replyTo: request.replyTo || config.replyToAddress,
+    }
+
+    try {
+      const result = await this.adapter.sendEmail(enrichedRequest)
       
-Phone: ${assessmentData.customerPhone}
-Email: ${assessmentData.customerEmail}
-Elder: ${assessmentData.elderName || 'N/A'}
-City: ${assessmentData.city || 'N/A'}
-Urgency: ${assessmentData.urgency || 'Routine'}
+      if (result.success) {
+        logger.info('Email delivered', {
+          to: Array.isArray(request.to) ? request.to.join(', ') : request.to,
+          subject: request.subject,
+          messageId: result.messageId,
+        })
+      } else {
+        logger.warn('Email delivery failed or suppressed', {
+          to: Array.isArray(request.to) ? request.to.join(', ') : request.to,
+          subject: request.subject,
+          providerConfigured: result.providerConfigured,
+          error: result.error,
+        })
+      }
 
-Requirements:
-${assessmentData.requirements}
-
-Please review in the admin dashboard.`
-    });
+      return result
+    } catch (error: any) {
+      logger.error('Email delivery exception', {
+        to: Array.isArray(request.to) ? request.to.join(', ') : request.to,
+        subject: request.subject,
+        error: error.message,
+      })
+      return {
+        success: false,
+        providerConfigured: this.configured,
+        error: error.message,
+      }
+    }
   }
 
-  async sendInvoiceReceipt(invoice: any, customerEmail: string, pdfBytes: Uint8Array): Promise<boolean> {
-    return this.sendEmail({
-      to: customerEmail,
-      subject: `Your Receipt for Invoice ${invoice.invoiceNumber}`,
-      text: `Dear Customer,\n\nThank you for choosing Sunshine Elder Care. Please find attached the receipt for your recent subscription payment.\n\nInvoice: ${invoice.invoiceNumber}\nAmount: ₹${Number(invoice.total).toLocaleString('en-IN')}\n\nRegards,\nSunshine Elder Care`,
-      attachments: [{
-        filename: `invoice-${invoice.invoiceNumber}.pdf`,
-        content: pdfBytes,
-        contentType: 'application/pdf'
-      }]
-    });
+  /**
+   * Whether a real email provider is configured.
+   */
+  isConfigured(): boolean {
+    return this.configured
   }
 }
 
-export const emailService = new EmailService();
+export const emailService = new EmailService()
+
+// Re-export types for convenience
+export type { SendEmailRequest, SendEmailResult, EmailProviderAdapter } from './types'

@@ -43,7 +43,6 @@ export function SignupForm() {
       })
 
       if (signInResult?.error) {
-        // Fallback to login page if auto-login fails
         router.push(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`)
       } else {
         router.push(callbackUrl)
@@ -56,70 +55,182 @@ export function SignupForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-6 w-full">
       {error && (
         <div className="rounded-md bg-red-500/10 p-3 text-sm text-red-600 border border-red-500/20">
           {error}
         </div>
       )}
 
-      <div>
-        <label
-          htmlFor="name"
-          className="mb-1.5 block text-sm font-medium text-foreground/80"
-        >
-          Full Name
-        </label>
-        <input
-          id="name"
-          name="name"
-          type="text"
-          required
-          placeholder="Maya Sharma"
-          className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
-        />
-      </div>
-      
-      <div>
-        <label
-          htmlFor="email"
-          className="mb-1.5 block text-sm font-medium text-foreground/80"
-        >
-          Email Address
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          required
-          placeholder="you@example.com"
-          className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
-        />
+      {/* Account Info */}
+      <div className="space-y-4">
+        <h3 className="font-serif text-xl border-b border-border pb-2">Account Login</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Email Address *</label>
+            <input name="email" type="email" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Password *</label>
+            <input name="password" type="password" required minLength={8} className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+        </div>
       </div>
 
-      <div>
-        <label
-          htmlFor="password"
-          className="mb-1.5 block text-sm font-medium text-foreground/80"
-        >
-          Password
-        </label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          required
-          minLength={8}
-          className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
-        />
+      {/* SECTION A: MEMBER DETAILS */}
+      <div className="space-y-4">
+        <h3 className="font-serif text-xl border-b border-border pb-2">Section A: Member Details</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">First Name *</label>
+            <input name="firstName" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Surname / Last Name *</label>
+            <input name="lastName" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">ID Proof Type</label>
+            <input name="idProofType" type="text" placeholder="e.g. Aadhar" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">ID Proof Number</label>
+            <input name="idProofNumber" type="text" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Date of Birth *</label>
+            <input name="dateOfBirth" type="date" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Gender *</label>
+            <select name="gender" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20">
+              <option value="">Select Gender</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div className="md:col-span-2">
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Service Address *</label>
+            <textarea name="serviceAddress" required rows={2} className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Nearest Landmark</label>
+            <input name="nearestLandmark" type="text" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Primary Mobile Number *</label>
+            <input name="mobileNumber" type="tel" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Alternate Number</label>
+            <input name="alternateNumber" type="tel" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION B: EMERGENCY CONTACT */}
+      <div className="space-y-4">
+        <h3 className="font-serif text-xl border-b border-border pb-2">Section B: Emergency Contact</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Contact Name *</label>
+            <input name="emergencyContactName" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Relationship *</label>
+            <input name="emergencyContactRelationship" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Primary Mobile *</label>
+            <input name="emergencyContactMobile" type="tel" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Other Contact</label>
+            <input name="emergencyContactOther" type="tel" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div className="md:col-span-2">
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Email</label>
+            <input name="emergencyContactEmail" type="email" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION C: SPONSOR DETAILS */}
+      <div className="space-y-4">
+        <h3 className="font-serif text-xl border-b border-border pb-2">Section C: Sponsor Details</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Sponsor Name *</label>
+            <input name="sponsorName" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Relationship *</label>
+            <input name="sponsorRelationship" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Primary Mobile *</label>
+            <input name="sponsorMobile" type="tel" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Other Contact</label>
+            <input name="sponsorOther" type="tel" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div className="md:col-span-2">
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Email</label>
+            <input name="sponsorEmail" type="email" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION D: HEALTH INSURANCE */}
+      <div className="space-y-4">
+        <h3 className="font-serif text-xl border-b border-border pb-2">Section D: Health Insurance</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Insurance Provider</label>
+            <input name="insuranceProvider" type="text" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Card / Policy Number</label>
+            <input name="policyNumber" type="text" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Coverage Amount</label>
+            <input name="coverageAmount" type="text" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION E: MEDICAL ALERT / HOSPITAL AUTHORIZATION */}
+      <div className="space-y-4">
+        <h3 className="font-serif text-xl border-b border-border pb-2">Section E: Medical Alert / Hospital Auth</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Hospital for SOS</label>
+            <input name="hospitalForSos" type="text" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Nominee Local Contact Number</label>
+            <input name="nomineeLocalContact" type="tel" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div className="md:col-span-2 mt-4">
+            <label className="flex items-start gap-3">
+              <input name="shiftAuthorization" type="checkbox" className="mt-1 h-5 w-5 rounded border-input text-primary focus:ring-primary/20" />
+              <span className="text-sm text-foreground/80">
+                I authorize Sunshine Eldercare personnel to shift the member to a hospital recommended by Sunshine Eldercare or chosen by the member in case of an emergency.
+              </span>
+            </label>
+          </div>
+        </div>
       </div>
 
       <button
         type="submit"
         disabled={loading}
-        className="mt-2 w-full rounded-full bg-primary px-7 py-3.5 text-base font-medium text-primary-foreground shadow-md transition-transform hover:-translate-y-0.5 disabled:opacity-70 disabled:hover:translate-y-0"
+        className="mt-6 w-full rounded-full bg-primary px-7 py-3.5 text-base font-medium text-primary-foreground shadow-md transition-transform hover:-translate-y-0.5 disabled:opacity-70 disabled:hover:translate-y-0"
       >
-        {loading ? 'Creating Account...' : 'Create Account'}
+        {loading ? 'Creating Account...' : 'Submit Registration'}
       </button>
 
       <div className="mt-2 text-center text-sm text-foreground/70">

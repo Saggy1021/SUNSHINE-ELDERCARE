@@ -6,6 +6,7 @@ import { calculateEndDate } from "@/lib/services/dates"
 import { carePricingService } from "@/lib/services/care-plans"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
+import { notificationService } from "@/lib/services/notification"
 
 export async function getUserSubscription() {
   const session = await auth()
@@ -114,8 +115,9 @@ export async function submitRenewalRequest(formData: FormData) {
   })
 
   // Start Transaction
+  let createdRequest: any = null
   await db.$transaction(async (tx) => {
-    const request = await tx.renewalRequest.create({
+    createdRequest = await tx.renewalRequest.create({
       data: {
         userId: session.user.id,
         currentSubscriptionId: currentSub?.id || null,
@@ -136,12 +138,17 @@ export async function submitRenewalRequest(formData: FormData) {
       
       await tx.renewalRequestAddOn.createMany({
         data: dbAddOns.map(a => ({
-          renewalRequestId: request.id,
+          renewalRequestId: createdRequest.id,
           addOnId: a.id
         }))
       })
     }
   })
+
+  // Fire notification AFTER transaction succeeds
+  if (createdRequest) {
+    notificationService.onRenewalSubmitted(createdRequest).catch(() => {})
+  }
 
   redirect('/dashboard?renewal=success')
 }

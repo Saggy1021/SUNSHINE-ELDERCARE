@@ -38,40 +38,40 @@ const PRICE_MATRIX: Array<{
   { plan: 'shield-shine', variant: 'SINGLE', months: 6,  expectedTotal: 33984 },
   { plan: 'shield-shine', variant: 'SINGLE', months: 12, expectedTotal: 62870, hasDiscount: true, discountNote: 'After 7.5% discount' },
   // Shield Shine — Couple
-  { plan: 'shield-shine', variant: 'COUPLE', months: 1,  expectedTotal: 6608 },
-  { plan: 'shield-shine', variant: 'COUPLE', months: 3,  expectedTotal: 19824 },
-  { plan: 'shield-shine', variant: 'COUPLE', months: 6,  expectedTotal: 39648 },
-  { plan: 'shield-shine', variant: 'COUPLE', months: 12, expectedTotal: 73349, hasDiscount: true, discountNote: 'After 7.5% discount' },
+  { plan: 'shield-shine', variant: 'COUPLE', months: 1,  expectedTotal: 7080 },
+  { plan: 'shield-shine', variant: 'COUPLE', months: 3,  expectedTotal: 21240 },
+  { plan: 'shield-shine', variant: 'COUPLE', months: 6,  expectedTotal: 42480 },
+  { plan: 'shield-shine', variant: 'COUPLE', months: 12, expectedTotal: 78588, hasDiscount: true, discountNote: 'After 7.5% discount' },
   // Semi Shield Shine — Single
   { plan: 'semi-shield-shine', variant: 'SINGLE', months: 1,  expectedTotal: 5310 },
   { plan: 'semi-shield-shine', variant: 'SINGLE', months: 3,  expectedTotal: 15930 },
   { plan: 'semi-shield-shine', variant: 'SINGLE', months: 6,  expectedTotal: 31860 },
   { plan: 'semi-shield-shine', variant: 'SINGLE', months: 12, expectedTotal: 58941, hasDiscount: true, discountNote: 'After 7.5% discount' },
   // Semi Shield Shine — Couple
-  { plan: 'semi-shield-shine', variant: 'COUPLE', months: 1,  expectedTotal: 6254 },
-  { plan: 'semi-shield-shine', variant: 'COUPLE', months: 3,  expectedTotal: 18762 },
-  { plan: 'semi-shield-shine', variant: 'COUPLE', months: 6,  expectedTotal: 37524 },
-  { plan: 'semi-shield-shine', variant: 'COUPLE', months: 12, expectedTotal: 69419, hasDiscount: true, discountNote: 'After 7.5% discount' },
+  { plan: 'semi-shield-shine', variant: 'COUPLE', months: 1,  expectedTotal: 6490 },
+  { plan: 'semi-shield-shine', variant: 'COUPLE', months: 3,  expectedTotal: 19470 },
+  { plan: 'semi-shield-shine', variant: 'COUPLE', months: 6,  expectedTotal: 38940 },
+  { plan: 'semi-shield-shine', variant: 'COUPLE', months: 12, expectedTotal: 72039, hasDiscount: true, discountNote: 'After 7.5% discount' },
   // Life Line Care — Single
   { plan: 'life-line-care', variant: 'SINGLE', months: 1,  expectedTotal: 2714 },
   { plan: 'life-line-care', variant: 'SINGLE', months: 3,  expectedTotal: 8142 },
   { plan: 'life-line-care', variant: 'SINGLE', months: 6,  expectedTotal: 16284 },
-  { plan: 'life-line-care', variant: 'SINGLE', months: 12, expectedTotal: 32568 },
+  { plan: 'life-line-care', variant: 'SINGLE', months: 12, expectedTotal: 30940, hasDiscount: true, discountNote: 'After 5% discount' },
   // Life Line Care — Couple
-  { plan: 'life-line-care', variant: 'COUPLE', months: 1,  expectedTotal: 3245 },
-  { plan: 'life-line-care', variant: 'COUPLE', months: 3,  expectedTotal: 9735 },
-  { plan: 'life-line-care', variant: 'COUPLE', months: 6,  expectedTotal: 19470 }, // CRITICAL: preserved exactly
-  { plan: 'life-line-care', variant: 'COUPLE', months: 12, expectedTotal: 38940 },
+  { plan: 'life-line-care', variant: 'COUPLE', months: 1,  expectedTotal: 3894 },
+  { plan: 'life-line-care', variant: 'COUPLE', months: 3,  expectedTotal: 11682 },
+  { plan: 'life-line-care', variant: 'COUPLE', months: 6,  expectedTotal: 23364 }, 
+  { plan: 'life-line-care', variant: 'COUPLE', months: 12, expectedTotal: 44392, hasDiscount: true, discountNote: 'After 5% discount' },
 ]
 
 // ── Monthly base/GST matrix ──────────────────────────────────────────────────
 const MONTHLY_MATRIX = [
   { plan: 'shield-shine',      variant: 'SINGLE', base: 4800, gst: 864,  total: 5664 },
-  { plan: 'shield-shine',      variant: 'COUPLE', base: 5600, gst: 1008, total: 6608 },
+  { plan: 'shield-shine',      variant: 'COUPLE', base: 6000, gst: 1080, total: 7080 },
   { plan: 'semi-shield-shine', variant: 'SINGLE', base: 4500, gst: 810,  total: 5310 },
-  { plan: 'semi-shield-shine', variant: 'COUPLE', base: 5300, gst: 954,  total: 6254 },
+  { plan: 'semi-shield-shine', variant: 'COUPLE', base: 5500, gst: 990,  total: 6490 },
   { plan: 'life-line-care',    variant: 'SINGLE', base: 2300, gst: 414,  total: 2714 },
-  { plan: 'life-line-care',    variant: 'COUPLE', base: 2750, gst: 495,  total: 3245 },
+  { plan: 'life-line-care',    variant: 'COUPLE', base: 3300, gst: 594,  total: 3894 },
 ]
 
 // ── Services matrix ──────────────────────────────────────────────────────────
@@ -81,14 +81,14 @@ const SERVICES_MATRIX: Record<string, { name: string; note: string | null }[]> =
     { name: '24/7 Emergency Assistant', note: null },
     { name: 'Daily Wellness Calls', note: null },
     { name: 'Monthly Senior Staff Visit', note: null },
-    { name: 'Out door visit', note: '4 x Out door visit per months (Total 10 Hrs/Month)' },
+    { name: '4 x Out door visit per months (Total 10 Hrs/Month)', note: null },
   ],
   'semi-shield-shine': [
     { name: 'Comprehensive Care Service', note: null },
     { name: '24/7 Emergency Assistant', note: null },
     { name: 'Daily Wellness Calls', note: null },
     { name: 'Monthly Senior Staff Visit', note: null },
-    { name: 'Out door visit', note: '2 x Out door visit per months (Total 5 Hrs/Month)' },
+    { name: '2 x Out door visit per months (Total 5 Hrs/Month)', note: null },
   ],
   'life-line-care': [
     { name: 'Comprehensive Care Service', note: null },
@@ -157,17 +157,8 @@ async function main() {
     }
   }
 
-  // ── 4. CRITICAL: Life Line Care Couple 6-month = ₹19,470 exactly ──────────
-  console.log('\n[ 4. CRITICAL Price Assertion ]')
-  const llcC6 = await prisma.carePlanDuration.findFirst({
-    where: { months: 6, variant: { variantType: 'COUPLE', carePlan: { slug: 'life-line-care' } } }
-  })
-  assert(llcC6?.documentedTotal === 19470,
-    'Life Line Care Couple 6m = ₹19,470 (preserved exactly from source document)',
-    `Got: ${llcC6?.documentedTotal}`)
-
-  // ── 5. Discount notes for 12-month plans only ─────────────────────────────
-  console.log('\n[ 5. Discount Notes ]')
+  // ── 4. Discount notes for 12-month plans and Life Line Care  ─────────────────────────────
+  console.log('\n[ 4. Discount Notes ]')
   const discountedPlans = ['shield-shine', 'semi-shield-shine']
   for (const slug of discountedPlans) {
     for (const vt of ['SINGLE', 'COUPLE']) {
@@ -178,16 +169,16 @@ async function main() {
       assert(r?.discountNote === 'After 7.5% discount', `${slug}/${vt}/12mo discountNote correct`)
     }
   }
-  // Life Line Care: NO discount
   for (const vt of ['SINGLE', 'COUPLE']) {
     const r = await prisma.carePlanDuration.findFirst({
       where: { months: 12, variant: { variantType: vt, carePlan: { slug: 'life-line-care' } } }
     })
-    assert(r?.hasDiscount === false, `life-line-care/${vt}/12mo hasDiscount=false (no discount in source)`)
+    assert(r?.hasDiscount === true, `life-line-care/${vt}/12mo hasDiscount=true`)
+    assert(r?.discountNote === 'After 5% discount', `life-line-care/${vt}/12mo discountNote correct`)
   }
 
-  // ── 6. Services ───────────────────────────────────────────────────────────
-  console.log('\n[ 6. Services ]')
+  // ── 5. Services ───────────────────────────────────────────────────────────
+  console.log('\n[ 5. Services ]')
   for (const [planSlug, expectedSvcs] of Object.entries(SERVICES_MATRIX)) {
     const plan = plans.find(p => p.slug === planSlug)
     const variant = plan?.variants.find(v => v.variantType === 'SINGLE')
@@ -209,8 +200,8 @@ async function main() {
   const hasOutdoor = llcSingle?.services.some(s => s.serviceName.toLowerCase().includes('door'))
   assert(!hasOutdoor, 'Life Line Care does NOT include outdoor visit service')
 
-  // ── 7. Uniqueness constraints ─────────────────────────────────────────────
-  console.log('\n[ 7. Database Uniqueness ]')
+  // ── 6. Uniqueness constraints ─────────────────────────────────────────────
+  console.log('\n[ 6. Database Uniqueness ]')
   for (const slug of ['shield-shine', 'semi-shield-shine', 'life-line-care']) {
     const count = await prisma.carePlan.count({ where: { slug } })
     assert(count === 1, `Only 1 CarePlan with slug '${slug}'`, `Found: ${count}`)
@@ -224,8 +215,8 @@ async function main() {
     }
   }
 
-  // ── 8. Invalid request simulation ─────────────────────────────────────────
-  console.log('\n[ 8. Invalid Request Handling ]')
+  // ── 7. Invalid request simulation ─────────────────────────────────────────
+  console.log('\n[ 7. Invalid Request Handling ]')
   const invalidPlan = await prisma.carePlan.findFirst({ where: { slug: 'non-existent-plan' } })
   assert(invalidPlan === null, 'Invalid plan slug returns null (not found)')
 
@@ -239,10 +230,10 @@ async function main() {
   })
   assert(invalidDuration === null, 'Unsupported duration (24mo) returns null')
 
-  // ── 9. No add-ons seeded ──────────────────────────────────────────────────
-  console.log('\n[ 9. Add-Ons (Placeholders) ]')
+  // ── 8. No add-ons seeded ──────────────────────────────────────────────────
+  console.log('\n[ 8. Add-Ons (Placeholders) ]')
   const addOnCount = await prisma.addOn.count()
-  assert(addOnCount === 3, '3 Placeholder add-ons seeded')
+  assert(addOnCount === 3, '3 Placeholder add-ons exist')
 
   // ── Summary ───────────────────────────────────────────────────────────────
   console.log(`\n${'='.repeat(60)}`)

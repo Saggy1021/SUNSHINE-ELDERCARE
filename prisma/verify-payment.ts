@@ -32,7 +32,7 @@ async function runTests() {
       calculatedEndDate: new Date(Date.now() + 86400000 * 180),
       status: "APPROVED",
       planName: "Life Line Care",
-      documentedTotal: 19470,
+      documentedTotal: 23364,
     }
   })
 

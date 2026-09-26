@@ -1,23 +1,42 @@
+import { db } from "@/lib/db"
 import { getUserSubscription, getUserRenewalState } from "@/app/actions/membership"
 import { auth } from "@/auth"
 import Link from "next/link"
-import { Shield, Clock, CalendarDays, CheckCircle2, Receipt, AlertCircle } from "lucide-react"
+import { Shield, Clock, CalendarDays, CheckCircle2, Receipt, AlertCircle, Fingerprint } from "lucide-react"
 import { initiateRenewalCheckout } from "@/app/actions/checkout"
 
 export default async function DashboardPage() {
   const session = await auth()
   const subscription = await getUserSubscription()
   const renewalState = await getUserRenewalState()
+  
+  let memberProfile = null;
+  if (session?.user?.id) {
+    memberProfile = await db.memberProfile.findUnique({
+      where: { userId: session.user.id }
+    })
+  }
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
-          Welcome, {session?.user?.name || "Member"}
-        </h1>
-        <p className="text-slate-600 mt-2">
-          Manage your Sunshine Elder Care membership and services.
-        </p>
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+            Welcome, {session?.user?.name || "Member"}
+          </h1>
+          <p className="text-slate-600 mt-2">
+            Manage your Sunshine Elder Care membership and services.
+          </p>
+        </div>
+        <div className="bg-slate-50 border border-slate-100 rounded-lg p-3 px-5 flex items-center gap-3">
+          <div className="bg-primary/10 p-2 rounded-full">
+            <Fingerprint className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Member ID</p>
+            <p className="font-mono font-bold text-slate-900">{memberProfile?.memberId || "UNASSIGNED"}</p>
+          </div>
+        </div>
       </div>
 
       {!subscription ? (

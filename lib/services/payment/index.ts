@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import { notificationService } from '@/lib/services/notification'
 
 export interface PaymentCheckoutRequest {
   invoiceId: string;
@@ -133,7 +134,7 @@ export async function submitOfflinePayment(
   }
 
   // Create payment record
-  return db.payment.create({
+  const payment = await db.payment.create({
     data: {
       userId,
       invoiceId,
@@ -146,6 +147,11 @@ export async function submitOfflinePayment(
       reference,
     }
   })
+
+  // Fire notification AFTER db operation succeeds
+  notificationService.onPaymentSubmitted(payment).catch(() => {})
+
+  return payment
 }
 
 export async function adminVerifyPayment(paymentId: string, adminUserId: string) {
@@ -227,6 +233,26 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
       }
     })
   })
+
+  // Fire notifications AFTER successful transaction — never inside $transaction
+  // Re-fetch the created subscription for notification context
+  const newSub = await db.subscription.findFirst({
+    where: { userId: renewalRequest.userId },
+    include: { addOns: { include: { addOn: true } } },
+    orderBy: { createdAt: 'desc' }
+  })
+
+  if (newSub) {
+    notificationService.onPaymentVerified(payment, {
+      status: newSub.status,
+      startDate: newSub.startDate,
+      endDate: newSub.endDate,
+      carePlanId: newSub.carePlanId,
+      variantType: newSub.variantType,
+      durationMonths: newSub.durationMonths,
+      addOns: newSub.addOns,
+    }).catch(() => {})
+  }
 }
 
 export async function adminRejectPayment(paymentId: string, adminUserId: string, reason: string) {
@@ -255,4 +281,10 @@ export async function adminRejectPayment(paymentId: string, adminUserId: string,
       }
     })
   })
+
+  // Fire notification AFTER successful transaction
+  const updatedPayment = await db.payment.findUnique({ where: { id: paymentId } })
+  if (updatedPayment) {
+    notificationService.onPaymentRejected(updatedPayment).catch(() => {})
+  }
 }

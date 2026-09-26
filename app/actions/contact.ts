@@ -1,12 +1,13 @@
 'use server'
 
 import { z } from 'zod'
-import { emailService } from '@/lib/services/email'
-import { businessData } from '@/lib/config/business-data'
+import { db } from '@/lib/db'
+import { notificationService } from '@/lib/services/notification'
 
 const contactSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
+  phone: z.string().min(5, "Phone number is required"),
   message: z.string().min(10, "Message must be at least 10 characters"),
 })
 
@@ -15,19 +16,25 @@ export async function submitContactForm(formData: FormData) {
     const data = {
       name: formData.get('name') as string,
       email: formData.get('email') as string,
+      phone: formData.get('phone') as string || '',
       message: formData.get('message') as string,
     }
 
     const validatedData = contactSchema.parse(data)
 
-    const emailServiceInstance = emailService
-    
-    // In a real app, this would send an email to the business and an auto-reply to the user.
-    await emailServiceInstance.sendEmail({
-      to: businessData.email,
-      subject: `New Inquiry from ${validatedData.name}`,
-      body: `Name: ${validatedData.name}\nEmail: ${validatedData.email}\n\nMessage:\n${validatedData.message}`
+    // Persist inquiry first — database is authoritative
+    const inquiry = await db.inquiry.create({
+      data: {
+        fullName: validatedData.name,
+        email: validatedData.email,
+        phone: validatedData.phone,
+        message: validatedData.message,
+        status: 'NEW',
+      }
     })
+
+    // Fire admin notification AFTER db operation succeeds — never blocks the inquiry
+    notificationService.onInquiryReceived(inquiry).catch(() => {})
 
     return { success: true }
   } catch (error) {
