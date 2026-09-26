@@ -134,7 +134,7 @@ export async function getMemberDetails(userId: string) {
         }
       },
       subscriptions: {
-        include: { carePlan: true, addOns: { include: { addOn: true } } },
+        include: { carePlan: true, addOns: { include: { addOn: true } }, customPlan: true },
         orderBy: { createdAt: 'desc' }
       },
       renewalRequests: {
@@ -143,9 +143,37 @@ export async function getMemberDetails(userId: string) {
       emergencyContact: true,
       feedback: {
         orderBy: { createdAt: 'desc' }
+      },
+      customPlanAgreements: {
+        orderBy: { createdAt: 'desc' }
+      },
+      invoices: {
+        where: { invoiceNumber: { not: null } },
+        orderBy: { issueDate: 'desc' }
+      },
+      receipts: {
+        orderBy: { createdAt: 'desc' }
+      },
+      payments: {
+        orderBy: { createdAt: 'desc' }
       }
     }
   })
+
+  let auditLogs: any[] = []
+  if (user) {
+    auditLogs = await db.auditLog.findMany({
+      where: {
+        OR: [
+          { actorUserId: userId },
+          { entityId: userId, entityType: 'USER' },
+          { entityId: user.memberProfile?.id, entityType: 'MEMBER_PROFILE' }
+        ]
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20
+    })
+  }
 
   if (user && !hasSensitiveView) {
     if (user.memberProfile) {
@@ -164,7 +192,7 @@ export async function getMemberDetails(userId: string) {
     }
   }
 
-  return user;
+  return { ...user, auditLogs };
 }
 
 // --- Renewal Requests ---
@@ -282,4 +310,76 @@ export async function rejectPayment(paymentId: string, reason: string) {
   await adminRejectPayment(paymentId, adminId, reason)
   revalidatePath('/admin/payments')
   revalidatePath('/admin')
+}
+
+import { memberRegistrationSchema } from '@/lib/validations/member'
+import bcrypt from 'bcryptjs'
+import { ROLES } from '@/lib/auth/roles'
+
+export async function adminCreateMember(formData: FormData) {
+  const adminId = await requirePermission('MEMBER_MANAGE')
+
+  const data = Object.fromEntries(formData.entries());
+  if (data.shiftAuthorization === 'on' || data.shiftAuthorization === 'true') {
+    data.shiftAuthorization = true as any;
+  } else {
+    data.shiftAuthorization = false as any;
+  }
+
+  const validationResult = memberRegistrationSchema.safeParse(data)
+  if (!validationResult.success) {
+    return { success: false, error: validationResult.error.errors[0].message }
+  }
+  const validatedData = validationResult.data
+  const normalizedEmail = validatedData.email.toLowerCase()
+
+  const existingUser = await db.user.findUnique({ where: { email: normalizedEmail } })
+  if (existingUser) return { success: false, error: 'Email already exists' }
+
+  const passwordHash = await bcrypt.hash(validatedData.password, 10)
+
+  const user = await db.$transaction(async (tx) => {
+    const newUser = await tx.user.create({
+      data: {
+        name: ` `,
+        email: normalizedEmail,
+        passwordHash,
+        role: ROLES.USER,
+        emailVerified: new Date(),
+      }
+    })
+    const profile = await tx.memberProfile.create({
+      data: {
+        userId: newUser.id,
+        firstName: validatedData.firstName,
+        lastName: validatedData.lastName,
+        idProofType: validatedData.idProofType || null,
+        idProofNumber: validatedData.idProofNumber || null,
+        dateOfBirth: new Date(validatedData.dateOfBirth),
+        gender: validatedData.gender,
+        serviceAddress: validatedData.serviceAddress,
+        nearestLandmark: validatedData.nearestLandmark || null,
+        mobileNumber: validatedData.mobileNumber,
+        alternateNumber: validatedData.alternateNumber || null,
+        email: normalizedEmail,
+      }
+    })
+    await tx.emergencyContact.create({
+      data: { userId: newUser.id, fullName: validatedData.emergencyContactName, relationship: validatedData.emergencyContactRelationship, phone: validatedData.emergencyContactMobile, alternatePhone: validatedData.emergencyContactOther || null, email: validatedData.emergencyContactEmail || null }
+    })
+    await tx.sponsor.create({
+      data: { memberProfileId: profile.id, fullName: validatedData.sponsorName, relationship: validatedData.sponsorRelationship, mobileNumber: validatedData.sponsorMobile, alternateNumber: validatedData.sponsorOther || null, email: validatedData.sponsorEmail || null }
+    })
+    if (validatedData.insuranceProvider || validatedData.policyNumber) {
+      await tx.insuranceDetails.create({ data: { memberProfileId: profile.id, providerName: validatedData.insuranceProvider || '', policyNumber: validatedData.policyNumber || '', coverageAmount: validatedData.coverageAmount || null } })
+    }
+    await tx.medicalAuthorization.create({
+      data: { memberProfileId: profile.id, hospitalForSos: validatedData.hospitalForSos || null, nomineeLocalContact: validatedData.nomineeLocalContact || null, shiftAuthorization: validatedData.shiftAuthorization }
+    })
+    return newUser
+  })
+
+  await logAudit(adminId, 'MEMBER_REGISTERED_BY_ADMIN', 'USER', user.id)
+  revalidatePath('/admin/members')
+  return { success: true, userId: user.id }
 }

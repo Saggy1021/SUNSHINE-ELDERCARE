@@ -195,3 +195,34 @@ export async function getUserRenewalState() {
     payment: payment
   }
 }
+
+export async function getMembershipHistory() {
+  const session = await auth()
+  if (!session?.user?.id) return []
+
+  return db.subscription.findMany({
+    where: { userId: session.user.id },
+    include: {
+      carePlan: true,
+      customPlan: true
+    },
+    orderBy: { createdAt: 'desc' }
+  })
+}
+
+export async function getMemberDocuments() {
+  const session = await auth()
+  if (!session?.user?.id) return { invoices: [], receipts: [] }
+
+  const invoices = await db.invoice.findMany({
+    where: { userId: session.user.id, invoiceNumber: { not: null } },
+    orderBy: { issueDate: 'desc' }
+  })
+
+  const receipts = await db.receipt.findMany({
+    where: { userId: session.user.id },
+    orderBy: { createdAt: 'desc' }
+  })
+
+  return { invoices, receipts }
+}

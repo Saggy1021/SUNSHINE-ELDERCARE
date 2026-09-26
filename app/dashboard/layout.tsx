@@ -14,6 +14,9 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "My Membership", href: "/dashboard/membership", icon: UserSquare2 },
+    { name: "My Profile", href: "/dashboard/profile", icon: UserSquare2 },
+    { name: "Membership History", href: "/dashboard/history", icon: RefreshCw },
+    { name: "Financial Documents", href: "/dashboard/documents", icon: RefreshCw },
     { name: "Manage Membership", href: "/dashboard/manage-membership", icon: RefreshCw },
     { name: "Emergency Contact", href: "/dashboard/emergency-contact", icon: ShieldAlert },
     { name: "Feedback", href: "/dashboard/feedback", icon: MessageSquarePlus },

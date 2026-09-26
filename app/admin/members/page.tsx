@@ -14,6 +14,12 @@ export default async function AdminMembersPage() {
           </h1>
           <p className="text-slate-600 mt-1">Manage user accounts and memberships.</p>
         </div>
+        <Link 
+          href="/admin/members/new" 
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+        >
+          Create Member
+        </Link>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
