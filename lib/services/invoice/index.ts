@@ -24,11 +24,11 @@ export class InvoiceService {
     const maxRetries = 3;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        const invoiceNumber = this.generateUniqueInvoiceNumber();
+        const referenceNumber = this.generateUniqueInvoiceNumber();
 
         const invoice = await db.invoice.create({
           data: {
-            invoiceNumber,
+            referenceNumber,
             userId,
             planId,
             subtotal: tax.subtotal,
@@ -79,11 +79,11 @@ export class InvoiceService {
     
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        const invoiceNumber = this.generateUniqueInvoiceNumber();
+        const referenceNumber = this.generateUniqueInvoiceNumber();
 
         const invoice = await db.invoice.create({
           data: {
-            invoiceNumber,
+            referenceNumber,
             userId,
             planId: pricing.planSlug,
             idempotencyKey: idempotencyKey || null,
@@ -127,7 +127,7 @@ export class InvoiceService {
             if (existing) return existing;
           }
           
-          // Collision on unique constraint (invoiceNumber). Retry.
+          // Collision on unique constraint (referenceNumber). Retry.
           if (attempt < maxRetries - 1) {
             continue;
           }

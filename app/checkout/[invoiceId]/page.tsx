@@ -69,7 +69,7 @@ export default async function InvoiceReviewPage({ params, searchParams }: Props)
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <div>
                     <p className="text-sm text-foreground/60 uppercase tracking-wider font-semibold">Invoice Number</p>
-                    <p className="font-display text-xl font-bold">{invoice.invoiceNumber}</p>
+                    <p className="font-display text-xl font-bold">{invoice.invoiceNumber || invoice.referenceNumber}</p>
                   </div>
                   <div className="text-left sm:text-right">
                     <p className="text-sm text-foreground/60 uppercase tracking-wider font-semibold">Status</p>

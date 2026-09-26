@@ -14,7 +14,7 @@ export class PdfService {
     page.drawText('INVOICE', { x: width - 150, y: height - 50, size: 24, font: boldFont })
     
     // Draw Invoice Details
-    page.drawText(`Invoice Number: ${invoice.invoiceNumber}`, { x: 50, y: height - 100, size: 12, font })
+    page.drawText(`Invoice Number: ${invoice.invoiceNumber || invoice.referenceNumber}`, { x: 50, y: height - 100, size: 12, font })
     page.drawText(`Date: ${new Date(invoice.createdAt).toLocaleDateString()}`, { x: 50, y: height - 120, size: 12, font })
     page.drawText(`Status: ${invoice.paymentStatus}`, { x: 50, y: height - 140, size: 12, font })
     

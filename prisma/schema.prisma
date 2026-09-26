@@ -13,36 +13,37 @@ datasource db {
 // --- Auth.js Models ---
 
 model User {
-  id             String         @id @default(cuid())
-  name           String?
-  email          String?        @unique
-  emailVerified  DateTime?
-  image          String?
-  passwordHash   String?
-  role           String         @default("USER") // USER or ADMIN
-  sessionVersion Int            @default(0)
-  accounts       Account[]
-  sessions       Session[]
-  subscriptions  Subscription[]
-  orders         Order[]
-  invoices       Invoice[]
-  elders         Elder[]
+  id               String            @id @default(cuid())
+  name             String?
+  email            String?           @unique
+  emailVerified    DateTime?
+  image            String?
+  passwordHash     String?
+  role             String            @default("USER") // USER or ADMIN
+  sessionVersion   Int               @default(0)
+  accounts         Account[]
+  sessions         Session[]
+  subscriptions    Subscription[]
+  orders           Order[]
+  invoices         Invoice[]
+  elders           Elder[]
   emergencyContact EmergencyContact?
-  feedback       Feedback[]
-  renewalRequests RenewalRequest[]
-  payments       Payment[]
-  verifiedPayments Payment[] @relation("PaymentVerifiedBy")
+  feedback         Feedback[]
+  renewalRequests  RenewalRequest[]
+  payments         Payment[]
+  verifiedPayments Payment[]         @relation("PaymentVerifiedBy")
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  auditLogs      AuditLog[]
-  memberProfile  MemberProfile?
-  employee       Employee?
-  userRoles      UserRole[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  auditLogs     AuditLog[]
+  memberProfile MemberProfile?
+  employee      Employee?
+  userRoles     UserRole[]
 
   customPlansReceived CustomPlanAgreement[] @relation("CustomPlanMember")
   customPlansCreated  CustomPlanAgreement[] @relation("CustomPlanCreator")
   customPlansAuth     CustomPlanAgreement[] @relation("CustomPlanAuthorizer")
+  receipts            Receipt[]
 }
 
 model Account {
@@ -85,13 +86,13 @@ model VerificationToken {
 // --- Care Plan Catalog (Source of Truth: Sunshine Elder Care Package) ---
 
 model CarePlan {
-  id        String            @id @default(cuid())
-  slug      String            @unique // e.g. shield-shine, semi-shield-shine, life-line-care
-  name      String // exact name from source document
-  active    Boolean           @default(true)
-  sortOrder Int               @default(0)
-  variants  CarePlanVariant[]
-  subscriptions Subscription[]
+  id              String            @id @default(cuid())
+  slug            String            @unique // e.g. shield-shine, semi-shield-shine, life-line-care
+  name            String // exact name from source document
+  active          Boolean           @default(true)
+  sortOrder       Int               @default(0)
+  variants        CarePlanVariant[]
+  subscriptions   Subscription[]
   renewalRequests RenewalRequest[]
 
   createdAt DateTime @default(now())
@@ -162,8 +163,8 @@ model AddOn {
   taxClassification String?
   active            Boolean @default(true)
 
-  plans PlanAddOn[]
-  subscriptionAddOns SubscriptionAddOn[]
+  plans                PlanAddOn[]
+  subscriptionAddOns   SubscriptionAddOn[]
   renewalRequestAddOns RenewalRequestAddOn[]
 
   createdAt DateTime @default(now())
@@ -233,10 +234,18 @@ model CareAssessment {
 }
 
 model Invoice {
-  id            String  @id @default(cuid())
-  invoiceNumber String  @unique
+  id              String  @id @default(cuid())
+  referenceNumber String  @unique
+  invoiceNumber   String? @unique
+
   userId        String
   planId        String?
+
+  // Immutable customer snapshot
+  customerName     String?
+  customerEmail    String?
+  customerAddress  String?  @db.Text
+  customerPhone    String?
 
   subtotal  Decimal?
   taxAmount Decimal?
@@ -260,6 +269,7 @@ model Invoice {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  receipts  Receipt[]
 }
 
 model InvoiceLineItem {
@@ -286,39 +296,39 @@ model InvoiceLineItem {
 }
 
 model Subscription {
-  id               String    @id @default(cuid())
-  userId           String
-  planId           String?
-  carePlanId       String?
-  customPlanId     String?
-  variantType      String?
-  durationMonths   Int?
-  startDate        DateTime?
-  endDate          DateTime?
-  
+  id             String    @id @default(cuid())
+  userId         String
+  planId         String?
+  carePlanId     String?
+  customPlanId   String?
+  variantType    String?
+  durationMonths Int?
+  startDate      DateTime?
+  endDate        DateTime?
+
   status           String    @default("PENDING") // PENDING, APPROVED, SCHEDULED, ACTIVE, EXPIRING, EXPIRED, SUSPENDED, CANCELLED
   providerSubId    String?   @unique // Provider-independent external reference
   currentPeriodEnd DateTime?
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan Plan? @relation(fields: [planId], references: [id], onDelete: Restrict)
-  carePlan CarePlan? @relation(fields: [carePlanId], references: [id], onDelete: Restrict)
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan       Plan?                @relation(fields: [planId], references: [id], onDelete: Restrict)
+  carePlan   CarePlan?            @relation(fields: [carePlanId], references: [id], onDelete: Restrict)
   customPlan CustomPlanAgreement? @relation(fields: [customPlanId], references: [id], onDelete: Restrict)
 
-  addOns           SubscriptionAddOn[]
-  renewalRequests  RenewalRequest[]
+  addOns          SubscriptionAddOn[]
+  renewalRequests RenewalRequest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model SubscriptionAddOn {
-  id             String       @id @default(cuid())
+  id             String @id @default(cuid())
   subscriptionId String
   addOnId        String
-  
-  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  addOn          AddOn        @relation(fields: [addOnId], references: [id], onDelete: Restrict)
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  addOn        AddOn        @relation(fields: [addOnId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now())
 }
@@ -335,14 +345,14 @@ model RenewalRequest {
   status                String   @default("SUBMITTED") // SUBMITTED, PENDING_PAYMENT, APPROVED, REJECTED, CANCELLED
 
   // Immutable commercial snapshot
-  planName              String
-  documentedTotal       Decimal
+  planName        String
+  documentedTotal Decimal
 
   user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   currentSubscription Subscription? @relation(fields: [currentSubscriptionId], references: [id], onDelete: SetNull)
   carePlan            CarePlan      @relation(fields: [carePlanId], references: [id], onDelete: Restrict)
 
-  addOns RenewalRequestAddOn[]
+  addOns   RenewalRequestAddOn[]
   payments Payment[]
 
   createdAt DateTime @default(now())
@@ -350,12 +360,12 @@ model RenewalRequest {
 }
 
 model RenewalRequestAddOn {
-  id               String         @id @default(cuid())
+  id               String @id @default(cuid())
   renewalRequestId String
   addOnId          String
-  
-  renewalRequest   RenewalRequest @relation(fields: [renewalRequestId], references: [id], onDelete: Cascade)
-  addOn            AddOn          @relation(fields: [addOnId], references: [id], onDelete: Restrict)
+
+  renewalRequest RenewalRequest @relation(fields: [renewalRequestId], references: [id], onDelete: Cascade)
+  addOn          AddOn          @relation(fields: [addOnId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now())
 }
@@ -417,62 +427,63 @@ model Inquiry {
 }
 
 model AuditLog {
-  id          String   @id @default(cuid())
+  id          String @id @default(cuid())
   actorUserId String
   action      String
   entityType  String
   entityId    String
   metadata    Json?
-  
-  actor       User     @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
-  
-  createdAt   DateTime @default(now())
+
+  actor User @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
 }
 
 model Payment {
-  id               String          @id @default(cuid())
+  id               String    @id @default(cuid())
   userId           String
   invoiceId        String?
   renewalRequestId String?
   customPlanId     String?
   amount           Decimal
-  currency         String          @default("INR")
-  paymentMethod    String          // "OFFLINE", "MOCK_ONLINE"
-  status           String          @default("PENDING") // PENDING, VERIFICATION_PENDING, VERIFIED, REJECTED, CANCELLED
-  provider         String          @default("SYSTEM")
-  providerRef      String?         @unique
-  reference        String?         
-  notes            String?         @db.Text
+  currency         String    @default("INR")
+  paymentMethod    String // "OFFLINE", "MOCK_ONLINE"
+  status           String    @default("PENDING") // PENDING, VERIFICATION_PENDING, VERIFIED, REJECTED, CANCELLED
+  provider         String    @default("SYSTEM")
+  providerRef      String?   @unique
+  reference        String?
+  notes            String?   @db.Text
   verifiedAt       DateTime?
   verifiedById     String?
   metadata         Json?
-  
-  user           User            @relation(fields: [userId], references: [id], onDelete: Restrict)
-  invoice        Invoice?        @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  renewalRequest RenewalRequest? @relation(fields: [renewalRequestId], references: [id], onDelete: SetNull)
+
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  invoice        Invoice?             @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  renewalRequest RenewalRequest?      @relation(fields: [renewalRequestId], references: [id], onDelete: SetNull)
   customPlan     CustomPlanAgreement? @relation(fields: [customPlanId], references: [id], onDelete: SetNull)
-  verifiedBy     User?           @relation("PaymentVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+  verifiedBy     User?                @relation("PaymentVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+  receipt        Receipt?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model EmailNotification {
-  id              String   @id @default(cuid())
-  eventType       String
-  entityType      String
-  entityId        String
-  recipientEmail  String
-  idempotencyKey  String
-  status          String   @default("PENDING")
-  attemptCount    Int      @default(0)
-  lastAttemptAt   DateTime?
-  sentAt          DateTime?
-  failedAt        DateTime?
-  error           String?  @db.Text
+  id             String    @id @default(cuid())
+  eventType      String
+  entityType     String
+  entityId       String
+  recipientEmail String
+  idempotencyKey String
+  status         String    @default("PENDING")
+  attemptCount   Int       @default(0)
+  lastAttemptAt  DateTime?
+  sentAt         DateTime?
+  failedAt       DateTime?
+  error          String?   @db.Text
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([idempotencyKey, recipientEmail])
   @@index([entityType, entityId])
@@ -480,72 +491,72 @@ model EmailNotification {
 }
 
 model MemberProfile {
-  id                   String   @id @default(cuid())
-  userId               String   @unique
-  memberId             String?  @unique // Business Member ID (e.g. SEC/S/1001/SAKR)
-  
+  id       String  @id @default(cuid())
+  userId   String  @unique
+  memberId String? @unique // Business Member ID (e.g. SEC/S/1001/SAKR)
+
   // Section A: Member Details
-  firstName            String
-  lastName             String
-  idProofType          String?  // e.g., Aadhar, PAN, Voter ID
-  idProofNumber        String?  // Sensitive
-  dateOfBirth          DateTime?
-  gender               String?  // "Male", "Female", "Other"
-  serviceAddress       String?  @db.Text
-  nearestLandmark      String?
-  mobileNumber         String?
-  alternateNumber      String?
-  email                String?
+  firstName       String
+  lastName        String
+  idProofType     String? // e.g., Aadhar, PAN, Voter ID
+  idProofNumber   String? // Sensitive
+  dateOfBirth     DateTime?
+  gender          String? // "Male", "Female", "Other"
+  serviceAddress  String?   @db.Text
+  nearestLandmark String?
+  mobileNumber    String?
+  alternateNumber String?
+  email           String?
 
-  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  sponsor              Sponsor?
-  insuranceDetails     InsuranceDetails?
-  medicalAuth          MedicalAuthorization?
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  sponsor          Sponsor?
+  insuranceDetails InsuranceDetails?
+  medicalAuth      MedicalAuthorization?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Sponsor {
-  id                   String   @id @default(cuid())
-  memberProfileId      String   @unique
-  fullName             String
-  relationship         String
-  mobileNumber         String
-  alternateNumber      String?
-  email                String?
+  id              String  @id @default(cuid())
+  memberProfileId String  @unique
+  fullName        String
+  relationship    String
+  mobileNumber    String
+  alternateNumber String?
+  email           String?
 
-  memberProfile        MemberProfile @relation(fields: [memberProfileId], references: [id], onDelete: Cascade)
+  memberProfile MemberProfile @relation(fields: [memberProfileId], references: [id], onDelete: Cascade)
 
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model InsuranceDetails {
-  id                   String   @id @default(cuid())
-  memberProfileId      String   @unique
-  providerName         String
-  policyNumber         String   // Sensitive
-  coverageAmount       String?
+  id              String  @id @default(cuid())
+  memberProfileId String  @unique
+  providerName    String
+  policyNumber    String // Sensitive
+  coverageAmount  String?
 
-  memberProfile        MemberProfile @relation(fields: [memberProfileId], references: [id], onDelete: Cascade)
+  memberProfile MemberProfile @relation(fields: [memberProfileId], references: [id], onDelete: Cascade)
 
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model MedicalAuthorization {
-  id                   String   @id @default(cuid())
-  memberProfileId      String   @unique
-  hospitalForSos       String?
-  nomineeLocalContact  String?
-  shiftAuthorization   Boolean  @default(false)
+  id                  String  @id @default(cuid())
+  memberProfileId     String  @unique
+  hospitalForSos      String?
+  nomineeLocalContact String?
+  shiftAuthorization  Boolean @default(false)
 
-  memberProfile        MemberProfile @relation(fields: [memberProfileId], references: [id], onDelete: Cascade)
+  memberProfile MemberProfile @relation(fields: [memberProfileId], references: [id], onDelete: Cascade)
 
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model MemberSequence {
@@ -554,21 +565,21 @@ model MemberSequence {
 }
 
 model Employee {
-  id              String   @id @default(cuid())
-  employeeId      String   @unique // e.g. SEC/101/SAKA
-  firstName       String
-  lastName        String
-  photoReference  String?  @db.Text
-  designation     String
-  contactNumber   String?
-  email           String?
-  status          String   @default("ACTIVE") // ACTIVE, INACTIVE
-  
-  userId          String?  @unique
-  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id             String  @id @default(cuid())
+  employeeId     String  @unique // e.g. SEC/101/SAKA
+  firstName      String
+  lastName       String
+  photoReference String? @db.Text
+  designation    String
+  contactNumber  String?
+  email          String?
+  status         String  @default("ACTIVE") // ACTIVE, INACTIVE
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model EmployeeSequence {
@@ -577,33 +588,33 @@ model EmployeeSequence {
 }
 
 model Permission {
-  id          String   @id @default(cuid())
-  code        String   @unique // e.g., MEMBER_VIEW, PAYMENT_VERIFY
+  id          String           @id @default(cuid())
+  code        String           @unique // e.g., MEMBER_VIEW, PAYMENT_VERIFY
   description String?
   roles       RolePermission[]
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Role {
-  id          String   @id @default(cuid())
-  name        String   @unique // e.g., "Member Manager"
+  id          String  @id @default(cuid())
+  name        String  @unique // e.g., "Member Manager"
   description String?
-  
+
   permissions RolePermission[]
   users       UserRole[]
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model RolePermission {
   roleId       String
   permissionId String
 
-  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@id([roleId, permissionId])
 }
@@ -612,40 +623,81 @@ model UserRole {
   userId String
   roleId String
 
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role   Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@id([userId, roleId])
 }
 
 model CustomPlanAgreement {
-  id                 String   @id @default(cuid())
-  userId             String   // The member receiving it
-  createdByUserId    String   // The admin who created it
-  authorizedByUserId String?  // Admin who approved it
-  
-  name               String
-  description        String?  @db.Text
-  
-  amount             Decimal
-  currency           String   @default("INR")
-  
-  durationType       String   // DAYS, MONTHS, YEARS
-  durationValue      Int
-  
-  startDate          DateTime?
-  calculatedEndDate  DateTime?
-  
-  status             String   @default("DRAFT") // DRAFT, APPROVED, CANCELLED, CONVERTED
-  metadata           Json?
+  id                 String  @id @default(cuid())
+  userId             String // The member receiving it
+  createdByUserId    String // The admin who created it
+  authorizedByUserId String? // Admin who approved it
 
-  user               User     @relation("CustomPlanMember", fields: [userId], references: [id], onDelete: Cascade)
-  createdBy          User     @relation("CustomPlanCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  authorizedBy       User?    @relation("CustomPlanAuthorizer", fields: [authorizedByUserId], references: [id], onDelete: Restrict)
+  name        String
+  description String? @db.Text
 
-  subscriptions      Subscription[]
-  payments           Payment[]
+  amount   Decimal
+  currency String  @default("INR")
 
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  durationType  String // DAYS, MONTHS, YEARS
+  durationValue Int
+
+  startDate         DateTime?
+  calculatedEndDate DateTime?
+
+  status   String @default("DRAFT") // DRAFT, APPROVED, CANCELLED, CONVERTED
+  metadata Json?
+
+  user         User  @relation("CustomPlanMember", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy    User  @relation("CustomPlanCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  authorizedBy User? @relation("CustomPlanAuthorizer", fields: [authorizedByUserId], references: [id], onDelete: Restrict)
+
+  subscriptions Subscription[]
+  payments      Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
+
+model InvoiceSequence {
+  id            String @id @default(cuid())
+  financialYear String @unique
+  nextSerial    Int    @default(1001)
+}
+
+model ReceiptSequence {
+  id            String @id @default(cuid())
+  financialYear String @unique
+  nextSerial    Int    @default(1001)
+}
+
+model Receipt {
+  id               String   @id @default(cuid())
+  receiptNumber    String   @unique
+  invoiceId        String
+  paymentId        String   @unique
+  userId           String
+  
+  // Immutable receipt snapshot
+  customerName     String
+  customerEmail    String?
+  customerAddress  String?  @db.Text
+  
+  amount           Decimal
+  currency         String   @default("INR")
+  paymentMethod    String
+  paymentReference String?
+  paymentDate      DateTime
+
+  relatedPlanName  String?
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+}
+

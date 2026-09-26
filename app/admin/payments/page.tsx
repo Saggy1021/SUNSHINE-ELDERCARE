@@ -45,7 +45,7 @@ export default async function AdminPaymentsPage() {
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-1 font-medium text-slate-900">
                       <Receipt className="h-4 w-4 text-slate-400" />
-                      {payment.invoice?.invoiceNumber || "N/A"}
+                      {payment.invoice?.invoiceNumber || payment.invoice?.referenceNumber || "N/A"}
                     </div>
                     {payment.renewalRequest && (
                       <p className="text-xs text-slate-500 mt-1">

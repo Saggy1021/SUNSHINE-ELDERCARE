@@ -158,7 +158,11 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
   // 1. Fetch payment and relations
   const payment = await db.payment.findUnique({ 
     where: { id: paymentId },
-    include: { invoice: true, renewalRequest: { include: { addOns: true } } }
+    include: { 
+      invoice: true, 
+      renewalRequest: { include: { addOns: true, carePlan: true } },
+      user: { include: { memberProfile: true } }
+    }
   })
   
   if (!payment) throw new Error("Payment not found")
@@ -180,18 +184,55 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
       }
     })
 
-    // B. Mark Invoice Paid
+    // B. Finalize Invoice (Snapshot and Numbering)
+    const now = new Date()
+    
+    let officialInvoiceNumber = invoice.invoiceNumber
+    if (!officialInvoiceNumber) {
+      officialInvoiceNumber = await DocumentSequenceService.generateInvoiceNumber(now, tx)
+    }
+
+    const customerName = payment.user.name || "Member"
+    const customerEmail = payment.user.email
+    const customerAddress = payment.user.memberProfile?.address || ""
+    const customerPhone = payment.user.memberProfile?.phone || ""
+
     await tx.invoice.update({
       where: { id: invoice.id },
       data: {
-        status: "PAID",
+        status: "ISSUED", // Automatically issue the invoice upon payment verification if not already issued
         paymentStatus: "PAID",
-        paidDate: new Date(),
+        paidDate: now,
+        issueDate: invoice.status === "DRAFT" ? now : invoice.issueDate,
+        invoiceNumber: officialInvoiceNumber,
+        customerName: invoice.customerName || customerName,
+        customerEmail: invoice.customerEmail || customerEmail,
+        customerAddress: invoice.customerAddress || customerAddress,
+        customerPhone: invoice.customerPhone || customerPhone,
+      }
+    })
+
+    // B2. Create Receipt
+    const receiptNumber = await DocumentSequenceService.generateReceiptNumber(now, tx)
+    await tx.receipt.create({
+      data: {
+        receiptNumber,
+        invoiceId: invoice.id,
+        paymentId: payment.id,
+        userId: payment.userId,
+        customerName,
+        customerEmail,
+        customerAddress,
+        amount: payment.amount,
+        currency: payment.currency,
+        paymentMethod: payment.paymentMethod,
+        paymentReference: payment.reference,
+        paymentDate: now,
+        relatedPlanName: renewalRequest.carePlan?.name || "Membership Plan"
       }
     })
 
     // C. Handle Subscription Lifecycle Transition
-    const now = new Date()
     const isFuture = renewalRequest.requestedStartDate > now
     
     // We create a new Subscription record to cleanly separate historical from new memberships

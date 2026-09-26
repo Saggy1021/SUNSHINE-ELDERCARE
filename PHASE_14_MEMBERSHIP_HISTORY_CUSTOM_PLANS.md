@@ -49,9 +49,17 @@ No fake payments were injected. The existing `PaymentService` architecture requi
 No arbitrary `Member ID` sequences are triggered just by creating a custom plan. The ID only populates during successful finalization/payment according to Phase 12 guidelines.
 
 ## 14. Database Migration
+
+DEVELOPMENT:
 ```bash
 npx prisma migrate dev --name phase14_membership_history_custom_plans
 ```
+
+STAGING / PRODUCTION:
+```bash
+npx prisma migrate deploy
+```
+
 This migration was structurally additive (no destructive drops or data mutations on old Subscriptions).
 
 ## 15. Tests

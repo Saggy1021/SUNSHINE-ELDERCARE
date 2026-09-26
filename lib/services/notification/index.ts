@@ -262,14 +262,14 @@ export const notificationService = {
     if (!user?.email) return
 
     const invoice = payment.invoiceId
-      ? await db.invoice.findUnique({ where: { id: payment.invoiceId }, select: { invoiceNumber: true } })
+      ? await db.invoice.findUnique({ where: { id: payment.invoiceId }, select: { invoiceNumber: true, referenceNumber: true } })
       : null
 
     // Member notification
     const memberTemplate = templates.paymentSubmittedEmail({
       memberName: user.name || 'Member',
       amount: formatINR(payment.amount),
-      invoiceNumber: invoice?.invoiceNumber || 'N/A',
+      invoiceNumber: invoice?.invoiceNumber || invoice?.referenceNumber || 'N/A',
       paymentMethod: payment.paymentMethod,
       reference: payment.reference || 'N/A',
       dashboardUrl: `${config.appBaseUrl}/dashboard`,
@@ -284,7 +284,7 @@ export const notificationService = {
         memberEmail: user.email,
         amount: formatINR(payment.amount),
         reference: payment.reference || 'N/A',
-        invoiceNumber: invoice?.invoiceNumber || 'N/A',
+        invoiceNumber: invoice?.invoiceNumber || invoice?.referenceNumber || 'N/A',
         adminUrl: `${config.appBaseUrl}/admin/payments`,
       })
       await safeSend('ADMIN_PAYMENT_SUBMITTED', 'Payment', payment.id, config.adminNotificationAddress, adminTemplate)
@@ -315,7 +315,7 @@ export const notificationService = {
     if (!user?.email) return
 
     const invoice = payment.invoiceId
-      ? await db.invoice.findUnique({ where: { id: payment.invoiceId }, select: { invoiceNumber: true } })
+      ? await db.invoice.findUnique({ where: { id: payment.invoiceId }, select: { invoiceNumber: true, referenceNumber: true } })
       : null
 
     const carePlan = subscription.carePlanId
@@ -328,7 +328,7 @@ export const notificationService = {
     const verifiedTemplate = templates.paymentVerifiedEmail({
       memberName: user.name || 'Member',
       amount: formatINR(payment.amount),
-      invoiceNumber: invoice?.invoiceNumber || 'N/A',
+      invoiceNumber: invoice?.invoiceNumber || invoice?.referenceNumber || 'N/A',
       paymentMethod: payment.paymentMethod,
       membershipStatus: subscription.status,
       planName,
@@ -383,13 +383,13 @@ export const notificationService = {
     if (!user?.email) return
 
     const invoice = payment.invoiceId
-      ? await db.invoice.findUnique({ where: { id: payment.invoiceId }, select: { invoiceNumber: true } })
+      ? await db.invoice.findUnique({ where: { id: payment.invoiceId }, select: { invoiceNumber: true, referenceNumber: true } })
       : null
 
     const template = templates.paymentRejectedEmail({
       memberName: user.name || 'Member',
       amount: formatINR(payment.amount),
-      invoiceNumber: invoice?.invoiceNumber || 'N/A',
+      invoiceNumber: invoice?.invoiceNumber || invoice?.referenceNumber || 'N/A',
       reason: payment.notes || undefined,
       dashboardUrl: `${config.appBaseUrl}/dashboard`,
     })

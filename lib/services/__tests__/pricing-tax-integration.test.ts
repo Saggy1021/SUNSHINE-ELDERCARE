@@ -41,7 +41,7 @@ describe('Pricing, Tax and Invoice Integration', () => {
 
   it('Duplicate checkout requests do not create duplicate financial records (AC: H)', async () => {
     // In a real implementation, idempotency keys would be used.
-    // The Invoice model has a unique `invoiceNumber`.
+    // The Invoice model has a unique `referenceNumber`.
     assert.ok(true);
   });
 });

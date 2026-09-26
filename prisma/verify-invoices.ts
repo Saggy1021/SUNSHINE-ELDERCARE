@@ -83,8 +83,8 @@ async function verifyInvoices() {
   // Invoice Number Uniqueness and Client Independence
   console.log('Testing invoice identity...')
   const inv4 = await invoiceService.createCarePlanInvoice(user1.id, pricingLife, taxLife)
-  assert(inv4.invoiceNumber.startsWith('INV-'), 'Invoice number is server-generated')
-  assert(inv4.invoiceNumber !== inv1m.invoiceNumber, 'Invoice numbers must be unique')
+  assert(inv4.referenceNumber.startsWith('INV-'), 'Invoice reference number is server-generated')
+  assert(inv4.referenceNumber !== inv1m.referenceNumber, 'Invoice reference numbers must be unique')
   assert(inv4.status === 'DRAFT', 'New invoice is DRAFT')
   assert(inv4.paymentStatus === 'UNPAID', 'New invoice is UNPAID')
 

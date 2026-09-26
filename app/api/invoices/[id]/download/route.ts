@@ -37,7 +37,7 @@ export async function GET(
     return new NextResponse(pdfBytes, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="invoice-${invoice.invoiceNumber}.pdf"`
+        'Content-Disposition': `attachment; filename="invoice-${invoice.invoiceNumber || invoice.referenceNumber}.pdf"`
       }
     })
   } catch (error) {
