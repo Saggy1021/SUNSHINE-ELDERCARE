@@ -215,6 +215,42 @@ async function main() {
     create: { id: "MEMBER_SEQ", current: 1000 },
   })
 
+  // ============================================================
+  // RBAC PERMISSIONS AND ROLES
+  // ============================================================
+  console.log('Seeding RBAC permissions...')
+  const { PERMISSIONS } = await import('../lib/auth/permissions')
+  
+  for (const [key, code] of Object.entries(PERMISSIONS)) {
+    await prisma.permission.upsert({
+      where: { code },
+      update: {},
+      create: {
+        code,
+        description: `Permission to ${key.replace(/_/g, ' ').toLowerCase()}`
+      }
+    })
+  }
+  console.log(`  ✓ ${Object.keys(PERMISSIONS).length} permissions seeded`)
+
+  // Seed default ADMIN role and grant all permissions
+  console.log('Seeding default roles...')
+  const adminRole = await prisma.role.upsert({
+    where: { name: 'Super Admin' },
+    update: {},
+    create: { name: 'Super Admin', description: 'Has all permissions' }
+  })
+  
+  const allPermissions = await prisma.permission.findMany()
+  for (const perm of allPermissions) {
+    await prisma.rolePermission.upsert({
+      where: { roleId_permissionId: { roleId: adminRole.id, permissionId: perm.id } },
+      update: {},
+      create: { roleId: adminRole.id, permissionId: perm.id }
+    })
+  }
+  console.log('  ✓ Super Admin role seeded with all permissions')
+
   console.log('Seed completed successfully.')
 }
 

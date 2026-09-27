@@ -44,6 +44,7 @@ model User {
   customPlansCreated  CustomPlanAgreement[] @relation("CustomPlanCreator")
   customPlansAuth     CustomPlanAgreement[] @relation("CustomPlanAuthorizer")
   receipts            Receipt[]
+  careNotes           CareNote[]
 }
 
 model Account {
@@ -201,16 +202,21 @@ model TaxRule {
 
 model Elder {
   id           String    @id @default(cuid())
-  userId       String // The Customer/Payer
+  userId       String // The member/payer
+  relationship String    @default("Self") // Relationship to the member
   firstName    String
   lastName     String
   dateOfBirth  DateTime?
   gender       String?
-  medicalNotes String?   @db.Text
+  contactNumber String?
   address      String?   @db.Text
   city         String?
+  landmark     String?
+  medicalNotes String?   @db.Text
+  status       String    @default("ACTIVE") // ACTIVE, INACTIVE
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cases CareCase[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -317,6 +323,7 @@ model Subscription {
 
   addOns          SubscriptionAddOn[]
   renewalRequests RenewalRequest[]
+  careCases       CareCase[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -578,6 +585,10 @@ model Employee {
   userId String? @unique
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+  assignments   CareAssignment[]
+  visits        CareVisit[]
+  tasks         CareTask[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -700,4 +711,111 @@ model Receipt {
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
   payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
 }
+
+// --- Phase 17: Operational Care Management ---
+
+model CareCase {
+  id               String   @id @default(cuid())
+  elderId          String
+  subscriptionId   String
+  status           String   @default("ACTIVE") // PENDING, ACTIVE, SUSPENDED, CLOSED
+  startDate        DateTime
+  endDate          DateTime?
+  operationalNotes String?  @db.Text
+
+  elder        Elder        @relation(fields: [elderId], references: [id], onDelete: Restrict)
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+
+  assignments   CareAssignment[]
+  visits        CareVisit[]
+  tasks         CareTask[]
+  notes         CareNote[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model CareAssignment {
+  id         String   @id @default(cuid())
+  careCaseId String
+  employeeId String
+  role       String   @default("PRIMARY_CAREGIVER") // PRIMARY_CAREGIVER, SUPERVISOR, RELIEVER
+  startDate  DateTime @default(now())
+  endDate    DateTime?
+  status     String   @default("ACTIVE") // ACTIVE, INACTIVE
+
+  assignedById String? // Employee or Admin who assigned
+
+  careCase   CareCase @relation(fields: [careCaseId], references: [id], onDelete: Cascade)
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([careCaseId, employeeId, startDate])
+}
+
+model CareVisit {
+  id             String    @id @default(cuid())
+  careCaseId     String
+  assignedEmpId  String?
+  scheduledStart DateTime
+  scheduledEnd   DateTime
+  actualStart    DateTime?
+  actualEnd      DateTime?
+  status         String    @default("SCHEDULED") // SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED, MISSED
+  operationalNotes String? @db.Text
+
+  createdById    String?
+
+  careCase       CareCase  @relation(fields: [careCaseId], references: [id], onDelete: Cascade)
+  assignedEmp    Employee? @relation(fields: [assignedEmpId], references: [id], onDelete: SetNull)
+  tasks          CareTask[]
+  notes          CareNote[]
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model CareTask {
+  id            String    @id @default(cuid())
+  careCaseId    String
+  careVisitId   String?
+  title         String
+  description   String?   @db.Text
+  assignedEmpId String?
+  scheduledFor  DateTime?
+  status        String    @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, CANCELLED
+  completedAt   DateTime?
+  completionNote String?  @db.Text
+
+  createdById   String?
+
+  careCase      CareCase   @relation(fields: [careCaseId], references: [id], onDelete: Cascade)
+  careVisit     CareVisit? @relation(fields: [careVisitId], references: [id], onDelete: SetNull)
+  assignedEmp   Employee?  @relation(fields: [assignedEmpId], references: [id], onDelete: SetNull)
+  notes         CareNote[]
+
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+model CareNote {
+  id          String   @id @default(cuid())
+  authorId    String
+  careCaseId  String
+  careVisitId String?
+  careTaskId  String?
+  note        String   @db.Text
+  visibility  String   @default("INTERNAL") // INTERNAL, MEMBER_VISIBLE, RESTRICTED
+
+  author      User       @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  careCase    CareCase   @relation(fields: [careCaseId], references: [id], onDelete: Cascade)
+  careVisit   CareVisit? @relation(fields: [careVisitId], references: [id], onDelete: Cascade)
+  careTask    CareTask?  @relation(fields: [careTaskId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 

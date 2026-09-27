@@ -23,6 +23,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     { name: "Inquiries", href: "/admin/inquiries", icon: ClipboardList },
     { name: "Feedback", href: "/admin/feedback", icon: MessageSquare },
     { name: "Add-ons", href: "/admin/add-ons", icon: Package },
+    { name: "Care Operations", href: "/admin/care", icon: Activity },
     { name: "Audit Log", href: "/admin/audit-log", icon: Shield },
   ]
 

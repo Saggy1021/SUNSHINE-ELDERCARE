@@ -19,6 +19,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     { name: "Financial Documents", href: "/dashboard/documents", icon: RefreshCw },
     { name: "Manage Membership", href: "/dashboard/manage-membership", icon: RefreshCw },
     { name: "Emergency Contact", href: "/dashboard/emergency-contact", icon: ShieldAlert },
+    { name: "Care Tracking", href: "/dashboard/care", icon: ShieldAlert },
     { name: "Feedback", href: "/dashboard/feedback", icon: MessageSquarePlus },
   ]
 
