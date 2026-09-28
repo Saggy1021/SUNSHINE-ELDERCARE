@@ -22,7 +22,16 @@ const notes = [
   },
 ]
 
-export function Testimonials() {
+export function Testimonials({ testimonials }: { testimonials?: any[] }) {
+  const displayNotes = testimonials && testimonials.length > 0
+    ? testimonials.map((t, i) => ({
+        text: t.quote,
+        name: t.authorName,
+        place: t.authorTitle || '',
+        rotate: ['-rotate-1', 'rotate-1', '-rotate-2'][i % 3]
+      }))
+    : notes;
+
   return (
     <section className="relative overflow-hidden py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
@@ -34,8 +43,8 @@ export function Testimonials() {
         </Reveal>
 
         <div className="mt-16 grid gap-8 md:grid-cols-3">
-          {notes.map((n, i) => (
-            <Reveal key={n.name} delay={i * 110}>
+          {displayNotes.map((n, i) => (
+            <Reveal key={n.name + i} delay={i * 110}>
               <figure
                 className={`relative rounded-sm bg-sandstone p-8 shadow-lg shadow-brown/15 paper-texture transition-transform duration-500 ${n.rotate} hover:rotate-0`}
               >

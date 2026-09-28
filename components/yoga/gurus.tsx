@@ -25,7 +25,17 @@ const gurus = [
   },
 ]
 
-export function Gurus() {
+export function Gurus({ employees }: { employees?: any[] }) {
+  const displayGurus = employees && employees.length > 0
+    ? employees.map((e) => ({
+        name: `${e.firstName} ${e.lastName}`,
+        title: e.designation,
+        image: e.photoReference || '/placeholder.svg',
+        bio: e.publicBiography || '',
+        quote: '', // No quote in Employee model, left empty to preserve design structurally
+      }))
+    : gurus;
+
   return (
     <section id="gurus" className="relative py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
@@ -40,8 +50,8 @@ export function Gurus() {
         </Reveal>
 
         <div className="mt-16 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-          {gurus.map((g, i) => (
-            <Reveal key={g.name} delay={i * 110}>
+          {displayGurus.map((g, i) => (
+            <Reveal key={g.name + i} delay={i * 110}>
               <article className="group h-full overflow-hidden rounded-[1.75rem] border border-gold/35 bg-card shadow-sm transition-all duration-500 hover:-translate-y-2 hover:shadow-xl">
                 <div className="relative overflow-hidden">
                   <img
@@ -63,9 +73,11 @@ export function Gurus() {
                   <p className="font-serif text-lg leading-relaxed text-foreground/80">
                     {g.bio}
                   </p>
-                  <blockquote className="mt-5 border-l-2 border-primary pl-4 font-serif text-lg italic text-primary">
-                    “{g.quote}”
-                  </blockquote>
+                  {g.quote && (
+                    <blockquote className="mt-5 border-l-2 border-primary pl-4 font-serif text-lg italic text-primary">
+                      “{g.quote}”
+                    </blockquote>
+                  )}
                 </div>
               </article>
             </Reveal>

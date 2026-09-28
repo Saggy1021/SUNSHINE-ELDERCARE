@@ -33,8 +33,17 @@ const books = [
   },
 ]
 
-export function PhilosophyLibrary() {
+export function PhilosophyLibrary({ faqs }: { faqs?: any[] }) {
   const [active, setActive] = useState(0)
+
+  const displayBooks = faqs && faqs.length > 0 
+    ? faqs.map((faq, i) => ({
+        title: faq.question,
+        author: `Question ${String(i + 1).padStart(2, '0')}`,
+        spine: ['bg-maroon text-ivory', 'bg-primary text-ivory', 'bg-gold text-brown', 'bg-copper text-ivory'][i % 4],
+        desc: faq.answer,
+      }))
+    : books;
 
   return (
     <section className="relative overflow-hidden bg-secondary/50 py-24 paper-texture sm:py-32">
@@ -54,7 +63,7 @@ export function PhilosophyLibrary() {
           <Reveal>
             <div className="rounded-2xl bg-gradient-to-b from-[#5a3a22] to-[#3a2618] p-6 shadow-2xl">
               <div className="flex items-end justify-center gap-3 sm:gap-4">
-                {books.map((b, i) => (
+                {displayBooks.map((b, i) => (
                   <button
                     key={b.title}
                     onClick={() => setActive(i)}
@@ -88,14 +97,14 @@ export function PhilosophyLibrary() {
               className="rounded-[1.75rem] border border-gold/40 bg-card p-8 shadow-lg"
             >
               <p className="font-serif text-sm uppercase tracking-[0.3em] text-primary">
-                {books[active].author}
+                {displayBooks[active]?.author}
               </p>
               <h3 className="mt-3 font-display text-3xl font-bold">
-                {books[active].title}
+                {displayBooks[active]?.title}
               </h3>
               <div className="my-5 h-px w-full bg-gradient-to-r from-gold/60 to-transparent" />
               <p className="font-serif text-lg leading-relaxed text-foreground/80">
-                {books[active].desc}
+                {displayBooks[active]?.desc}
               </p>
               <button className="mt-7 inline-flex items-center gap-2 rounded-full border border-primary px-6 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground">
                 <BookOpen className="size-4" />

@@ -28,6 +28,11 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     { name: "Audit Log", href: "/admin/audit-log", icon: Shield },
   ]
 
+  const hasContentView = await AuthorizationService.can(session.user.id, 'CONTENT_VIEW');
+  if (hasContentView) {
+    navItems.push({ name: "Content (CMS)", href: "/admin/content", icon: ClipboardList });
+  }
+
   const isOwner = await AuthorizationService.isOwner(session.user.id);
   if (isOwner) {
     navItems.push(

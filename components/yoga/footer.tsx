@@ -29,7 +29,12 @@ const columns = [
   },
 ]
 
-export function Footer() {
+export function Footer({ settings }: { settings?: Record<string, string> }) {
+  const address = settings?.['public_address'] || businessData.address;
+  const email = settings?.['public_email'] || businessData.email;
+  const phone = settings?.['public_phone'] || businessData.phone;
+  const footerText = settings?.['footer_text'] || 'Compassionate Care. Exceptional Companionship.';
+  const name = settings?.['public_name'] || businessData.name;
   return (
     <footer className="relative overflow-hidden bg-brown text-ivory paper-texture">
       {/* Lotus watermark */}
@@ -42,7 +47,7 @@ export function Footer() {
             <div className="flex items-center gap-2.5">
               <Lotus className="h-8 w-auto text-gold" />
               <span className="font-display text-2xl font-bold tracking-[0.18em] text-ivory">
-                {businessData.name.toUpperCase()}
+                {name.toUpperCase()}
               </span>
             </div>
             <p className="mt-5 max-w-sm font-serif text-lg leading-relaxed text-ivory/70">
@@ -50,13 +55,13 @@ export function Footer() {
             </p>
             <ul className="mt-6 space-y-2 text-sm text-ivory/70">
               <li className="flex items-center gap-3">
-                <MapPin className="size-4 text-gold" /> {businessData.address}
+                <MapPin className="size-4 text-gold" /> {address}
               </li>
               <li className="flex items-center gap-3">
-                <Mail className="size-4 text-gold" /> {businessData.email}
+                <Mail className="size-4 text-gold" /> {email}
               </li>
               <li className="flex items-center gap-3">
-                <Phone className="size-4 text-gold" /> {businessData.phone}
+                <Phone className="size-4 text-gold" /> {phone}
               </li>
             </ul>
           </div>
@@ -84,10 +89,10 @@ export function Footer() {
 
         <div className="mt-14 flex flex-col items-center gap-4 border-t border-ivory/15 pt-8">
           <p className="text-center font-serif text-xl italic text-gold">
-            Compassionate Care. Exceptional Companionship.
+            {footerText}
           </p>
           <p className="text-center text-sm text-ivory/50">
-            © {new Date().getFullYear()} {businessData.name}. All Rights Reserved.
+            © {new Date().getFullYear()} {name}. All Rights Reserved.
           </p>
         </div>
       </div>

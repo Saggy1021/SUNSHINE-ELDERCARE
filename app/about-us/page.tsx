@@ -2,18 +2,28 @@ import { Essence } from "@/components/yoga/essence"
 import { TraditionsMap } from "@/components/yoga/traditions-map"
 import { Gurus } from "@/components/yoga/gurus"
 import { Metadata } from "next"
+import { CmsService } from "@/lib/services/cms"
 
-export const metadata: Metadata = {
-  title: "About Us | Sunshine Elder Care",
-  description: "Learn about our philosophy, our coverage areas, and the expert medical team behind Sunshine Elder Care.",
+export const dynamic = 'force-dynamic'
+
+export async function generateMetadata(): Promise<Metadata> {
+  const page = await CmsService.getPageBySlug('about-us');
+  const seo = page?.seoMetadata;
+  return {
+    title: seo?.title || "About Us | Sunshine Elder Care",
+    description: seo?.description || "Learn about our philosophy, our coverage areas, and the expert medical team behind Sunshine Elder Care.",
+    ...(seo?.noIndex ? { robots: { index: false, follow: false } } : {}),
+  }
 }
 
-export default function AboutUsPage() {
+export default async function AboutUsPage() {
+  const employees = await CmsService.getPublicEmployees();
+
   return (
     <main className="relative overflow-x-clip min-h-screen pt-24">
       <Essence />
       <TraditionsMap />
-      <Gurus />
+      <Gurus employees={employees} />
     </main>
   )
 }

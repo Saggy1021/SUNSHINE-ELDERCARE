@@ -46,6 +46,12 @@ model User {
   customPlansAuth     CustomPlanAgreement[] @relation("CustomPlanAuthorizer")
   receipts            Receipt[]
   careNotes           CareNote[]
+
+  // CMS relations
+  updatedPages        WebsitePage[]    @relation("PageUpdatedBy")
+  updatedFaqs         FaqEntry[]       @relation("FaqUpdatedBy")
+  updatedTestimonials Testimonial[]    @relation("TestimonialUpdatedBy")
+  updatedSettings     WebsiteSetting[] @relation("SettingUpdatedBy")
 }
 
 model Account {
@@ -590,6 +596,11 @@ model Employee {
   visits      CareVisit[]
   tasks       CareTask[]
 
+  // Public Profile Fields (CMS)
+  isPublic        Boolean @default(false)
+  publicBiography String? @db.Text
+  displayOrder    Int     @default(0)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -818,4 +829,81 @@ model CareNote {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// --- Phase 17.6: Content Management System (CMS) ---
+
+model WebsitePage {
+  id      String @id @default(cuid())
+  slug    String @unique
+  title   String
+  content Json?
+  status  String @default("DRAFT") // DRAFT, PUBLISHED, ARCHIVED
+
+  seoMetadata SeoMetadata?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  publishedAt DateTime?
+  updatedById String?
+
+  updatedBy User? @relation("PageUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+model SeoMetadata {
+  id                String  @id @default(cuid())
+  websitePageId     String? @unique
+  title             String?
+  description       String? @db.Text
+  canonicalUrl      String?
+  socialTitle       String?
+  socialDescription String? @db.Text
+  socialImage       String?
+  noIndex           Boolean @default(false)
+
+  websitePage WebsitePage? @relation(fields: [websitePageId], references: [id], onDelete: Cascade)
+}
+
+model FaqEntry {
+  id        String @id @default(cuid())
+  question  String @db.Text
+  answer    String @db.Text
+  status    String @default("DRAFT") // DRAFT, PUBLISHED, ARCHIVED
+  sortOrder Int    @default(0)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+
+  updatedBy User? @relation("FaqUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+model Testimonial {
+  id          String  @id @default(cuid())
+  authorName  String
+  authorTitle String?
+  quote       String  @db.Text
+  rating      Int?    @default(5)
+  image       String?
+  status      String  @default("DRAFT") // DRAFT, PUBLISHED, ARCHIVED
+  sortOrder   Int     @default(0)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+
+  updatedBy User? @relation("TestimonialUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+model WebsiteSetting {
+  id          String  @id @default(cuid())
+  key         String  @unique
+  value       String  @db.Text
+  description String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+
+  updatedBy User? @relation("SettingUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
 }

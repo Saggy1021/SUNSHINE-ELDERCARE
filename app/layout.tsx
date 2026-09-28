@@ -5,6 +5,7 @@ import './globals.css'
 import { Navbar } from "@/components/yoga/navbar"
 import { Footer } from "@/components/yoga/footer"
 import { auth } from "@/auth"
+import { CmsService } from "@/lib/services/cms"
 
 const cinzel = Cinzel({
   variable: '--font-cinzel',
@@ -43,6 +44,7 @@ export default async function RootLayout({
   children: React.ReactNode
 }>) {
   const session = await auth()
+  const settingsMap = await CmsService.getSettingsMap().catch(() => ({}))
   return (
     <html
       lang="en"
@@ -51,7 +53,7 @@ export default async function RootLayout({
       <body className="font-sans antialiased">
         <Navbar isAuthenticated={!!session?.user} />
         {children}
-        <Footer />
+        <Footer settings={settingsMap} />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
