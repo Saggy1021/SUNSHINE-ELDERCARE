@@ -47,6 +47,7 @@ export const PERMISSIONS = {
   // Admin Users
   ADMIN_USER_VIEW: 'ADMIN_USER_VIEW',
   ADMIN_USER_MANAGE: 'ADMIN_USER_MANAGE',
+  ROLE_MANAGE: 'ROLE_MANAGE',
 
   // Care Operations (Phase 17)
   CARE_CASE_VIEW: 'CARE_CASE_VIEW',

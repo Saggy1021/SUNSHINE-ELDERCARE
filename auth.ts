@@ -27,7 +27,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
         })
 
-        if (!user || !user.passwordHash) {
+        if (!user || !user.passwordHash || user.status === 'INACTIVE') {
           return null
         }
 
@@ -68,11 +68,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token.sub) {
         const dbUser = await db.user.findUnique({
           where: { id: token.sub },
-          select: { role: true, sessionVersion: true }
+          select: { role: true, sessionVersion: true, status: true }
         })
 
-        // Invalidate session if user deleted or sessionVersion incremented (e.g., password reset)
-        if (!dbUser || dbUser.sessionVersion !== token.sessionVersion) {
+        // Invalidate session if user deleted, INACTIVE, or sessionVersion incremented (e.g., password reset)
+        if (!dbUser || dbUser.status === 'INACTIVE' || dbUser.sessionVersion !== token.sessionVersion) {
           // Returning an empty token effectively revokes the session
           return {} as any
         }

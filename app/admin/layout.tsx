@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { Shield, Users, RefreshCw, MessageSquare, ClipboardList, Package, Activity, LogOut, Receipt } from "lucide-react"
+import { AuthorizationService } from "@/lib/services/authorization"
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const session = await auth()
@@ -26,6 +27,14 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     { name: "Care Operations", href: "/admin/care", icon: Activity },
     { name: "Audit Log", href: "/admin/audit-log", icon: Shield },
   ]
+
+  const isOwner = await AuthorizationService.isOwner(session.user.id);
+  if (isOwner) {
+    navItems.push(
+      { name: "Admin Users", href: "/admin/admin-users", icon: Users },
+      { name: "Roles", href: "/admin/roles", icon: Shield }
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col md:flex-row">

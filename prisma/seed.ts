@@ -233,23 +233,42 @@ async function main() {
   }
   console.log(`  ✓ ${Object.keys(PERMISSIONS).length} permissions seeded`)
 
-  // Seed default ADMIN role and grant all permissions
-  console.log('Seeding default roles...')
+  // Seed default System Roles
+  console.log('Seeding default system roles...')
+  
+  const ownerRole = await prisma.role.upsert({
+    where: { name: 'Owner' },
+    update: { isSystem: true },
+    create: { name: 'Owner', description: 'Highest administrative authority', isSystem: true }
+  })
+
   const adminRole = await prisma.role.upsert({
     where: { name: 'Super Admin' },
-    update: {},
-    create: { name: 'Super Admin', description: 'Has all permissions' }
+    update: { isSystem: true },
+    create: { name: 'Super Admin', description: 'Operational super administrator', isSystem: true }
   })
   
   const allPermissions = await prisma.permission.findMany()
+  
+  // Owner gets ALL permissions
   for (const perm of allPermissions) {
+    await prisma.rolePermission.upsert({
+      where: { roleId_permissionId: { roleId: ownerRole.id, permissionId: perm.id } },
+      update: {},
+      create: { roleId: ownerRole.id, permissionId: perm.id }
+    })
+  }
+
+  // Super Admin gets all permissions EXCEPT ROLE_MANAGE
+  for (const perm of allPermissions) {
+    if (perm.code === 'ROLE_MANAGE') continue;
     await prisma.rolePermission.upsert({
       where: { roleId_permissionId: { roleId: adminRole.id, permissionId: perm.id } },
       update: {},
       create: { roleId: adminRole.id, permissionId: perm.id }
     })
   }
-  console.log('  ✓ Super Admin role seeded with all permissions')
+  console.log('  ✓ System roles seeded (Owner, Super Admin)')
 
   console.log('Seed completed successfully.')
 }

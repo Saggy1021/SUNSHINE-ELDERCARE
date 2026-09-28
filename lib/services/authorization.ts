@@ -71,4 +71,25 @@ export class AuthorizationService {
       throw new Error(`Unauthorized: Requires at least one of [${permissionCodes.join(', ')}]`);
     }
   }
+
+  /**
+   * Checks if the user has the 'Owner' role
+   */
+  static async isOwner(userId: string): Promise<boolean> {
+    const userRoles = await db.userRole.findMany({
+      where: { userId },
+      include: { role: true }
+    });
+    return userRoles.some(ur => ur.role.name === 'Owner');
+  }
+
+  /**
+   * Enforces that the user is an Owner
+   */
+  static async requireOwner(userId: string): Promise<void> {
+    const isOwner = await this.isOwner(userId);
+    if (!isOwner) {
+      throw new Error("Unauthorized: Owner access required.");
+    }
+  }
 }
