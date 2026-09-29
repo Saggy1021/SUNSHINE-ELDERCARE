@@ -22,7 +22,7 @@ export async function updateMemberProfile(formData: FormData) {
   const validationResult = updateProfileSchema.safeParse(data)
   
   if (!validationResult.success) {
-    return { success: false, error: validationResult.error.errors[0].message }
+    return { success: false, error: validationResult.error.issues[0].message }
   }
 
   const { firstName, lastName, mobileNumber, alternateNumber, serviceAddress, nearestLandmark } = validationResult.data

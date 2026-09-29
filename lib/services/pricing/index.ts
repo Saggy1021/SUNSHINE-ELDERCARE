@@ -55,7 +55,7 @@ export class PricingService {
         quantity: 1,
         unitPrice: basePrice,
         total: basePrice,
-        type: 'PLAN' as const,
+        type: 'PLAN' as 'PLAN' | 'ADD_ON',
         referenceId: plan.id,
         taxClassification: plan.taxClassification || undefined
       }

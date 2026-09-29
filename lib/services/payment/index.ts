@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import { DocumentSequenceService } from '@/lib/services/document-sequence'
 import { notificationService } from '@/lib/services/notification'
 
 export interface PaymentCheckoutRequest {
@@ -194,8 +195,8 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
 
     const customerName = payment.user.name || "Member"
     const customerEmail = payment.user.email
-    const customerAddress = payment.user.memberProfile?.address || ""
-    const customerPhone = payment.user.memberProfile?.phone || ""
+    const customerAddress = payment.user.memberProfile?.serviceAddress || ""
+    const customerPhone = payment.user.memberProfile?.mobileNumber || ""
 
     await tx.invoice.update({
       where: { id: invoice.id },

@@ -9,7 +9,7 @@ async function runTests() {
 
   // Test 1: Published FAQ appears publicly
   console.log('\n--- 1. FAQ Public Retrieval ---');
-  let faqPub, faqDraft, faqArchived;
+  let faqPub: any, faqDraft: any, faqArchived: any;
   try {
     faqPub = await prisma.faqEntry.create({
       data: { question: 'Pub FAQ?', answer: 'Yes', status: 'PUBLISHED' }
@@ -38,7 +38,7 @@ async function runTests() {
 
   // Test 2: Testimonial Public Retrieval
   console.log('\n--- 2. Testimonial Public Retrieval ---');
-  let testPub, testDraft;
+  let testPub: any, testDraft: any;
   try {
     testPub = await prisma.testimonial.create({
       data: { authorName: 'Pub', quote: 'Pub quote', status: 'PUBLISHED' }
@@ -62,7 +62,7 @@ async function runTests() {
 
   // Test 3: Public Employee Retrieval
   console.log('\n--- 3. Public Employee Retrieval ---');
-  let empPub, empPriv;
+  let empPub: any, empPriv: any;
   try {
     empPub = await prisma.employee.create({
       data: {

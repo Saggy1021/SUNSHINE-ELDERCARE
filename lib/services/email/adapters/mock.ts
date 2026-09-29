@@ -1,4 +1,4 @@
-import { EmailProviderAdapter, SendEmailRequest, SendEmailResult } from './types'
+import { EmailProviderAdapter, SendEmailRequest, SendEmailResult } from '../types'
 
 /**
  * Mock adapter — used when EMAIL_PROVIDER is 'mock' or not configured.

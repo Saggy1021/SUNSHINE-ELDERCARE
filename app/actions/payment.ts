@@ -5,6 +5,8 @@ import { db } from "@/lib/db"
 import { submitOfflinePayment } from "@/lib/services/payment"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
+import { AuthorizationService } from "@/lib/services/authorization"
+import { PERMISSIONS } from "@/lib/auth/permissions"
 
 export async function processOfflinePayment(
   invoiceId: string, 
@@ -34,8 +36,13 @@ export async function processOfflinePayment(
 // Admin Server Actions for Payment Verification
 export async function getPendingPayments() {
   const session = await auth()
-  if (!session?.user?.id || session.user.role !== "ADMIN") {
+  if (!session?.user?.id) {
     throw new Error("Unauthorized")
+  }
+
+  const authorized = await AuthorizationService.can(session.user.id, PERMISSIONS.PAYMENT_VIEW)
+  if (!authorized) {
+    throw new Error("Forbidden")
   }
 
   return db.payment.findMany({

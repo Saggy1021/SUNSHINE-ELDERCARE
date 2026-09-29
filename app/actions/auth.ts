@@ -21,7 +21,7 @@ export async function registerUser(formData: FormData) {
 
     const validationResult = memberRegistrationSchema.safeParse(data)
     if (!validationResult.success) {
-      return { success: false, error: validationResult.error.errors[0].message }
+      return { success: false, error: validationResult.error.issues[0].message }
     }
     const validatedData = validationResult.data
     const normalizedEmail = validatedData.email.toLowerCase()
@@ -126,7 +126,7 @@ export async function registerUser(formData: FormData) {
     return { success: true }
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return { success: false, error: error.errors[0].message }
+      return { success: false, error: error.issues[0].message }
     }
     return { success: false, error: 'Failed to create account' }
   }

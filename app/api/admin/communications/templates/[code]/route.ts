@@ -4,7 +4,8 @@ import { db as prisma } from "@/lib/db";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { AuthorizationService } from "@/lib/services/authorization";
 
-export async function PUT(request: Request, { params }: { params: { code: string } }) {
+export async function PUT(request: Request, props: { params: Promise<{ code: string }> }) {
+  const params = await props.params;
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

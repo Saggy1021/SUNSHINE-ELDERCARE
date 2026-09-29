@@ -4,7 +4,7 @@ import RenewalWorkflow from "@/components/yoga/member/renewal-workflow"
 
 export default async function RenewMembershipPage() {
   const plansResult = await getCarePlanCatalog()
-  const plans = plansResult.success ? plansResult.data : []
+  const plans = plansResult.success && plansResult.data ? plansResult.data : []
   const addOns = await getPlaceHolderAddOns()
 
   return (

@@ -8,7 +8,7 @@ import { db as prisma } from "@/lib/db";
 
 export async function GET(request: Request) {
   const session = await auth();
-  if (!session?.user) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     where,
     orderBy: { createdAt: "desc" },
     include: {
-      user: { select: { name: true, email: true, memberSequenceId: true } },
+      user: { select: { name: true, email: true } },
     }
   });
 
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (!session?.user) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -85,6 +85,20 @@ export async function POST(request: Request) {
       documentType,
       session.user.id
     );
+
+    await prisma.auditLog.create({
+      data: {
+        actorUserId: session.user.id,
+        action: 'DOCUMENT_UPLOADED',
+        entityType: 'MEMBER_DOCUMENT',
+        entityId: doc.id,
+        metadata: {
+          documentType,
+          targetUserId: userId.trim(),
+          fileName: displayName
+        }
+      }
+    });
 
     return NextResponse.json(doc, { status: 201 });
   } catch (e: any) {

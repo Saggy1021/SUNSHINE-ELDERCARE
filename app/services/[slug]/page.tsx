@@ -65,12 +65,12 @@ export default async function ServicePage({ params }: PageProps) {
             </div>
 
             <div className="mt-12 flex flex-col sm:flex-row gap-4">
-              <Button asChild size="lg" className="bg-maroon hover:bg-maroon/90 text-white">
-                <Link href="/membership">View Plans</Link>
-              </Button>
-              <Button asChild size="lg" variant="outline" className="border-maroon text-maroon hover:bg-maroon/5">
-                <Link href="/contact-us">Contact Us</Link>
-              </Button>
+              <Link href="/membership" className="inline-flex items-center justify-center rounded-lg px-8 py-3 text-lg font-medium transition-colors bg-maroon hover:bg-maroon/90 text-white">
+                View Plans
+              </Link>
+              <Link href="/contact-us" className="inline-flex items-center justify-center rounded-lg px-8 py-3 text-lg font-medium transition-colors border border-maroon text-maroon hover:bg-maroon/5">
+                Contact Us
+              </Link>
             </div>
           </Reveal>
 

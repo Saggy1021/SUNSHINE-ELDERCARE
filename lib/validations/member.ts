@@ -12,7 +12,7 @@ export const memberRegistrationSchema = z.object({
   idProofNumber: z.string().optional(),
   dateOfBirth: z.string().min(1, "Date of Birth is required"),
   gender: z.enum(["Male", "Female", "Other"], {
-    errorMap: () => ({ message: "Please select a valid gender" })
+    error: "Please select a valid gender"
   }),
   serviceAddress: z.string().min(1, "Service Address is required"),
   nearestLandmark: z.string().optional(),

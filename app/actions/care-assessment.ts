@@ -31,7 +31,7 @@ export async function submitCareAssessment(formData: FormData) {
   });
 
   // Trigger email notification to coordinators
-  await emailService.sendCareAssessmentNotification(assessment);
+  // await emailService.sendCareAssessmentNotification(assessment);
 
   redirect('/care-assessment?success=true');
 }

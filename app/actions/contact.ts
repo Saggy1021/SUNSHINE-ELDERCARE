@@ -40,7 +40,7 @@ export async function submitContactForm(formData: FormData) {
   } catch (error) {
     console.error('Contact form submission failed:', error)
     if (error instanceof z.ZodError) {
-      return { success: false, errors: error.errors }
+      return { success: false, errors: error.issues }
     }
     return { success: false, error: 'Failed to submit form' }
   }

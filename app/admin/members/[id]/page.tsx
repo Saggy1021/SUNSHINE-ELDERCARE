@@ -166,7 +166,7 @@ export default async function MemberDetailPage({ params }: { params: { id: strin
               <p className="text-slate-500 text-sm">No memberships found.</p>
             ) : (
               <div className="space-y-4">
-                {member.subscriptions.map((sub, index) => {
+                {member.subscriptions.map((sub: any, index: number) => {
                   const isCurrent = index === 0;
                   const planName = sub.customPlan ? sub.customPlan.name : (sub.carePlan?.name || "Unknown Plan");
                   return (
@@ -213,7 +213,7 @@ export default async function MemberDetailPage({ params }: { params: { id: strin
               <p className="text-slate-500 text-sm">No renewal requests.</p>
             ) : (
               <div className="space-y-3">
-                {member.renewalRequests.map(req => (
+                {member.renewalRequests.map((req: any) => (
                   <div key={req.id} className="flex justify-between items-center bg-slate-50 p-4 rounded-lg border border-slate-100">
                     <div>
                       <p className="font-semibold text-slate-900 text-sm">{req.planName} ({req.durationMonths}m)</p>
@@ -235,11 +235,11 @@ export default async function MemberDetailPage({ params }: { params: { id: strin
           {/* Custom Plan Agreements */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
             <h2 className="text-lg font-semibold text-slate-900 mb-4 border-b border-slate-100 pb-2">Custom Plan Agreements</h2>
-            {member.customPlanAgreements.length === 0 ? (
+            {(member.customPlanAgreements?.length || 0) === 0 ? (
               <p className="text-slate-500 text-sm">No custom plans.</p>
             ) : (
               <div className="space-y-3">
-                {member.customPlanAgreements.map(cp => (
+                {member.customPlanAgreements?.map((cp: any) => (
                   <div key={cp.id} className="flex justify-between items-center bg-slate-50 p-4 rounded-lg border border-slate-100">
                     <div>
                       <p className="font-semibold text-slate-900 text-sm">{cp.name} ({cp.durationMonths}m)</p>
@@ -269,7 +269,7 @@ export default async function MemberDetailPage({ params }: { params: { id: strin
                   <p className="text-slate-500 text-xs">No payments found.</p>
                 ) : (
                   <div className="space-y-2">
-                    {member.payments.map(payment => (
+                    {member.payments.map((payment: any) => (
                       <div key={payment.id} className="flex justify-between text-sm bg-slate-50 p-2 rounded border border-slate-100">
                         <span className="text-slate-700">₹{payment.amount.toString()} ({payment.paymentMethod})</span>
                         <span className={`text-xs font-semibold ${payment.status === 'VERIFIED' ? 'text-emerald-600' : 'text-amber-600'}`}>{payment.status}</span>
@@ -285,7 +285,7 @@ export default async function MemberDetailPage({ params }: { params: { id: strin
                   <p className="text-slate-500 text-xs">No invoices found.</p>
                 ) : (
                   <div className="space-y-2">
-                    {member.invoices.map(invoice => (
+                    {member.invoices.map((invoice: any) => (
                       <div key={invoice.id} className="flex justify-between text-sm bg-slate-50 p-2 rounded border border-slate-100">
                         <span className="font-mono text-slate-700 text-xs">{invoice.invoiceNumber}</span>
                         <span className="text-slate-500 text-xs">{invoice.issueDate.toLocaleDateString('en-GB')}</span>
@@ -301,7 +301,7 @@ export default async function MemberDetailPage({ params }: { params: { id: strin
                   <p className="text-slate-500 text-xs">No receipts found.</p>
                 ) : (
                   <div className="space-y-2">
-                    {member.receipts.map(receipt => (
+                    {member.receipts.map((receipt: any) => (
                       <div key={receipt.id} className="flex justify-between text-sm bg-slate-50 p-2 rounded border border-slate-100">
                         <span className="font-mono text-slate-700 text-xs">{receipt.receiptNumber}</span>
                         <span className="text-slate-500 text-xs">₹{receipt.amount.toString()}</span>

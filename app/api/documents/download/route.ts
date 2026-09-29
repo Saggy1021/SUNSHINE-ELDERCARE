@@ -7,7 +7,7 @@ import { PERMISSIONS } from "@/lib/auth/permissions";
 
 export async function GET(request: Request) {
   const session = await auth();
-  if (!session?.user) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -42,6 +42,8 @@ export async function GET(request: Request) {
       headers: {
         "Content-Type": mimeType,
         "Content-Disposition": `attachment; filename="${fileName}"`,
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff"
       },
     });
   } catch (e: any) {

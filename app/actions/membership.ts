@@ -104,7 +104,7 @@ export async function submitRenewalRequest(formData: FormData) {
   })
   if (!carePlan || carePlan.variants.length === 0) throw new Error("Invalid Care Plan")
   
-  const pricingTotal = await carePricingService.lookupPrice({ planSlug: carePlan.slug, variantType, months: durationMonths })
+  const pricingTotal = await carePricingService.lookupPrice({ planSlug: carePlan.slug, variantType: variantType as "SINGLE" | "COUPLE", months: durationMonths })
   if (!pricingTotal) throw new Error("Invalid Pricing configuration")
 
   const calculatedEndDate = calculateEndDate(requestedStartDate, durationMonths)
@@ -128,7 +128,7 @@ export async function submitRenewalRequest(formData: FormData) {
         calculatedEndDate,
         status: "SUBMITTED",
         planName: carePlan.name,
-        documentedTotal: pricingTotal.total
+        documentedTotal: pricingTotal.documentedTotal
       }
     })
 

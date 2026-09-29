@@ -339,8 +339,8 @@ export class CareOperationsService {
     }
 
     const visibilityFilter = includeRestricted
-      ? { in: ["INTERNAL", "MEMBER_VISIBLE", "RESTRICTED"] as const }
-      : { in: ["INTERNAL", "MEMBER_VISIBLE"] as const };
+      ? { in: ["INTERNAL", "MEMBER_VISIBLE", "RESTRICTED"] as ("INTERNAL" | "MEMBER_VISIBLE" | "RESTRICTED")[] }
+      : { in: ["INTERNAL", "MEMBER_VISIBLE"] as ("INTERNAL" | "MEMBER_VISIBLE" | "RESTRICTED")[] };
 
     return db.careNote.findMany({
       where: { careCaseId, visibility: visibilityFilter },
