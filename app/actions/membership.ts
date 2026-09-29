@@ -212,7 +212,7 @@ export async function getMembershipHistory() {
 
 export async function getMemberDocuments() {
   const session = await auth()
-  if (!session?.user?.id) return { invoices: [], receipts: [] }
+  if (!session?.user?.id) return { invoices: [], receipts: [], documents: [] }
 
   const invoices = await db.invoice.findMany({
     where: { userId: session.user.id, invoiceNumber: { not: null } },
@@ -223,6 +223,11 @@ export async function getMemberDocuments() {
     where: { userId: session.user.id },
     orderBy: { createdAt: 'desc' }
   })
+  
+  const documents = await db.memberDocument.findMany({
+    where: { userId: session.user.id, visibility: "PRIVATE", status: "ACTIVE" },
+    orderBy: { createdAt: 'desc' }
+  })
 
-  return { invoices, receipts }
+  return { invoices, receipts, documents }
 }

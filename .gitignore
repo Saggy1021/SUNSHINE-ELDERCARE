@@ -21,3 +21,6 @@ coverage/
 *.log
 *.tmp
 *.temp
+
+# Private member document storage — MUST NOT be committed to version control
+private_storage/

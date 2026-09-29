@@ -67,6 +67,12 @@ export const PERMISSIONS = {
   // CMS & Public Website
   CONTENT_VIEW: 'CONTENT_VIEW',
   CONTENT_MANAGE: 'CONTENT_MANAGE',
+  
+  // Communications & Documents (Phase 17.7)
+  COMMUNICATION_VIEW: 'COMMUNICATION_VIEW',
+  COMMUNICATION_MANAGE: 'COMMUNICATION_MANAGE',
+  DOCUMENT_VIEW: 'DOCUMENT_VIEW',
+  DOCUMENT_MANAGE: 'DOCUMENT_MANAGE',
 } as const;
 
 export type PermissionCode = keyof typeof PERMISSIONS;

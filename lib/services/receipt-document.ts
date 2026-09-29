@@ -1,6 +1,16 @@
 import { db } from "../db";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
-import { formatINR, formatDate } from "../email/templates";
+function formatINR(amount: number): string {
+  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
+}
+
+function formatDate(date: Date): string {
+  return date.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  });
+}
 
 export class ReceiptDocumentService {
   /**

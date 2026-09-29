@@ -33,6 +33,16 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     navItems.push({ name: "Content (CMS)", href: "/admin/content", icon: ClipboardList });
   }
 
+  const hasCommunicationView = await AuthorizationService.can(session.user.id, 'COMMUNICATION_VIEW');
+  if (hasCommunicationView) {
+    navItems.push({ name: "Communications", href: "/admin/communications", icon: MessageSquare });
+  }
+
+  const hasDocumentView = await AuthorizationService.can(session.user.id, 'DOCUMENT_VIEW');
+  if (hasDocumentView) {
+    navItems.push({ name: "Documents", href: "/admin/documents", icon: ClipboardList });
+  }
+
   const isOwner = await AuthorizationService.isOwner(session.user.id);
   if (isOwner) {
     navItems.push(

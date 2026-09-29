@@ -11,7 +11,7 @@ import { getEmailConfig } from './config'
 // Base Layout
 // ---------------------------------------------------------------------------
 
-function baseLayout(bodyContent: string): string {
+export function baseLayout(bodyContent: string): string {
   const config = getEmailConfig()
   return `<!DOCTYPE html>
 <html lang="en">

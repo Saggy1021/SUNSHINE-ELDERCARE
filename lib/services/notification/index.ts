@@ -16,7 +16,7 @@
 import { emailService } from '@/lib/services/email'
 import { getEmailConfig } from '@/lib/services/email/config'
 import { NotificationEventType } from '@/lib/services/email/types'
-import * as templates from '@/lib/services/email/templates'
+import { templateService } from '@/lib/services/email/template-service'
 import { db } from '@/lib/db'
 import { logger } from '@/lib/logger'
 
@@ -167,7 +167,7 @@ export const notificationService = {
     if (!user?.email) return
 
     // Member notification
-    const memberTemplate = templates.renewalSubmittedEmail({
+    const memberTemplate = await templateService.getTemplateContent('RENEWAL_SUBMITTED', {
       memberName: user.name || 'Member',
       planName: renewalRequest.planName,
       variantType: renewalRequest.variantType,
@@ -182,7 +182,7 @@ export const notificationService = {
 
     // Admin notification
     if (config.adminNotificationAddress) {
-      const adminTemplate = templates.adminNewRenewalEmail({
+      const adminTemplate = await templateService.getTemplateContent('ADMIN_NEW_RENEWAL', {
         memberName: user.name || 'Member',
         memberEmail: user.email,
         planName: renewalRequest.planName,
@@ -211,7 +211,7 @@ export const notificationService = {
     const user = await db.user.findUnique({ where: { id: renewalRequest.userId }, select: { name: true, email: true } })
     if (!user?.email) return
 
-    const template = templates.renewalApprovedEmail({
+    const template = await templateService.getTemplateContent('RENEWAL_APPROVED', {
       memberName: user.name || 'Member',
       planName: renewalRequest.planName,
       variantType: renewalRequest.variantType,
@@ -236,7 +236,7 @@ export const notificationService = {
     const user = await db.user.findUnique({ where: { id: renewalRequest.userId }, select: { name: true, email: true } })
     if (!user?.email) return
 
-    const template = templates.renewalRejectedEmail({
+    const template = await templateService.getTemplateContent('RENEWAL_REJECTED', {
       memberName: user.name || 'Member',
       planName: renewalRequest.planName,
       requestId: renewalRequest.id.slice(-8).toUpperCase(),
@@ -266,7 +266,7 @@ export const notificationService = {
       : null
 
     // Member notification
-    const memberTemplate = templates.paymentSubmittedEmail({
+    const memberTemplate = await templateService.getTemplateContent('PAYMENT_SUBMITTED', {
       memberName: user.name || 'Member',
       amount: formatINR(payment.amount),
       invoiceNumber: invoice?.invoiceNumber || invoice?.referenceNumber || 'N/A',
@@ -279,7 +279,7 @@ export const notificationService = {
 
     // Admin notification
     if (config.adminNotificationAddress) {
-      const adminTemplate = templates.adminPaymentSubmittedEmail({
+      const adminTemplate = await templateService.getTemplateContent('ADMIN_PAYMENT_SUBMITTED', {
         memberName: user.name || 'Member',
         memberEmail: user.email,
         amount: formatINR(payment.amount),
@@ -325,7 +325,7 @@ export const notificationService = {
     const planName = carePlan?.name || 'Membership'
 
     // Payment verified email
-    const verifiedTemplate = templates.paymentVerifiedEmail({
+    const verifiedTemplate = await templateService.getTemplateContent('PAYMENT_VERIFIED', {
       memberName: user.name || 'Member',
       amount: formatINR(payment.amount),
       invoiceNumber: invoice?.invoiceNumber || invoice?.referenceNumber || 'N/A',
@@ -343,7 +343,7 @@ export const notificationService = {
     const addOnNames = subscription.addOns?.map(a => a.addOn.name) || []
 
     if (subscription.status === 'ACTIVE') {
-      const activatedTemplate = templates.membershipActivatedEmail({
+      const activatedTemplate = await templateService.getTemplateContent('MEMBERSHIP_ACTIVATED', {
         memberName: user.name || 'Member',
         planName,
         variantType: subscription.variantType || '',
@@ -355,7 +355,7 @@ export const notificationService = {
       })
       await safeSend('MEMBERSHIP_ACTIVATED', 'Subscription', payment.id, user.email, activatedTemplate)
     } else if (subscription.status === 'SCHEDULED') {
-      const scheduledTemplate = templates.membershipScheduledEmail({
+      const scheduledTemplate = await templateService.getTemplateContent('MEMBERSHIP_SCHEDULED', {
         memberName: user.name || 'Member',
         planName,
         variantType: subscription.variantType || '',
@@ -386,7 +386,7 @@ export const notificationService = {
       ? await db.invoice.findUnique({ where: { id: payment.invoiceId }, select: { invoiceNumber: true, referenceNumber: true } })
       : null
 
-    const template = templates.paymentRejectedEmail({
+    const template = await templateService.getTemplateContent('PAYMENT_REJECTED', {
       memberName: user.name || 'Member',
       amount: formatINR(payment.amount),
       invoiceNumber: invoice?.invoiceNumber || invoice?.referenceNumber || 'N/A',
@@ -410,7 +410,7 @@ export const notificationService = {
     const config = getEmailConfig()
     if (!config.adminNotificationAddress) return
 
-    const template = templates.adminInquiryReceivedEmail({
+    const template = await templateService.getTemplateContent('ADMIN_INQUIRY_RECEIVED', {
       fullName: inquiry.fullName,
       email: inquiry.email,
       phone: inquiry.phone,
