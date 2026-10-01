@@ -11,11 +11,14 @@ export function SignupForm() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  // Validate callback url to prevent open redirects
+  // Validate callback url to prevent open redirects (including protocol-relative and backslash bypasses)
   const rawCallback = searchParams.get('callbackUrl')
-  const callbackUrl = rawCallback && rawCallback.startsWith('/') && !rawCallback.startsWith('//')
-    ? rawCallback
-    : '/dashboard'
+  const isValidCallback = rawCallback && 
+    rawCallback.startsWith('/') && 
+    !rawCallback.startsWith('//') && 
+    !rawCallback.startsWith('/\\')
+  
+  const callbackUrl = isValidCallback ? rawCallback : '/dashboard'
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()

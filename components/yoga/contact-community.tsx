@@ -6,11 +6,10 @@ import { Reveal } from './reveal'
 import { Eyebrow } from './ornaments'
 import { submitContactForm } from '@/app/actions/contact'
 
-const events = [
-  { date: 'Apr 14', title: 'Free Senior Health Camp', place: 'Kolkata Center' },
-  { date: 'May 02', title: 'Virtual Diet & Nutrition', place: 'Online Webinar' },
-  { date: 'Jun 21', title: 'Community Wellness Meet', place: 'Delhi NCR' },
-]
+const contactInfo = {
+  address: "1/67 NAKTALA, N.S.C BOSE ROAD, KOLKATA - 700047, WEST BENGAL, INDIA",
+  email: "INFO.SUNSHINEELDERCARE@GMAIL.COM",
+}
 
 function InstagramIcon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -184,28 +183,26 @@ export function ContactCommunity() {
               </div>
             </Reveal>
 
-            {/* Events */}
+            {/* Contact Details */}
             <Reveal delay={180}>
               <div className="rounded-[1.75rem] border border-gold/40 bg-card p-7 shadow-lg">
-                <h3 className="flex items-center gap-2 font-display text-xl font-bold">
-                  <Calendar className="size-5 text-primary" /> Community Events
+                <h3 className="font-display text-xl font-bold mb-4">
+                  Head Office
                 </h3>
-                <ul className="mt-5 space-y-4">
-                  {events.map((ev) => (
-                    <li key={ev.title} className="flex items-center gap-4">
-                      <span className="flex size-12 shrink-0 flex-col items-center justify-center rounded-xl bg-secondary text-center font-display text-xs font-bold leading-tight text-primary">
-                        {ev.date.split(' ')[0]}
-                        <span className="text-base">{ev.date.split(' ')[1]}</span>
-                      </span>
-                      <div>
-                        <p className="font-medium leading-tight">{ev.title}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {ev.place}
-                        </p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                <div className="space-y-4">
+                  <div>
+                    <p className="font-serif text-sm font-semibold text-primary">Address</p>
+                    <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                      {contactInfo.address}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-serif text-sm font-semibold text-primary">Email</p>
+                    <a href={`mailto:${contactInfo.email.toLowerCase()}`} className="text-sm text-gold hover:underline mt-1 block">
+                      {contactInfo.email}
+                    </a>
+                  </div>
+                </div>
               </div>
             </Reveal>
           </div>

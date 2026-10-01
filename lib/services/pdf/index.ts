@@ -52,7 +52,7 @@ export class PdfService {
       page.drawText(`Rs. ${Number(invoice.subtotal).toLocaleString('en-IN')}`, { x: width - 150, y: currentY, size: 12, font })
       currentY -= 20
       
-      page.drawText('GST (18%):', { x: width - 250, y: currentY, size: 12, font })
+      page.drawText('Applicable Taxes:', { x: width - 250, y: currentY, size: 12, font })
       page.drawText(`Rs. ${Number(invoice.taxAmount).toLocaleString('en-IN')}`, { x: width - 150, y: currentY, size: 12, font })
       currentY -= 20
     }

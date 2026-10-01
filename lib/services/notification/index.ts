@@ -420,4 +420,36 @@ export const notificationService = {
 
     await safeSend('ADMIN_INQUIRY_RECEIVED', 'Inquiry', inquiry.id, config.adminNotificationAddress, template)
   },
+
+  /**
+   * Email Verification
+   */
+  async onAccountVerification(email: string, name: string, token: string) {
+    const config = getEmailConfig()
+    // Canonical origin
+    const verificationUrl = `${config.appBaseUrl}/verify-email?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`
+
+    const template = await templateService.getTemplateContent('ACCOUNT_VERIFICATION', {
+      memberName: name,
+      verificationUrl
+    })
+
+    // Entity ID is a hash or pseudo-ID since User might not be fully active, but we can just use the email
+    await safeSend('ACCOUNT_VERIFICATION', 'User', email, email, template)
+  },
+
+  /**
+   * Password Reset
+   */
+  async onPasswordReset(email: string, name: string, token: string) {
+    const config = getEmailConfig()
+    const resetUrl = `${config.appBaseUrl}/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`
+
+    const template = await templateService.getTemplateContent('PASSWORD_RESET', {
+      memberName: name,
+      resetUrl
+    })
+
+    await safeSend('PASSWORD_RESET', 'User', email, email, template)
+  },
 }

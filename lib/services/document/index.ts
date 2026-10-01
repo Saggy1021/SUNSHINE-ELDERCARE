@@ -1,4 +1,5 @@
 import { db as prisma } from "@/lib/db";
+import crypto from "crypto";
 import { storageService } from "../storage";
 import { InvoiceDocumentService } from "../invoice-document";
 import { validateDocumentType, APPROVED_UPLOAD_DOCUMENT_TYPES } from "./validation";
@@ -37,6 +38,17 @@ export const documentService = {
 
     if (doc.storageKey) {
       const buffer = await storageService.download(doc.storageKey);
+      
+      // Verify SHA-256 for migration safety and integrity check if present
+      if (doc.sha256) {
+        const hash = crypto.createHash("sha256").update(buffer).digest("hex");
+        if (hash !== doc.sha256) {
+          console.error(`INTEGRITY WARNING: Checksum mismatch for document ${doc.id}`);
+          // We log instead of throw here to not break legacy docs that might have changed unexpectedly, 
+          // or we could throw if strictly required. For now, logging is safer for production.
+        }
+      }
+      
       return { buffer, mimeType: doc.mimeType, fileName: doc.displayName };
     }
 
@@ -50,13 +62,6 @@ export const documentService = {
 
   /**
    * Upload a document for a member.
-   *
-   * @param userId       - owner (must be a valid User.id)
-   * @param fileBuffer   - validated file bytes (caller must validate before passing here)
-   * @param displayName  - human-readable name for display only (NOT used in path construction)
-   * @param mimeType     - validated MIME type
-   * @param documentType - must be in APPROVED_UPLOAD_DOCUMENT_TYPES
-   * @param createdById  - admin user performing the upload
    */
   async uploadDocument(
     userId: string,
@@ -66,30 +71,43 @@ export const documentService = {
     documentType: string,
     createdById: string
   ) {
-    // Service-layer enforcement of the document type allowlist.
-    // This prevents bypass via direct service calls that skip the API route.
     const validatedDocType = validateDocumentType(documentType);
+    
+    const sha256 = crypto.createHash("sha256").update(fileBuffer).digest("hex");
 
     const key = await storageService.upload(fileBuffer, {
-      fileName: displayName, // passed for metadata purposes; adapter uses UUID for path
+      fileName: displayName, // passed for metadata purposes
       mimeType,
       userId,
       documentType: validatedDocType,
     });
 
-    return prisma.memberDocument.create({
-      data: {
-        userId,
-        documentType: validatedDocType,
-        displayName,
-        storageKey: key,
-        mimeType,
-        sizeBytes: fileBuffer.length,
-        createdById,
-        status: "ACTIVE",
-        visibility: "PRIVATE",
-      },
-    });
+    const providerName = process.env.STORAGE_PROVIDER ? process.env.STORAGE_PROVIDER.toUpperCase().replace("-", "_") : "LOCAL";
+
+    try {
+      return await prisma.memberDocument.create({
+        data: {
+          userId,
+          documentType: validatedDocType,
+          displayName,
+          storageKey: key,
+          mimeType,
+          sizeBytes: fileBuffer.length,
+          createdById,
+          status: "ACTIVE",
+          visibility: "PRIVATE",
+          sha256,
+          storageProvider: providerName,
+          storageObjectId: key, // For Google Drive, the 'key' is the file ID
+        },
+      });
+    } catch (error) {
+      // Rollback: DB insert failed, clean up the orphaned object
+      await storageService.delete(key).catch(e => {
+        console.error(`Failed to cleanup orphaned storage object: ${key}`, e);
+      });
+      throw error;
+    }
   },
 
   /**

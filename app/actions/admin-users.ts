@@ -3,9 +3,11 @@
 import { requireAuth } from "@/lib/auth/utils"
 import { AdminUserService } from "@/lib/services/admin-users"
 import { revalidatePath } from "next/cache"
+import { RateLimitService } from "@/lib/services/rate-limit"
 
 export async function createAdminUserAction(formData: FormData) {
   const user = await requireAuth();
+  await RateLimitService.checkLimit('ADMINISTRATIVE');
   
   const email = formData.get("email") as string;
   const name = formData.get("name") as string;
@@ -23,6 +25,7 @@ export async function createAdminUserAction(formData: FormData) {
 
 export async function updateAdminUserAction(userId: string, formData: FormData) {
   const user = await requireAuth();
+  await RateLimitService.checkLimit('ADMINISTRATIVE');
   
   const employeeId = formData.get("employeeId") as string || null;
   const roleIds = formData.getAll("roleIds") as string[];

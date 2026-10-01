@@ -1,5 +1,5 @@
-import { Essence } from "@/components/yoga/essence"
-import { TraditionsMap } from "@/components/yoga/traditions-map"
+import { AboutSunshine } from "@/components/yoga/about-sunshine"
+import { ArmyTeam } from "@/components/yoga/army-team"
 import { Gurus } from "@/components/yoga/gurus"
 import { Metadata } from "next"
 import { CmsService } from "@/lib/services/cms"
@@ -21,8 +21,8 @@ export default async function AboutUsPage() {
 
   return (
     <main className="relative overflow-x-clip min-h-screen pt-24">
-      <Essence />
-      <TraditionsMap />
+      <AboutSunshine />
+      <ArmyTeam />
       <Gurus employees={employees} />
     </main>
   )

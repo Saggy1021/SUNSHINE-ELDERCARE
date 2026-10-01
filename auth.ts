@@ -4,6 +4,9 @@ import { PrismaAdapter } from "@auth/prisma-adapter"
 import { db } from "@/lib/db"
 import bcrypt from "bcryptjs"
 
+// A fixed hash for timing attack mitigation (hash of 'dummy' with salt rounds = 10)
+const DUMMY_HASH = "$2a$10$w8uQe0bY8R4uU9m4F9w/u.bM/zHwS0E5V1q7xH0O9A3zX1sXwO0cK";
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(db),
   session: { strategy: "jwt" },
@@ -19,6 +22,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null
         }
         
+        try {
+          const { RateLimitService } = await import('@/lib/services/rate-limit')
+          await RateLimitService.checkLimit('AUTHENTICATION')
+        } catch (e: any) {
+          if (e.name === 'RateLimitError') {
+            throw new Error('Too many login attempts. Please try again later.')
+          }
+        }
+
         const normalizedEmail = (credentials.email as string).toLowerCase()
 
         const user = await db.user.findUnique({
@@ -27,14 +39,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
         })
 
+        // Always hash to prevent timing attacks for account enumeration
+        const isPasswordValid = await bcrypt.compare(
+          credentials.password as string,
+          user?.passwordHash || DUMMY_HASH
+        )
+
         if (!user || !user.passwordHash || user.status === 'INACTIVE') {
           return null
         }
-
-        const isPasswordValid = await bcrypt.compare(
-          credentials.password as string,
-          user.passwordHash
-        )
 
         if (!isPasswordValid) {
           return null

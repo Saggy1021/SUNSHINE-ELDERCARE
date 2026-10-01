@@ -20,6 +20,8 @@ export default function TermsAndConditionsPage() {
             
             <p className="text-sm font-sans text-foreground/50 mb-8 border-b border-gold/30 pb-4">
               Last Updated: [DATE TO BE SUPPLIED BY LEGAL COUNSEL]
+              <br/>
+              <span className="font-bold text-red-600 mt-2 inline-block">DRAFT FOR LAWYER REVIEW</span>
             </p>
 
             <section className="mb-10">
@@ -66,9 +68,8 @@ export default function TermsAndConditionsPage() {
                 For any questions regarding these Terms, please contact us at:
               </p>
               <ul className="mt-4 space-y-2">
-                <li>Email: admin@sunshineeldercare.com</li>
-                <li>Phone: +91 81003 11142</li>
-                <li>Address: Kolkata, West Bengal, India</li>
+                <li>Email: INFO.SUNSHINEELDERCARE@GMAIL.COM</li>
+                <li>Address: 1/67 NAKTALA, N.S.C BOSE ROAD, KOLKATA - 700047, WEST BENGAL, INDIA</li>
               </ul>
             </section>
 

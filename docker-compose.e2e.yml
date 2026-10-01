@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  postgres-e2e:
+    image: postgres:16-alpine
+    container_name: sunshine_eldercare_db_e2e
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: e2e_user
+      POSTGRES_PASSWORD: e2e_pass
+      POSTGRES_DB: e2e_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_e2e_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U e2e_user -d e2e_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  postgres_e2e_data:
+    driver: local

@@ -2,11 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { db } from '@/lib/db'
 import { pdfService } from '@/lib/services/pdf'
+import { RateLimitService } from '@/lib/services/rate-limit'
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  try {
+    await RateLimitService.checkLimit('SENSITIVE_FILES')
+  } catch (error: any) {
+    if (error?.name === 'RateLimitError') {
+      return new NextResponse('Too Many Requests', { status: 429, headers: { 'Retry-After': error.retryAfterSeconds.toString() } })
+    }
+  }
+
   try {
     const session = await auth()
     if (!session?.user?.id) {

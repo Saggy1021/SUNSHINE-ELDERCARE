@@ -4,8 +4,18 @@ import { documentService } from "@/lib/services/document";
 import { db as prisma } from "@/lib/db";
 import { AuthorizationService } from "@/lib/services/authorization";
 import { PERMISSIONS } from "@/lib/auth/permissions";
+import { RateLimitService } from '@/lib/services/rate-limit'
+import { storageService } from "@/lib/services/storage";
 
 export async function GET(request: Request) {
+  try {
+    await RateLimitService.checkLimit('SENSITIVE_FILES')
+  } catch (error: any) {
+    if (error?.name === 'RateLimitError') {
+      return NextResponse.json({ error: "Too Many Requests" }, { status: 429, headers: { 'Retry-After': error.retryAfterSeconds.toString() } })
+    }
+  }
+
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -36,6 +46,17 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    if (document.storageKey) {
+      const signedUrl = await storageService.getSignedUrl(document.storageKey);
+      
+      // If the signed URL is external (S3/R2), issue a temporary redirect (HTTP 307)
+      // This avoids Vercel's 4.5MB response size limit and delegates bandwidth to the object store.
+      if (signedUrl.startsWith('http')) {
+        return NextResponse.redirect(signedUrl, 307);
+      }
+    }
+
+    // Otherwise, fallback to proxying the buffer (e.g., LocalStorage or dynamic Invoice PDF)
     const { buffer, mimeType, fileName } = await documentService.getDocumentContent(document.id);
 
     return new NextResponse(buffer, {

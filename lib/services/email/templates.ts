@@ -435,3 +435,35 @@ export function adminInquiryReceivedEmail(data: {
   const text = `New inquiry from ${data.fullName} (${data.email}, ${data.phone}).\n\n${data.message}\n\nReview: ${data.adminUrl}`
   return { subject, html, text }
 }
+
+export function accountVerificationEmail(data: {
+  memberName: string
+  verificationUrl: string
+}): { subject: string; html: string; text: string } {
+  const subject = 'Verify your email address'
+  const html = baseLayout(`
+    ${heading('Verify Your Email')}
+    ${paragraph(`Dear ${data.memberName},`)}
+    ${paragraph('Thank you for registering with us. Please verify your email address to complete your registration.')}
+    ${ctaButton('Verify Email', data.verificationUrl)}
+    ${securityNotice('This link will expire in 24 hours. If you did not create an account, you can safely ignore this email.')}
+  `)
+  const text = `Dear ${data.memberName},\n\nPlease verify your email address by visiting this link: ${data.verificationUrl}\n\nThis link will expire in 24 hours.`
+  return { subject, html, text }
+}
+
+export function passwordResetEmail(data: {
+  memberName: string
+  resetUrl: string
+}): { subject: string; html: string; text: string } {
+  const subject = 'Password Reset Request'
+  const html = baseLayout(`
+    ${heading('Password Reset Request')}
+    ${paragraph(`Dear ${data.memberName},`)}
+    ${paragraph('We received a request to reset your password. Click the button below to choose a new password.')}
+    ${ctaButton('Reset Password', data.resetUrl)}
+    ${securityNotice('This link will expire in 1 hour. If you did not request a password reset, please ignore this email; your password will remain unchanged.')}
+  `)
+  const text = `Dear ${data.memberName},\n\nReset your password by visiting this link: ${data.resetUrl}\n\nThis link will expire in 1 hour.`
+  return { subject, html, text }
+}

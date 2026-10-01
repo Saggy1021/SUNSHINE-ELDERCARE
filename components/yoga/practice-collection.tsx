@@ -1,107 +1,78 @@
 import { Reveal } from './reveal'
 import { Eyebrow } from './ornaments'
 import Link from 'next/link'
+import { ArrowRight, PhoneCall, Stethoscope, UserCheck, ShieldAlert, HeartHandshake } from 'lucide-react'
 
-const practices = [
+const coreServices = [
   {
-    name: 'Medical Coordination',
-    slug: 'medical-coordination',
-    path: 'Health Management',
-    desc: 'Regular doctor visits and comprehensive health monitoring.',
-    image: '/images/stamp-hatha.png',
-    rotate: '-rotate-3',
+    name: 'Comprehensive Care',
+    desc: 'Holistic care management tailored to your specific requirements and health conditions.',
+    icon: HeartHandshake,
   },
   {
-    name: 'Companionship',
-    slug: 'companionship',
-    path: 'Emotional Support',
-    desc: 'Engaging conversations and focus on emotional well-being.',
-    image: '/images/stamp-raja.png',
-    rotate: 'rotate-2',
+    name: 'Daily Wellness Calls',
+    desc: 'Regular check-ins to monitor health, mood, and provide daily reassurance.',
+    icon: PhoneCall,
   },
   {
-    name: 'Physiotherapy',
-    slug: 'physiotherapy',
-    path: 'Mobility & Strength',
-    desc: 'At-home therapy for active, pain-free, and healthy aging.',
-    image: '/images/stamp-bhakti.png',
-    rotate: '-rotate-2',
+    name: 'Monthly Senior Staff Visit',
+    desc: 'In-person visits by our experienced senior staff to ensure care quality and well-being.',
+    icon: UserCheck,
   },
   {
-    name: 'Nursing Support',
-    slug: 'nursing-support',
-    path: 'Specialized Care',
-    desc: 'Professional nurses for daily assistance or post-operative care.',
-    image: '/images/stamp-karma.png',
-    rotate: 'rotate-3',
+    name: 'Outdoor Visits',
+    desc: 'Accompanied outdoor visits according to plan, assisting with essential errands or social outings.',
+    icon: Stethoscope,
   },
   {
-    name: 'Diagnostics',
-    slug: 'diagnostics',
-    path: 'Convenient Testing',
-    desc: 'At-home lab sample collection and rapid reporting.',
-    image: '/images/stamp-kundalini.png',
-    rotate: '-rotate-1',
+    name: '24/7 Emergency Assistance',
+    desc: 'Immediate round-the-clock support when you need it most.',
+    icon: ShieldAlert,
   },
 ]
 
 export function PracticeCollection() {
   return (
-    <section
-      id="practices"
-      className="relative overflow-hidden bg-secondary/50 py-24 paper-texture sm:py-32"
-    >
+    <section className="relative overflow-hidden py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         <Reveal className="text-center">
-          <Eyebrow>Comprehensive Care</Eyebrow>
-          <h2 className="mx-auto mt-5 max-w-3xl text-balance font-display text-3xl font-bold leading-tight sm:text-5xl">
-            Our Primary Services
+          <Eyebrow>Core Offerings</Eyebrow>
+          <h2 className="mx-auto mt-4 max-w-3xl text-balance font-display text-3xl font-bold leading-tight sm:text-5xl">
+            Core Eldercare Services
           </h2>
-          <p className="mx-auto mt-5 max-w-2xl text-pretty font-serif text-lg text-foreground/75">
-            Every service is tailored to respect the dignity and individual needs of our elders, bringing essential care directly to their doorstep.
+          <p className="mx-auto mt-5 max-w-2xl text-pretty font-serif text-lg text-foreground/80">
+            Our fundamental services provided directly by Sunshine Elder Care to guarantee continuous support, engagement, and safety.
           </p>
         </Reveal>
 
-        <div className="mt-16 flex flex-wrap items-center justify-center gap-8 sm:gap-10">
-          {practices.map((p, i) => (
-            <Reveal key={p.name} delay={i * 90}>
-              <Link href={`/services/${p.slug}`}>
-                <article
-                  className={`group relative w-60 transition-transform duration-500 ${p.rotate} hover:rotate-0 hover:-translate-y-2`}
-                >
-                  {/* Perforated stamp */}
-                  <div className="rounded-md bg-ivory p-3 shadow-lg shadow-brown/15 [outline:3px_dashed_var(--ivory)] [outline-offset:-7px]">
-                    <div className="overflow-hidden rounded-sm border border-dashed border-gold/50">
-                      <div className="relative overflow-hidden">
-                        <img
-                          src={p.image || '/placeholder.svg'}
-                          alt={`${p.name} illustration`}
-                          className="aspect-square w-full object-cover transition-transform duration-700 group-hover:scale-105"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-brown/25 to-transparent" />
-                      </div>
-                      <div className="px-3 py-3 text-center">
-                        <h3 className="font-display text-lg font-bold leading-tight">
-                          {p.name}
-                        </h3>
-                        <p className="mt-0.5 text-xs uppercase tracking-widest text-primary">
-                          {p.path}
-                        </p>
-                        <p className="mt-2 font-serif text-sm leading-snug text-foreground/70">
-                          {p.desc}
-                        </p>
-                      </div>
-                    </div>
-                    {/* faux postmark */}
-                    <span className="absolute right-3 top-3 flex size-10 rotate-12 items-center justify-center rounded-full border-2 border-maroon/40 text-center font-display text-[8px] uppercase leading-none text-maroon/50">
-                      Care
-                    </span>
+        <div className="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {coreServices.map((service, index) => {
+            const Icon = service.icon
+            return (
+              <Reveal key={service.name} delay={index * 100}>
+                <div className="group relative flex h-full flex-col rounded-2xl border border-gold/30 bg-card p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-md">
+                  <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                    <Icon className="h-6 w-6" />
                   </div>
-                </article>
-              </Link>
-            </Reveal>
-          ))}
+                  <h3 className="font-display text-xl font-bold">{service.name}</h3>
+                  <p className="mt-2 flex-grow font-serif text-sm text-foreground/75 leading-relaxed">
+                    {service.desc}
+                  </p>
+                </div>
+              </Reveal>
+            )
+          })}
         </div>
+
+        <Reveal className="mt-12 text-center">
+          <Link
+            href="/services"
+            className="inline-flex items-center gap-2 rounded-full border-2 border-primary px-6 py-3 text-sm font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
+          >
+            Explore All Services
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </Reveal>
       </div>
     </section>
   )

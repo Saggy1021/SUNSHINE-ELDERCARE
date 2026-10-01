@@ -9,6 +9,15 @@ import { carePricingService, carePlanLookupSchema } from '@/lib/services/care-pl
  */
 export async function GET() {
   try {
+    const { RateLimitService } = await import('@/lib/services/rate-limit')
+    await RateLimitService.checkLimit('PUBLIC_PRICING')
+  } catch (error: any) {
+    if (error?.code === 'RATE_LIMIT_EXCEEDED') {
+      return NextResponse.json({ error: "Too Many Requests" }, { status: 429, headers: { 'Retry-After': error.retryAfterSeconds?.toString() || '60' } })
+    }
+  }
+
+  try {
     const catalog = await carePricingService.getCatalog()
     return NextResponse.json({ success: true, data: catalog })
   } catch (error) {
@@ -27,6 +36,15 @@ export async function GET() {
  * Any submitted price/GST/total from the client is completely IGNORED.
  */
 export async function POST(req: NextRequest) {
+  try {
+    const { RateLimitService } = await import('@/lib/services/rate-limit')
+    await RateLimitService.checkLimit('PUBLIC_PRICING')
+  } catch (error: any) {
+    if (error?.code === 'RATE_LIMIT_EXCEEDED') {
+      return NextResponse.json({ error: "Too Many Requests" }, { status: 429, headers: { 'Retry-After': error.retryAfterSeconds?.toString() || '60' } })
+    }
+  }
+
   try {
     const body = await req.json()
 

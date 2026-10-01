@@ -7,10 +7,13 @@ import bcrypt from 'bcryptjs'
 import { ROLES } from '@/lib/auth/roles'
 import { generateEmailVerificationToken, generatePasswordResetToken, hashToken } from '@/lib/auth/tokens'
 
+import { RateLimitService } from '@/lib/services/rate-limit'
 import { memberRegistrationSchema } from '@/lib/validations/member'
+import { notificationService } from '@/lib/services/notification'
 
 export async function registerUser(formData: FormData) {
   try {
+    await RateLimitService.checkLimit('AUTHENTICATION')
     const data = Object.fromEntries(formData.entries());
     // Convert string 'on' to boolean for shiftAuthorization if present
     if (data.shiftAuthorization === 'on' || data.shiftAuthorization === 'true') {
@@ -31,7 +34,8 @@ export async function registerUser(formData: FormData) {
     })
 
     if (existingUser) {
-      return { success: false, error: "Registration failed. This email may already be in use." }
+      // Do not reveal account existence
+      return { success: true, message: "If the details are valid, an account has been created. Please check your email." }
     }
 
     const passwordHash = await bcrypt.hash(validatedData.password, 10)
@@ -109,8 +113,9 @@ export async function registerUser(formData: FormData) {
       return newUser
     })
 
-    // Phase 2: Generate email verification token (email provider will be connected later)
-    await generateEmailVerificationToken(normalizedEmail)
+    // Generate email verification token and trigger email safely
+    const rawToken = await generateEmailVerificationToken(normalizedEmail)
+    await notificationService.onAccountVerification(normalizedEmail, user.name || 'Member', rawToken)
 
     // Audit log
     await db.auditLog.create({
@@ -123,8 +128,11 @@ export async function registerUser(formData: FormData) {
       }
     })
 
-    return { success: true }
-  } catch (error) {
+    return { success: true, message: "If the details are valid, an account has been created. Please check your email." }
+  } catch (error: any) {
+    if (error?.name === 'RateLimitError') {
+      return { success: false, error: 'Too many requests. Please try again later.' }
+    }
     if (error instanceof z.ZodError) {
       return { success: false, error: error.issues[0].message }
     }
@@ -134,6 +142,7 @@ export async function registerUser(formData: FormData) {
 
 export async function requestPasswordReset(formData: FormData) {
   try {
+    await RateLimitService.checkLimit('AUTHENTICATION')
     const email = formData.get('email') as string
     
     if (!email) {
@@ -148,18 +157,22 @@ export async function requestPasswordReset(formData: FormData) {
 
     // Secure behavior: Do not reveal if the account exists
     if (user) {
-      // Phase 2: Generate token (Email provider integration in Phase 3)
-      await generatePasswordResetToken(normalizedEmail)
+      const rawToken = await generatePasswordResetToken(normalizedEmail)
+      await notificationService.onPasswordReset(normalizedEmail, user.name || 'Member', rawToken)
     }
 
     return { success: true, message: "If an account exists, a password reset link has been sent." }
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === 'RateLimitError') {
+      return { success: false, error: 'Too many requests. Please try again later.' }
+    }
     return { success: false, error: "Failed to process password reset request." }
   }
 }
 
 export async function verifyEmail(email: string, rawToken: string) {
   try {
+    await RateLimitService.checkLimit('AUTHENTICATION')
     const hashedToken = hashToken(rawToken)
     const identifier = `verify_${email}`
 
@@ -185,13 +198,17 @@ export async function verifyEmail(email: string, rawToken: string) {
     })
 
     return { success: true }
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === 'RateLimitError') {
+      return { success: false, error: 'Too many requests. Please try again later.' }
+    }
     return { success: false, error: "Verification failed" }
   }
 }
 
 export async function resetPassword(formData: FormData) {
   try {
+    await RateLimitService.checkLimit('AUTHENTICATION')
     const email = (formData.get('email') as string)?.toLowerCase()
     const rawToken = formData.get('token') as string
     const newPassword = formData.get('password') as string
@@ -230,7 +247,10 @@ export async function resetPassword(formData: FormData) {
     })
 
     return { success: true, message: "Password updated successfully" }
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === 'RateLimitError') {
+      return { success: false, error: 'Too many requests. Please try again later.' }
+    }
     return { success: false, error: "Password reset failed" }
   }
 }

@@ -24,3 +24,6 @@ coverage/
 
 # Private member document storage — MUST NOT be committed to version control
 private_storage/
+# Playwright Test Reports
+playwright-report/
+test-results/

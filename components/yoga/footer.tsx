@@ -25,6 +25,7 @@ const columns = [
     links: [
       { label: 'Terms & Conditions', href: '/legal/terms-and-conditions' },
       { label: 'Privacy Policy', href: '/legal/privacy-policy' },
+      { label: 'Refund & Cancellation', href: '/legal/refund-cancellation' },
     ],
   },
 ]
@@ -60,9 +61,11 @@ export function Footer({ settings }: { settings?: Record<string, string> }) {
               <li className="flex items-center gap-3">
                 <Mail className="size-4 text-gold" /> {email}
               </li>
-              <li className="flex items-center gap-3">
-                <Phone className="size-4 text-gold" /> {phone}
-              </li>
+              {phone && (
+                <li className="flex items-center gap-3">
+                  <Phone className="size-4 text-gold" /> {phone}
+                </li>
+              )}
             </ul>
           </div>
 

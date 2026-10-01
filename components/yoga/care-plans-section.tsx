@@ -29,6 +29,9 @@ export async function CarePlansSection() {
           <p className="mx-auto mt-5 max-w-2xl text-pretty font-serif text-lg text-foreground/75">
             Choose a plan that best fits the needs of your loved ones. All plans are designed with flexibility and total peace of mind at their core.
           </p>
+          <p className="mt-2 text-sm text-muted-foreground/80 font-serif">
+            All prices are inclusive of applicable taxes.
+          </p>
         </Reveal>
 
         <div className="mt-16 grid gap-8 md:grid-cols-3">

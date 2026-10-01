@@ -1,11 +1,11 @@
 export const businessData = {
   name: "Sunshine Elder Care",
-  phone: "+91 81003 11142",
-  email: "admin@sunshineeldercare.com",
-  address: "Kolkata, West Bengal, India",
+  phone: "",
+  email: "INFO.SUNSHINEELDERCARE@GMAIL.COM",
+  address: "1/67 NAKTALA, N.S.C BOSE ROAD, KOLKATA - 700047, WEST BENGAL, INDIA",
   socialLinks: {
-    facebook: "https://www.facebook.com/sunshineeldercare/",
-    whatsapp: "https://wa.me/918100311142"
+    facebook: "",
+    whatsapp: ""
   },
   programs: [
     {

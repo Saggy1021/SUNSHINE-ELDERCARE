@@ -106,7 +106,7 @@ export default async function InvoiceReviewPage({ params, searchParams }: Props)
                           <span className="font-medium">{formatINR(invoice.subtotal)}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-foreground/60">GST (18%)</span>
+                          <span className="text-foreground/60">Applicable Taxes</span>
                           <span className="font-medium">{formatINR(invoice.taxAmount)}</span>
                         </div>
                       </>
@@ -126,12 +126,18 @@ export default async function InvoiceReviewPage({ params, searchParams }: Props)
                 </div>
 
                 <div className="pt-6 space-y-4">
+                  <div className="bg-primary/5 border border-primary/20 p-4 rounded-xl mb-6">
+                    <p className="text-sm font-serif text-foreground/80 leading-relaxed text-center">
+                      We accept online payments including UPI, cards and net banking, as well as offline bank transfers. <span className="font-bold text-red-700">Direct cash payments are not accepted.</span>
+                    </p>
+                  </div>
                   
                   {/* Online Payment (Mock or configured provider) */}
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                     <h4 className="font-semibold text-slate-900 mb-2">Online Payment</h4>
                     <form action={initiatePaymentAction}>
                       <input type="hidden" name="invoiceId" value={invoice.id} />
+                      {renewalId && <input type="hidden" name="renewalId" value={renewalId} />}
                       <button 
                         type="submit"
                         className="w-full rounded-xl bg-gold px-6 py-3 text-center text-sm font-bold text-brown transition-opacity hover:opacity-90 shadow-sm"

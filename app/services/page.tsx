@@ -1,5 +1,7 @@
 import { PracticeCollection } from "@/components/yoga/practice-collection"
-import { EightLimbs } from "@/components/yoga/eight-limbs"
+import { MedicalNetwork } from "@/components/yoga/medical-network"
+import { CaregiverNetwork } from "@/components/yoga/caregiver-network"
+import { EmergencyAssistance } from "@/components/yoga/emergency-assistance"
 import { Metadata } from "next"
 
 export const metadata: Metadata = {
@@ -11,7 +13,9 @@ export default function ServicesPage() {
   return (
     <main className="relative overflow-x-clip min-h-screen pt-24">
       <PracticeCollection />
-      <EightLimbs />
+      <MedicalNetwork />
+      <CaregiverNetwork />
+      <EmergencyAssistance />
     </main>
   )
 }

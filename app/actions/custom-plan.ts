@@ -6,12 +6,14 @@ import { AuthorizationService } from "@/lib/services/authorization"
 import { CustomPlanService } from "@/lib/services/custom-plan"
 import { customPlanSchema, CustomPlanInput } from "@/lib/validations/custom-plan"
 import { revalidatePath } from "next/cache"
+import { RateLimitService } from "@/lib/services/rate-limit"
 
 async function requirePermission(permission: string) {
   const session = await auth()
   if (!session?.user?.id) {
     throw new Error("Unauthorized access.")
   }
+  await RateLimitService.checkLimit('ADMINISTRATIVE');
   await AuthorizationService.require(session.user.id, permission)
   return session.user.id
 }

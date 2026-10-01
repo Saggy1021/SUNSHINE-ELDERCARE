@@ -11,8 +11,11 @@ const contactSchema = z.object({
   message: z.string().min(10, "Message must be at least 10 characters"),
 })
 
+import { RateLimitService } from '@/lib/services/rate-limit'
+
 export async function submitContactForm(formData: FormData) {
   try {
+    await RateLimitService.checkLimit('PUBLIC_FORMS')
     const data = {
       name: formData.get('name') as string,
       email: formData.get('email') as string,
@@ -37,8 +40,11 @@ export async function submitContactForm(formData: FormData) {
     notificationService.onInquiryReceived(inquiry).catch(() => {})
 
     return { success: true }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Contact form submission failed:', error)
+    if (error?.name === 'RateLimitError') {
+      return { success: false, error: 'Too many requests. Please try again later.' }
+    }
     if (error instanceof z.ZodError) {
       return { success: false, errors: error.issues }
     }

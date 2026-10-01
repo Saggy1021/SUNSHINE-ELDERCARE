@@ -5,6 +5,7 @@ import { notificationService } from '@/lib/services/notification'
 export interface PaymentCheckoutRequest {
   invoiceId: string;
   userId: string;
+  renewalRequestId?: string;
   successUrl: string;
   cancelUrl: string;
 }
@@ -71,6 +72,10 @@ export class PaymentService {
       throw new Error('Invoice not found for payment processing');
     }
 
+    if (invoice.userId !== request.userId) {
+      throw new Error('Unauthorized: Invoice does not belong to the current user');
+    }
+
     if (invoice.status === 'PAID') {
       throw new Error('Invoice is already paid');
     }
@@ -90,7 +95,24 @@ export class PaymentService {
       currency: invoice.currency
     };
 
-    return this.adapter.createCheckoutSession(adapterRequest);
+    const session = await this.adapter.createCheckoutSession(adapterRequest);
+
+    // Create a PENDING payment record to track this initiation and link the renewal request
+    await db.payment.create({
+      data: {
+        userId: request.userId,
+        invoiceId: invoice.id,
+        renewalRequestId: request.renewalRequestId,
+        amount: invoice.total,
+        currency: invoice.currency,
+        paymentMethod: "ONLINE",
+        status: "PENDING",
+        provider: process.env.PAYMENT_PROVIDER || "SYSTEM",
+        reference: session.providerOrderId
+      }
+    });
+
+    return session;
   }
 
   async verifyWebhook(payload: any, signature: string, secret: string): Promise<boolean> {
@@ -127,21 +149,21 @@ export async function submitOfflinePayment(
 
   // Idempotency: check if verification pending payment already exists for this invoice
   const existingPending = await db.payment.findFirst({
-    where: { invoiceId, status: "VERIFICATION_PENDING" }
+    where: { invoiceId, status: { in: ["VERIFICATION_PENDING", "VERIFIED"] } }
   })
   
   if (existingPending) {
-    throw new Error("A payment verification is already pending for this invoice.")
+    throw new Error("A payment is already pending or verified for this invoice.")
   }
 
-  // Create payment record
+  // Create payment record using authoritative server-side values
   const payment = await db.payment.create({
     data: {
       userId,
       invoiceId,
       renewalRequestId,
-      amount,
-      currency: "INR",
+      amount: invoice.total,
+      currency: invoice.currency,
       paymentMethod: "OFFLINE",
       status: "VERIFICATION_PENDING",
       provider: "SYSTEM",
@@ -175,15 +197,19 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
   // 2. Perform Transactional settlement
   await db.$transaction(async (tx) => {
     
-    // A. Mark Payment Verified
-    await tx.payment.update({
-      where: { id: paymentId },
+    // A. Mark Payment Verified (Atomic concurrency check)
+    const updateResult = await tx.payment.updateMany({
+      where: { id: paymentId, status: "VERIFICATION_PENDING" },
       data: {
         status: "VERIFIED",
         verifiedAt: new Date(),
         verifiedById: adminUserId
       }
     })
+
+    if (updateResult.count === 0) {
+      throw new Error("Payment could not be verified. It may have already been processed.")
+    }
 
     // B. Finalize Invoice (Snapshot and Numbering)
     const now = new Date()
@@ -303,8 +329,8 @@ export async function adminRejectPayment(paymentId: string, adminUserId: string,
   if (payment.status === "VERIFIED") throw new Error("Cannot reject a verified payment")
 
   await db.$transaction(async (tx) => {
-    await tx.payment.update({
-      where: { id: paymentId },
+    const updateResult = await tx.payment.updateMany({
+      where: { id: paymentId, status: "VERIFICATION_PENDING" },
       data: {
         status: "REJECTED",
         verifiedAt: new Date(),
@@ -312,6 +338,10 @@ export async function adminRejectPayment(paymentId: string, adminUserId: string,
         notes: reason
       }
     })
+
+    if (updateResult.count === 0) {
+      throw new Error("Payment could not be rejected. It may have already been processed.")
+    }
 
     await tx.auditLog.create({
       data: {

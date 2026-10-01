@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { AuthorizationService } from "@/lib/services/authorization"
 import { PERMISSIONS } from "@/lib/auth/permissions"
+import { RateLimitService } from '@/lib/services/rate-limit'
 
 export async function processOfflinePayment(
   invoiceId: string, 
@@ -18,6 +19,8 @@ export async function processOfflinePayment(
   if (!session?.user?.id) {
     throw new Error("Unauthorized")
   }
+
+  await RateLimitService.checkLimit('FINANCIAL')
 
   // Submit offline payment
   await submitOfflinePayment(

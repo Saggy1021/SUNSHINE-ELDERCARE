@@ -9,8 +9,11 @@ import { carePricingService, carePlanLookupSchema } from '@/lib/services/care-pl
  * The server ALWAYS resolves the authoritative price from the database.
  * Client-submitted price/GST/total are IGNORED.
  */
+import { RateLimitService } from '@/lib/services/rate-limit'
+
 export async function getCarePlanPrice(formData: FormData) {
   try {
+    await RateLimitService.checkLimit('PUBLIC_PRICING')
     const raw = {
       planSlug: formData.get('planSlug') as string,
       variantType: formData.get('variantType') as string,

@@ -202,7 +202,7 @@ export function PriceCalculator({ plan, isAuthenticated }: PriceCalculatorProps)
                 <p className="font-semibold text-foreground">{formatINR(result.monthlyBasePrice)}</p>
               </div>
               <div>
-                <p className="text-foreground/50 text-xs">GST 18%</p>
+                <p className="text-foreground/50 text-xs">Applicable Taxes</p>
                 <p className="font-semibold text-foreground">{formatINR(result.monthlyGst)}</p>
               </div>
               <div>

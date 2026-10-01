@@ -941,6 +941,11 @@ model MemberDocument {
   mimeType     String  @default("application/pdf")
   sizeBytes    Int     @default(0)
 
+  // Phase 19G Migration tracking
+  sha256          String?
+  storageProvider String  @default("LOCAL") // LOCAL, GOOGLE_DRIVE, S3, etc.
+  storageObjectId String? // Native file ID (e.g. Google Drive file ID)
+
   invoiceId      String? @unique
   receiptId      String? @unique
   subscriptionId String?

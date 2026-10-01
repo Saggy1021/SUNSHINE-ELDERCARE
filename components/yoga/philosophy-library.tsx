@@ -50,9 +50,9 @@ export function PhilosophyLibrary({ faqs }: { faqs?: any[] }) {
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         <Reveal className="text-center">
           <Eyebrow>Common Questions</Eyebrow>
-          <h2 className="mx-auto mt-5 max-w-3xl text-balance font-display text-3xl font-bold leading-tight sm:text-5xl">
+          <h1 className="mx-auto mt-5 max-w-3xl text-balance font-display text-3xl font-bold leading-tight sm:text-5xl">
             Frequently Asked Questions
-          </h2>
+          </h1>
           <p className="mx-auto mt-5 max-w-2xl text-pretty font-serif text-lg text-foreground/75">
             Pull a topic from the shelf to learn more about how Sunshine Elder Care works.
           </p>

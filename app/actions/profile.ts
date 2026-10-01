@@ -14,9 +14,19 @@ const updateProfileSchema = z.object({
   nearestLandmark: z.string().optional(),
 })
 
+import { RateLimitService } from "@/lib/services/rate-limit"
+
 export async function updateMemberProfile(formData: FormData) {
   const session = await auth()
   if (!session?.user?.id) throw new Error("Unauthorized")
+
+  try {
+    await RateLimitService.checkLimit('ADMINISTRATIVE')
+  } catch (error: any) {
+    if (error?.name === 'RateLimitError') {
+      return { success: false, error: 'Too many requests. Please try again later.' }
+    }
+  }
 
   const data = Object.fromEntries(formData.entries())
   const validationResult = updateProfileSchema.safeParse(data)

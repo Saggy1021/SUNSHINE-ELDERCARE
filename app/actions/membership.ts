@@ -7,6 +7,7 @@ import { carePricingService } from "@/lib/services/care-plans"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { notificationService } from "@/lib/services/notification"
+import { RateLimitService } from "@/lib/services/rate-limit"
 
 export async function getUserSubscription() {
   const session = await auth()
@@ -47,6 +48,7 @@ export async function getEmergencyContact() {
 export async function updateEmergencyContact(formData: FormData) {
   const session = await auth()
   if (!session?.user?.id) throw new Error("Unauthorized")
+  await RateLimitService.checkLimit('ADMINISTRATIVE')
 
   const fullName = formData.get("fullName") as string
   const relationship = formData.get("relationship") as string
@@ -68,6 +70,7 @@ export async function updateEmergencyContact(formData: FormData) {
 export async function submitFeedback(formData: FormData) {
   const session = await auth()
   if (!session?.user?.id) throw new Error("Unauthorized")
+  await RateLimitService.checkLimit('PUBLIC_FORMS') // Or ADMINISTRATIVE
 
   const category = formData.get("category") as string
   const rating = parseInt(formData.get("rating") as string, 10)
@@ -88,6 +91,7 @@ export async function submitFeedback(formData: FormData) {
 export async function submitRenewalRequest(formData: FormData) {
   const session = await auth()
   if (!session?.user?.id) throw new Error("Unauthorized")
+  await RateLimitService.checkLimit('FINANCIAL')
 
   const carePlanId = formData.get("carePlanId") as string
   const variantType = formData.get("variantType") as string

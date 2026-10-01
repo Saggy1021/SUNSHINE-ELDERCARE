@@ -3,10 +3,12 @@
 import { auth } from "@/auth";
 import { CmsService } from "@/lib/services/cms";
 import { revalidatePath } from "next/cache";
+import { RateLimitService } from '@/lib/services/rate-limit';
 
 async function getActor() {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
+  await RateLimitService.checkLimit('ADMINISTRATIVE');
   return session.user.id;
 }
 

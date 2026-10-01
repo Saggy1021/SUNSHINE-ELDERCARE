@@ -6,13 +6,15 @@ import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { notificationService } from "@/lib/services/notification"
 import { AuthorizationService } from "@/lib/services/authorization"
+import { RateLimitService } from "@/lib/services/rate-limit"
 
 // --- Authorization Helper ---
 async function requirePermission(permission: string) {
   const session = await auth()
   if (!session?.user?.id) {
-    throw new Error("Unauthorized access.")
+    redirect('/login')
   }
+  await RateLimitService.checkLimit('ADMINISTRATIVE');
   await AuthorizationService.require(session.user.id, permission)
   return session.user.id
 }

@@ -5,6 +5,7 @@ import { carePricingService, carePlanLookupSchema } from '@/lib/services/care-pl
 import { taxService } from '@/lib/services/tax'
 import { invoiceService } from '@/lib/services/invoice'
 import { z } from 'zod'
+import { RateLimitService } from '@/lib/services/rate-limit'
 
 export async function createCarePlanInvoiceAction(formData: FormData) {
   const session = await auth()
@@ -12,6 +13,8 @@ export async function createCarePlanInvoiceAction(formData: FormData) {
   if (!session?.user?.id) {
     throw new Error('UNAUTHORIZED')
   }
+
+  await RateLimitService.checkLimit('FINANCIAL')
 
   const rawData = {
     planSlug: formData.get('planSlug'),
