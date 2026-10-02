@@ -27,7 +27,7 @@ test.describe('Public Website Smoke Tests', () => {
   test('Guest price calculator works', async ({ page }) => {
     await page.goto('/membership');
     // We expect the calculator to be present on membership page or similar
-    const calculator = page.locator('text=Applicable Taxes');
+    const calculator = page.locator('text=Inclusive of all applicable taxes/charges');
     if (await calculator.isVisible()) {
       await expect(calculator).toBeVisible();
     }

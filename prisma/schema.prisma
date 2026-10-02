@@ -364,10 +364,12 @@ model RenewalRequest {
   requestedStartDate    DateTime
   calculatedEndDate     DateTime
   status                String   @default("SUBMITTED") // SUBMITTED, PENDING_PAYMENT, APPROVED, REJECTED, CANCELLED
+  requestType           String   @default("RENEWAL") // RENEWAL, UPGRADE
 
   // Immutable commercial snapshot
   planName        String
   documentedTotal Decimal
+  customPrice     Decimal?
 
   user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   currentSubscription Subscription? @relation(fields: [currentSubscriptionId], references: [id], onDelete: SetNull)
@@ -534,6 +536,11 @@ model MemberProfile {
   sponsor          Sponsor?
   insuranceDetails InsuranceDetails?
   medicalAuth      MedicalAuthorization?
+
+  medicalConditions String?         @db.Text
+  bloodGroup        String?
+  idProofDocumentId String?         @unique
+  idProofDocument   MemberDocument? @relation("MemberIdProof", fields: [idProofDocumentId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -957,9 +964,10 @@ model MemberDocument {
   updatedAt   DateTime @updatedAt
   createdById String?
 
-  user         User          @relation("UserDocuments", fields: [userId], references: [id], onDelete: Restrict)
-  invoice      Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  receipt      Receipt?      @relation(fields: [receiptId], references: [id], onDelete: SetNull)
-  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  createdBy    User?         @relation("DocumentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  user         User           @relation("UserDocuments", fields: [userId], references: [id], onDelete: Restrict)
+  invoice      Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  receipt      Receipt?       @relation(fields: [receiptId], references: [id], onDelete: SetNull)
+  subscription Subscription?  @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  createdBy    User?          @relation("DocumentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  idProofFor   MemberProfile? @relation("MemberIdProof")
 }

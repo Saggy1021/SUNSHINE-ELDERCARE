@@ -42,6 +42,10 @@ export const memberRegistrationSchema = z.object({
   hospitalForSos: z.string().optional(),
   nomineeLocalContact: z.string().optional(),
   shiftAuthorization: z.boolean().default(false),
+
+  // SECTION F: HEALTH / MEDICAL INFORMATION (PHASE 20)
+  medicalConditions: z.string().optional(),
+  bloodGroup: z.string().optional(),
 });
 
 export type MemberRegistrationInput = z.infer<typeof memberRegistrationSchema>;

@@ -106,7 +106,7 @@ export default async function InvoiceReviewPage({ params, searchParams }: Props)
                           <span className="font-medium">{formatINR(invoice.subtotal)}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-foreground/60">Applicable Taxes</span>
+                          <span className="text-foreground/60">Inclusive of all applicable taxes/charges</span>
                           <span className="font-medium">{formatINR(invoice.taxAmount)}</span>
                         </div>
                       </>

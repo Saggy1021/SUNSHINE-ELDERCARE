@@ -91,19 +91,47 @@ export async function initiateRenewalCheckout(renewalRequestId: string) {
     throw new Error("Renewal request is not approved yet")
   }
 
-  const pricingResult = await carePricingService.lookupPrice({
-    planSlug: renewal.carePlan.slug,
-    variantType: renewal.variantType as 'SINGLE' | 'COUPLE',
-    months: renewal.durationMonths,
-  });
+  let invoice;
 
-  const taxResult = await taxService.calculateCarePlanTax(pricingResult);
+  if (renewal.requestType === "UPGRADE") {
+    if (!renewal.customPrice) throw new Error("Upgrade amount not set")
+    const pricingResult: any = {
+      basePrice: renewal.customPrice.toNumber(),
+      addOnsTotal: 0,
+      discount: 0,
+      subtotal: renewal.customPrice.toNumber(),
+      currency: 'INR',
+      lineItems: [{
+        description: `Upgrade to ${renewal.planName} - ${renewal.variantType}`,
+        quantity: 1,
+        unitPrice: renewal.customPrice.toNumber(),
+        total: renewal.customPrice.toNumber(),
+        type: 'PLAN',
+        referenceId: renewal.id,
+        taxClassification: 'CARE_PLAN_GST'
+      }]
+    }
+    const taxResult = await taxService.calculateTax(pricingResult)
+    invoice = await invoiceService.createInvoice(
+      session.user.id,
+      pricingResult,
+      taxResult
+    )
+  } else {
+    const pricingResult = await carePricingService.lookupPrice({
+      planSlug: renewal.carePlan.slug,
+      variantType: renewal.variantType as 'SINGLE' | 'COUPLE',
+      months: renewal.durationMonths,
+    });
 
-  const invoice = await invoiceService.createCarePlanInvoice(
-    session.user.id,
-    pricingResult,
-    taxResult
-  );
+    const taxResult = await taxService.calculateCarePlanTax(pricingResult);
+
+    invoice = await invoiceService.createCarePlanInvoice(
+      session.user.id,
+      pricingResult,
+      taxResult
+    );
+  }
 
   redirect(`/checkout/${invoice.id}?renewal=${renewalRequestId}`)
 }

@@ -27,6 +27,7 @@ export const APPROVED_UPLOAD_DOCUMENT_TYPES = [
   "CONTRACT",
   "ASSESSMENT",
   "OTHER",
+  "ID_PROOF",
 ] as const;
 
 export type ApprovedUploadDocumentType = typeof APPROVED_UPLOAD_DOCUMENT_TYPES[number];
@@ -41,6 +42,7 @@ export const ALL_DOCUMENT_TYPES = [
   "CONTRACT",   // Admin: uploadable
   "ASSESSMENT", // Admin: uploadable
   "OTHER",      // Admin: uploadable
+  "ID_PROOF",   // Member/Admin: uploadable identity proof
 ] as const;
 
 /**

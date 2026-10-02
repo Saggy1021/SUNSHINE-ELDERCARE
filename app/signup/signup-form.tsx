@@ -100,6 +100,11 @@ export function SignupForm() {
             <label className="mb-1.5 block text-sm font-medium text-foreground/80">ID Proof Number</label>
             <input name="idProofNumber" type="text" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
           </div>
+          <div className="md:col-span-2">
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Upload ID Proof (Max 2MB)</label>
+            <input name="idProofFile" type="file" accept=".pdf,image/jpeg,image/png" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+            <p className="mt-1 text-xs text-foreground/60">Accepted formats: PDF, JPEG, PNG. Size limit: 2MB.</p>
+          </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground/80">Date of Birth *</label>
             <input name="dateOfBirth" type="date" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
@@ -224,6 +229,21 @@ export function SignupForm() {
                 I authorize Sunshine Eldercare personnel to shift the member to a hospital recommended by Sunshine Eldercare or chosen by the member in case of an emergency.
               </span>
             </label>
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION F: HEALTH / MEDICAL INFORMATION */}
+      <div className="space-y-4">
+        <h3 className="font-serif text-xl border-b border-border pb-2">Section F: Health / Medical Information</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="md:col-span-2">
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Existing Medical Conditions (Optional)</label>
+            <textarea name="medicalConditions" rows={3} placeholder="Please list any existing medical conditions..." className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Blood Group (Optional)</label>
+            <input name="bloodGroup" type="text" placeholder="e.g., O+" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
           </div>
         </div>
       </div>

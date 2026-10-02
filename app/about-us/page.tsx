@@ -1,6 +1,7 @@
 import { AboutSunshine } from "@/components/yoga/about-sunshine"
 import { ArmyTeam } from "@/components/yoga/army-team"
 import { Gurus } from "@/components/yoga/gurus"
+import { Credentials } from "@/components/yoga/credentials"
 import { Metadata } from "next"
 import { CmsService } from "@/lib/services/cms"
 
@@ -24,6 +25,7 @@ export default async function AboutUsPage() {
       <AboutSunshine />
       <ArmyTeam />
       <Gurus employees={employees} />
+      <Credentials />
     </main>
   )
 }

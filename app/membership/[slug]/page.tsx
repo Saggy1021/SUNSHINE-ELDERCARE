@@ -73,7 +73,7 @@ export default async function CarePlanDetailPage({ params }: Props) {
                       <p className="mt-3 text-3xl font-bold font-display">{formatINR(singleVariant.monthlyTotal)}<span className="text-sm font-normal text-foreground/50"> /mo</span></p>
                       <div className="mt-3 text-xs text-foreground/50 space-y-1">
                         <p>Base: {formatINR(singleVariant.monthlyBasePrice)}</p>
-                        <p>Applicable Taxes: {formatINR(singleVariant.monthlyGst)}</p>
+                        <p>Inclusive of all applicable taxes/charges: {formatINR(singleVariant.monthlyGst)}</p>
                       </div>
                     </div>
                   )}
@@ -83,7 +83,7 @@ export default async function CarePlanDetailPage({ params }: Props) {
                       <p className="mt-3 text-3xl font-bold font-display">{formatINR(coupleVariant.monthlyTotal)}<span className="text-sm font-normal text-foreground/50"> /mo</span></p>
                       <div className="mt-3 text-xs text-foreground/50 space-y-1">
                         <p>Base: {formatINR(coupleVariant.monthlyBasePrice)}</p>
-                        <p>Applicable Taxes: {formatINR(coupleVariant.monthlyGst)}</p>
+                        <p>Inclusive of all applicable taxes/charges: {formatINR(coupleVariant.monthlyGst)}</p>
                       </div>
                     </div>
                   )}

@@ -4,6 +4,9 @@ import { z } from 'zod'
 import { db } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 
+import { documentService } from '@/lib/services/document'
+import { validateUpload } from '@/lib/services/document/validation'
+
 import { ROLES } from '@/lib/auth/roles'
 import { generateEmailVerificationToken, generatePasswordResetToken, hashToken } from '@/lib/auth/tokens'
 
@@ -51,6 +54,28 @@ export async function registerUser(formData: FormData) {
         }
       })
 
+      let idProofDocumentId: string | null = null;
+      const idProofFile = formData.get("idProofFile") as File | null;
+      if (idProofFile && idProofFile.size > 0) {
+        if (idProofFile.size > 2 * 1024 * 1024) {
+          throw new Error("ID Proof file exceeds the 2MB size limit.");
+        }
+        const buffer = Buffer.from(await idProofFile.arrayBuffer());
+        
+        // This will enforce MIME types, magic bytes, and global size limit
+        validateUpload("ID_PROOF", idProofFile.type, buffer);
+
+        const uploadedDoc = await documentService.uploadDocument(
+          newUser.id,
+          buffer,
+          idProofFile.name,
+          idProofFile.type,
+          "ID_PROOF",
+          newUser.id
+        );
+        idProofDocumentId = uploadedDoc.id;
+      }
+
       const profile = await tx.memberProfile.create({
         data: {
           userId: newUser.id,
@@ -65,6 +90,9 @@ export async function registerUser(formData: FormData) {
           mobileNumber: validatedData.mobileNumber,
           alternateNumber: validatedData.alternateNumber || null,
           email: normalizedEmail,
+          medicalConditions: validatedData.medicalConditions || null,
+          bloodGroup: validatedData.bloodGroup || null,
+          idProofDocumentId,
         }
       })
 
@@ -135,6 +163,9 @@ export async function registerUser(formData: FormData) {
     }
     if (error instanceof z.ZodError) {
       return { success: false, error: error.issues[0].message }
+    }
+    if (error instanceof Error) {
+      return { success: false, error: error.message }
     }
     return { success: false, error: 'Failed to create account' }
   }

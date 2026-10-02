@@ -114,9 +114,37 @@ export async function submitRenewalRequest(formData: FormData) {
   const calculatedEndDate = calculateEndDate(requestedStartDate, durationMonths)
 
   const currentSub = await db.subscription.findFirst({
-    where: { userId: session.user.id },
-    orderBy: { createdAt: 'desc' }
+    where: { userId: session.user.id, status: "ACTIVE" },
+    orderBy: { createdAt: 'desc' },
+    include: { carePlan: true }
   })
+  let requestType = "RENEWAL"
+  
+  // Phase 20: Enforce downgrade rules
+  if (currentSub && currentSub.carePlan && currentSub.endDate) {
+    const currentPrice = await carePricingService.lookupPrice({
+      planSlug: currentSub.carePlan.slug,
+      variantType: currentSub.variantType as "SINGLE" | "COUPLE",
+      months: 1
+    })
+    
+    const newPrice = await carePricingService.lookupPrice({
+      planSlug: carePlan.slug,
+      variantType: variantType as "SINGLE" | "COUPLE",
+      months: 1
+    })
+
+    const isDowngrade = newPrice && currentPrice && (newPrice.monthlyBasePrice < currentPrice.monthlyBasePrice)
+    const isUpgrade = newPrice && currentPrice && (newPrice.monthlyBasePrice > currentPrice.monthlyBasePrice)
+    
+    if (isDowngrade && requestedStartDate < currentSub.endDate) {
+      throw new Error("Mid-cycle downgrades are not permitted. Downgrades may only become effective at the end of the current membership period.")
+    }
+    
+    if (isUpgrade && requestedStartDate < currentSub.endDate) {
+      requestType = "UPGRADE"
+    }
+  }
 
   // Start Transaction
   let createdRequest: any = null
@@ -131,6 +159,7 @@ export async function submitRenewalRequest(formData: FormData) {
         requestedStartDate,
         calculatedEndDate,
         status: "SUBMITTED",
+        requestType,
         planName: carePlan.name,
         documentedTotal: pricingTotal.documentedTotal
       }

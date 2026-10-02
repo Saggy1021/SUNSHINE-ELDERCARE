@@ -86,7 +86,7 @@ export class InvoiceDocumentService {
       yPos -= 15;
     }
     if (invoice.taxAmount) {
-      page.drawText('Applicable Taxes:', { x: width - 180, y: yPos, size: 10, font });
+      page.drawText('Inclusive of all applicable taxes/charges:', { x: width - 300, y: yPos, size: 10, font });
       page.drawText(formatINR(invoice.taxAmount.toNumber()), { x: width - 100, y: yPos, size: 10, font });
       yPos -= 15;
     }

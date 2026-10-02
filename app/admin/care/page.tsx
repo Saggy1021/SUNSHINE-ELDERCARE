@@ -23,7 +23,17 @@ export default async function AdminCarePage() {
     where: { status: "ACTIVE" },
     include: {
       elder: {
-        include: { user: true },
+        include: { 
+          user: {
+            include: {
+              memberProfile: {
+                include: {
+                  medicalAuth: true
+                }
+              }
+            }
+          } 
+        },
       },
       assignments: {
         where: { status: "ACTIVE" },
@@ -102,6 +112,32 @@ export default async function AdminCarePage() {
                       ))}
                     </ul>
                   )}
+
+                  {/* SOS Information */}
+                  <div className="mt-6">
+                    <h4 className="text-sm font-semibold text-red-700 mb-3 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                      Emergency / SOS Info
+                    </h4>
+                    {careCase.elder.user.memberProfile?.medicalAuth ? (
+                      <div className="space-y-2 text-sm p-3 bg-red-50 border border-red-100 rounded text-red-900">
+                        <div>
+                          <span className="font-medium">SOS Hospital:</span>{" "}
+                          {careCase.elder.user.memberProfile.medicalAuth.hospitalForSos || "Not specified"}
+                        </div>
+                        <div>
+                          <span className="font-medium">Nominee Contact:</span>{" "}
+                          {careCase.elder.user.memberProfile.medicalAuth.nomineeLocalContact || "Not specified"}
+                        </div>
+                        <div>
+                          <span className="font-medium">Shift Authorization:</span>{" "}
+                          {careCase.elder.user.memberProfile.medicalAuth.shiftAuthorization ? "Yes" : "No"}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-slate-500 text-xs p-3 bg-slate-50 rounded">No medical authorization on file.</p>
+                    )}
+                  </div>
                 </div>
 
                 {/* Upcoming Visits */}

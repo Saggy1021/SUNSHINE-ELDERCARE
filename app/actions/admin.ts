@@ -205,17 +205,30 @@ export async function getRenewalRequests() {
   })
 }
 
-export async function approveRenewalRequest(requestId: string) {
+export async function approveRenewalRequest(formData: FormData) {
   const adminId = await requirePermission("RENEWAL_APPROVE")
+
+  const requestId = formData.get("requestId") as string
+  const customAmountStr = formData.get("customAmount") as string | null
 
   const request = await db.renewalRequest.findUnique({ where: { id: requestId } })
   if (!request) throw new Error("Renewal request not found")
   if (request.status !== "SUBMITTED") throw new Error("Can only approve SUBMITTED requests")
 
+  let customPrice = undefined
+  if (request.requestType === "UPGRADE") {
+    if (!customAmountStr) throw new Error("Upgrade requests require a custom approved amount")
+    customPrice = parseFloat(customAmountStr)
+    if (isNaN(customPrice) || customPrice < 0) throw new Error("Invalid upgrade amount")
+  }
+
   // Transition RenewalRequest to APPROVED
   await db.renewalRequest.update({
     where: { id: requestId },
-    data: { status: "APPROVED" }
+    data: { 
+      status: "APPROVED",
+      ...(customPrice !== undefined && { customPrice })
+    }
   })
 
   await logAudit(adminId, "RENEWAL_APPROVED", "RenewalRequest", requestId, { 

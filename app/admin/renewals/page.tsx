@@ -27,6 +27,7 @@ export default async function AdminRenewalsPage() {
                 <th className="px-6 py-4">Total</th>
                 <th className="px-6 py-4">Start Date</th>
                 <th className="px-6 py-4">Submitted</th>
+                <th className="px-6 py-4">Type</th>
                 <th className="px-6 py-4 text-right">Action / Status</th>
               </tr>
             </thead>
@@ -58,8 +59,13 @@ export default async function AdminRenewalsPage() {
                   <td className="px-6 py-4 text-slate-500 text-xs">
                     {req.createdAt.toLocaleDateString('en-GB')}
                   </td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${req.requestType === 'UPGRADE' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                      {req.requestType}
+                    </span>
+                  </td>
                   <td className="px-6 py-4 flex justify-end">
-                    <RenewalActions requestId={req.id} status={req.status} />
+                    <RenewalActions requestId={req.id} status={req.status} requestType={req.requestType} />
                   </td>
                 </tr>
               ))}
