@@ -24,6 +24,6 @@ test.describe('Authentication Tests', () => {
     await page.fill('input[type="password"]', 'WrongPassword123!');
     await page.click('button[type="submit"]');
     // Assert an error message is shown instead of logging in
-    await expect(page.locator('text=Invalid credentials')).toBeVisible();
+    await expect(page.locator('text=Invalid email or password.')).toBeVisible();
   });
 });

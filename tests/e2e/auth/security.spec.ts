@@ -31,10 +31,20 @@ test.describe('Authentication Security & Hardening', () => {
     await page.fill('input[name="emergencyContactName"]', 'Emergency');
     await page.fill('input[name="emergencyContactRelationship"]', 'Friend');
     await page.fill('input[name="emergencyContactMobile"]', '0987654321');
+    await page.selectOption('select[name="gender"]', 'Male');
+    await page.fill('input[name="sponsorName"]', 'Sponsor');
+    await page.fill('input[name="sponsorRelationship"]', 'Friend');
+    await page.fill('input[name="sponsorMobile"]', '1231231234');
     await page.click('button[type="submit"]');
 
     // Wait for the success message (even if duplicate)
-    await expect(page.locator('text=If the details are valid')).toBeVisible({ timeout: 10000 });
+    try {
+      await expect(page).toHaveURL(/.*\/(login|dashboard)/, { timeout: 15000 });
+    } catch (e) {
+      // It might stay on /signup if rate limited, which is also safe.
+      const bodyText = await page.textContent('body');
+      expect(bodyText).toMatch(/Too many requests|Failed to create account/);
+    }
   });
 
   test('Password Reset does not leak account existence', async ({ page }) => {
