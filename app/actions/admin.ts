@@ -209,7 +209,6 @@ export async function approveRenewalRequest(formData: FormData) {
   const adminId = await requirePermission("RENEWAL_APPROVE")
 
   const requestId = formData.get("requestId") as string
-  const customAmountStr = formData.get("customAmount") as string | null
 
   const request = await db.renewalRequest.findUnique({ where: { id: requestId } })
   if (!request) throw new Error("Renewal request not found")
@@ -217,9 +216,47 @@ export async function approveRenewalRequest(formData: FormData) {
 
   let customPrice = undefined
   if (request.requestType === "UPGRADE") {
-    if (!customAmountStr) throw new Error("Upgrade requests require a custom approved amount")
-    customPrice = parseFloat(customAmountStr)
-    if (isNaN(customPrice) || customPrice < 0) throw new Error("Invalid upgrade amount")
+    if (!request.currentSubscriptionId) {
+      throw new Error("Business rule missing: Mid-cycle upgrade calculation is not defined for subscriptions without history.")
+    }
+    
+    const currentSub = await db.subscription.findUnique({
+      where: { id: request.currentSubscriptionId },
+      include: { carePlan: true }
+    })
+    
+    if (!currentSub || !currentSub.carePlan) {
+      throw new Error("Business rule missing: Cannot calculate upgrade without an active standard care plan.")
+    }
+    
+    const { carePricingService } = await import('@/lib/services/care-plans')
+    
+    // Authoritative current pricing lookup
+    const currentPricing = await carePricingService.lookupPrice({
+      planSlug: currentSub.carePlan.slug,
+      variantType: (currentSub.variantType as "SINGLE" | "COUPLE") || "SINGLE",
+      months: currentSub.durationMonths || 1
+    })
+    
+    // Authoritative target pricing lookup
+    const targetPlan = await db.carePlan.findUnique({ where: { id: request.carePlanId } })
+    if (!targetPlan) throw new Error("Target plan no longer exists")
+
+    const targetPricing = await carePricingService.lookupPrice({
+      planSlug: targetPlan.slug,
+      variantType: (request.variantType as "SINGLE" | "COUPLE") || "SINGLE",
+      months: request.durationMonths || 1
+    })
+    
+    const targetTotal = targetPricing.documentedTotal
+    const currentTotal = currentPricing.documentedTotal
+    
+    const diff = targetTotal - currentTotal
+    if (diff < 0) {
+      throw new Error("Mid-cycle downgrade is not allowed.")
+    }
+    
+    customPrice = diff
   }
 
   // Transition RenewalRequest to APPROVED

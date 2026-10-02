@@ -56,11 +56,14 @@ export async function registerUser(formData: FormData) {
 
       let idProofDocumentId: string | null = null;
       const idProofFile = formData.get("idProofFile") as File | null;
-      if (idProofFile && idProofFile.size > 0) {
-        if (idProofFile.size > 2 * 1024 * 1024) {
-          throw new Error("ID Proof file exceeds the 2MB size limit.");
-        }
-        const buffer = Buffer.from(await idProofFile.arrayBuffer());
+      if (!idProofFile || idProofFile.size === 0) {
+        throw new Error("ID Proof file upload is required.");
+      }
+      
+      if (idProofFile.size > 2 * 1024 * 1024) {
+        throw new Error("ID Proof file exceeds the 2MB size limit.");
+      }
+      const buffer = Buffer.from(await idProofFile.arrayBuffer());
         
         // This will enforce MIME types, magic bytes, and global size limit
         validateUpload("ID_PROOF", idProofFile.type, buffer);
@@ -74,7 +77,6 @@ export async function registerUser(formData: FormData) {
           newUser.id
         );
         idProofDocumentId = uploadedDoc.id;
-      }
 
       const profile = await tx.memberProfile.create({
         data: {

@@ -19,7 +19,8 @@ export class InvoiceService {
     userId: string,
     pricing: PricingCalculationResult,
     tax: TaxCalculationResult,
-    planId?: string
+    planId?: string,
+    idempotencyKey?: string | null
   ) {
     const maxRetries = 3;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -31,6 +32,7 @@ export class InvoiceService {
             referenceNumber,
             userId,
             planId,
+            idempotencyKey: idempotencyKey || null,
             subtotal: tax.subtotal,
             taxAmount: tax.taxAmount,
             total: tax.total,

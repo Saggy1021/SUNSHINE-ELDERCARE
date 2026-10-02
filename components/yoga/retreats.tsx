@@ -5,29 +5,21 @@ import Link from 'next/link'
 
 const retreats = [
   {
-    id: 'basic',
-    name: 'Basic Plan',
-    location: 'Essential Care',
-    days: '₹14,100 / yr',
-    desc: 'Our fundamental care package including 24/7 emergency response helpline and regular health check-ins.',
+    id: 'shield-single',
+    name: 'Shield (Single)',
+    location: 'Complete Care',
+    days: '₹62,000 / yr',
+    desc: 'Our comprehensive care package including 24/7 emergency response, health tracking, and dedicated companionship hours for a single member.',
     image: '/images/retreat-himalaya.png',
   },
   {
-    id: 'standard',
-    name: 'Standard Plan',
-    location: 'Comprehensive Care',
-    days: '₹25,000 / yr',
-    desc: 'Includes everything in Basic, plus monthly doctor visits, regular diagnostic tests, and dedicated companionship hours.',
+    id: 'shield-couple',
+    name: 'Shield (Couple)',
+    location: 'Shared Protection',
+    days: '₹78,000 / yr',
+    desc: 'Complete coverage for two family members, providing identical peace of mind, emergency support, and regular care routines at a family rate.',
     image: '/images/retreat-kerala.png',
-  },
-  {
-    id: 'premium',
-    name: 'Premium Plan',
-    location: 'Holistic Support',
-    days: '₹40,000 / yr',
-    desc: 'Full-spectrum support with weekly caregiver visits, physiotherapy sessions, and dedicated healthcare management.',
-    image: '/images/retreat-rishikesh.png',
-  },
+  }
 ]
 
 export function Retreats() {

@@ -18,7 +18,7 @@ const limbs = [
   },
   {
     n: 'III',
-    name: 'Pulse Care+',
+    name: 'Health Monitor',
     sanskrit: 'Health',
     short: 'Advanced Tracking',
     deep: 'Advanced health tracking, doctor visits, and full-spectrum eldercare support.',

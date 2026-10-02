@@ -93,16 +93,23 @@ export function SignupForm() {
             <input name="lastName" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
           </div>
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground/80">ID Proof Type</label>
-            <input name="idProofType" type="text" placeholder="e.g. Aadhar" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">ID Proof Type *</label>
+            <select name="idProofType" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20">
+              <option value="">Select ID Proof</option>
+              <option value="Aadhaar">Aadhaar</option>
+              <option value="Voter ID">Voter ID</option>
+              <option value="Passport">Passport</option>
+              <option value="PAN">PAN</option>
+              <option value="Driving Licence">Driving Licence</option>
+            </select>
           </div>
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground/80">ID Proof Number</label>
-            <input name="idProofNumber" type="text" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">ID Proof Number *</label>
+            <input name="idProofNumber" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
           </div>
           <div className="md:col-span-2">
-            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Upload ID Proof (Max 2MB)</label>
-            <input name="idProofFile" type="file" accept=".pdf,image/jpeg,image/png" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Upload ID Proof (Max 2MB) *</label>
+            <input name="idProofFile" type="file" required accept=".pdf,image/jpeg,image/png" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
             <p className="mt-1 text-xs text-foreground/60">Accepted formats: PDF, JPEG, PNG. Size limit: 2MB.</p>
           </div>
           <div>

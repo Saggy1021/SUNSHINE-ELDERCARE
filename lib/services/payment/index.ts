@@ -284,6 +284,17 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
       })
     }
 
+    // C2. Expire old subscription to prevent overlapping active memberships
+    if (renewalRequest.currentSubscriptionId && !isFuture) {
+      await tx.subscription.update({
+        where: { id: renewalRequest.currentSubscriptionId },
+        data: {
+          status: "EXPIRED",
+          endDate: now
+        }
+      })
+    }
+
     // D. Finalize Renewal Request
     await tx.renewalRequest.update({
       where: { id: renewalRequest.id },

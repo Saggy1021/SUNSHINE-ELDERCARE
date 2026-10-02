@@ -22,26 +22,12 @@ export default function RenewalActions({ requestId, status, requestType }: { req
   }
 
   const handleApprove = async () => {
-    let customAmount: number | null = null
-    if (requestType === "UPGRADE") {
-      const amtStr = window.prompt("Enter the approved additional amount for this UPGRADE:")
-      if (amtStr === null) return // Cancelled
-      customAmount = parseFloat(amtStr)
-      if (isNaN(customAmount) || customAmount < 0) {
-        alert("Invalid amount")
-        return
-      }
-    } else {
-      if (!confirm("Are you sure you want to approve this renewal request? This will stage it for payment/verification.")) return
-    }
+    if (!confirm("Are you sure you want to approve this request? This will stage it for payment/verification.")) return
     try {
       setLoading(true)
       setError(null)
       const formData = new FormData()
       formData.append("requestId", requestId)
-      if (customAmount !== null) {
-        formData.append("customAmount", customAmount.toString())
-      }
       await approveRenewalRequest(formData)
     } catch (err: any) {
       setError(err.message)

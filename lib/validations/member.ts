@@ -8,8 +8,10 @@ export const memberRegistrationSchema = z.object({
   // SECTION A: MEMBER DETAILS
   firstName: z.string().min(1, "First Name is required"),
   lastName: z.string().min(1, "Surname / Last Name is required"),
-  idProofType: z.string().optional(),
-  idProofNumber: z.string().optional(),
+  idProofType: z.enum(["Aadhaar", "Voter ID", "Passport", "PAN", "Driving Licence"], {
+    message: "Invalid ID Proof Type"
+  }),
+  idProofNumber: z.string().min(1, "ID Proof Number is required"),
   dateOfBirth: z.string().min(1, "Date of Birth is required"),
   gender: z.enum(["Male", "Female", "Other"], {
     error: "Please select a valid gender"

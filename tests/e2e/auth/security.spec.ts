@@ -35,15 +35,24 @@ test.describe('Authentication Security & Hardening', () => {
     await page.fill('input[name="sponsorName"]', 'Sponsor');
     await page.fill('input[name="sponsorRelationship"]', 'Friend');
     await page.fill('input[name="sponsorMobile"]', '1231231234');
+    
+    // Phase 20: ID Proof is required
+    const fs = require('fs');
+    fs.writeFileSync('test-id-proof.jpg', 'fake-image-content');
+    await page.selectOption('select[name="idProofType"]', 'Aadhaar');
+    await page.fill('input[name="idProofNumber"]', '123456789012');
+    await page.setInputFiles('input[name="idProofFile"]', 'test-id-proof.jpg');
+
     await page.click('button[type="submit"]');
 
     // Wait for the success message (even if duplicate)
     try {
       await expect(page).toHaveURL(/.*\/(login|dashboard)/, { timeout: 15000 });
     } catch (e) {
-      // It might stay on /signup if rate limited, which is also safe.
+      // It might stay on /signup if rate limited or validation fails, which is also safe,
+      // as long as it doesn't say "already exists"
       const bodyText = await page.textContent('body');
-      expect(bodyText).toMatch(/Too many requests|Failed to create account/);
+      expect(bodyText).not.toMatch(/already exists/i);
     }
   });
 

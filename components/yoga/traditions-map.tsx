@@ -24,7 +24,7 @@ const places = [
     left: '46%',
     tradition: 'Comprehensive Senior Support',
     history:
-      'Serving the capital region with dedicated caregivers, specialized nursing, and our trusted Pulse Care+ advanced tracking systems.',
+      'Serving the capital region with dedicated caregivers, specialized nursing, and our trusted Health Tracking advanced tracking systems.',
     image: '/images/tradition-rishikesh.png',
   },
   {

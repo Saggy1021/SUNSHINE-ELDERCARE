@@ -91,6 +91,19 @@ export async function initiateRenewalCheckout(renewalRequestId: string) {
     throw new Error("Renewal request is not approved yet")
   }
 
+  // Check for existing invoice to enforce idempotency
+  const existingInvoice = await db.invoice.findUnique({
+    where: { idempotencyKey: renewalRequestId }
+  })
+
+  if (existingInvoice) {
+    if (existingInvoice.status === "DRAFT" || existingInvoice.paymentStatus === "UNPAID") {
+      redirect(`/checkout/${existingInvoice.id}?renewal=${renewalRequestId}`)
+    } else {
+      throw new Error("This renewal request has already been paid or processed.")
+    }
+  }
+
   let invoice;
 
   if (renewal.requestType === "UPGRADE") {
@@ -115,7 +128,9 @@ export async function initiateRenewalCheckout(renewalRequestId: string) {
     invoice = await invoiceService.createInvoice(
       session.user.id,
       pricingResult,
-      taxResult
+      taxResult,
+      undefined,
+      renewalRequestId
     )
   } else {
     const pricingResult = await carePricingService.lookupPrice({
@@ -129,7 +144,8 @@ export async function initiateRenewalCheckout(renewalRequestId: string) {
     invoice = await invoiceService.createCarePlanInvoice(
       session.user.id,
       pricingResult,
-      taxResult
+      taxResult,
+      renewalRequestId
     );
   }
 

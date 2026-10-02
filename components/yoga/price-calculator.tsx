@@ -128,7 +128,6 @@ export function PriceCalculator({ plan, isAuthenticated }: PriceCalculatorProps)
           <label className="block text-sm font-semibold text-foreground/80 mb-2">Optional Add-Ons (Placeholder)</label>
           <div className="space-y-3">
             {[
-              { id: 'care_visit_plus', name: 'Care Visit Plus', price: 0 },
               { id: 'doctor_consultation', name: 'Doctor Consultation', price: 0 },
               { id: 'wellness_support', name: 'Wellness Support', price: 0 },
             ].map(addon => (
