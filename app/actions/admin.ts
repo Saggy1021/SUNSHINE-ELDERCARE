@@ -2,7 +2,6 @@
 
 import { auth } from "@/auth"
 import { db } from "@/lib/db"
-import { Prisma } from "@prisma/client"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { notificationService } from "@/lib/services/notification"
@@ -389,7 +388,7 @@ export async function adminCreateMember(formData: FormData) {
 
   const passwordHash = await bcrypt.hash(validatedData.password, 10)
 
-  const user = await db.$transaction(async (tx: Prisma.TransactionClient) => {
+  const user = await db.$transaction(async (tx: Omit<typeof db, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">) => {
     const newUser = await tx.user.create({
       data: {
         name: ` `,
