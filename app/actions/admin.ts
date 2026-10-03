@@ -388,7 +388,7 @@ export async function adminCreateMember(formData: FormData) {
 
   const passwordHash = await bcrypt.hash(validatedData.password, 10)
 
-  const user = await db.$transaction(async (tx: Omit<typeof db, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">) => {
+  const user = await db.$transaction(async (tx) => {
     const newUser = await tx.user.create({
       data: {
         name: ` `,
