@@ -74,7 +74,8 @@ export async function registerUser(formData: FormData) {
           idProofFile.name,
           idProofFile.type,
           "ID_PROOF",
-          newUser.id
+          newUser.id,
+          tx
         );
         idProofDocumentId = uploadedDoc.id;
 
