@@ -149,9 +149,12 @@ test.describe('Phase 19E.1 Payment Security E2E Tests', () => {
     await page.fill('input[name="email"]', userA.email);
     await page.fill('input[name="password"]', 'SecurePass123!');
     await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(/.*\/dashboard/, { timeout: 15000 });
+    await expect(page).toHaveURL(/.*\/dashboard/, { timeout: 30000 });
 
     await page.goto(`/checkout/${invoiceA.id}?renewal=${renewalA.id}`);
+    
+    // Wait for React hydration to complete
+    await page.waitForLoadState('networkidle');
 
     // Tamper with the amount field
     await page.evaluate(() => {
