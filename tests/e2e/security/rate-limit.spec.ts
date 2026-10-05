@@ -2,6 +2,10 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Rate Limiting Regression Tests', () => {
   test('Rate limit triggers 429 on excessive public pricing API calls', async ({ request }) => {
+    test.skip(
+      process.env.RATE_LIMIT_ENABLED === 'false',
+      'Rate limiting disabled in environment'
+    );
     test.setTimeout(120000); // 120s for sequential HTTP requests
     const endpoint = '/api/care-plans'; // POST endpoint
     
