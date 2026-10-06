@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { Menu, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Lotus } from './ornaments'
@@ -35,14 +36,14 @@ export function Navbar({ isAuthenticated = false }: { isAuthenticated?: boolean 
       )}
     >
       <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8">
-        <a
+        <Link
           href="/"
           className={cn(
             'flex items-center gap-2.5 transition-colors',
             scrolled ? 'text-foreground' : 'text-ivory',
           )}
         >
-          <div className="relative h-12 w-[170px] sm:h-14 sm:w-[200px] lg:h-16 lg:w-[220px]">
+          <div className="relative h-12 w-[180px] sm:h-14 sm:w-[200px] lg:h-16 lg:w-[220px] max-w-[70vw] shrink-0">
             <Image 
               src="/images/logo-new.png" 
               alt="Sunshine Elder Care Logo"
@@ -52,39 +53,39 @@ export function Navbar({ isAuthenticated = false }: { isAuthenticated?: boolean 
               className="object-contain object-left" 
             />
           </div>
-        </a>
+        </Link>
 
         <div className="hidden items-center gap-8 lg:flex">
           {links.map((l) => (
-            <a
+            <Link
               key={l.href}
               href={l.href}
               className="text-sm font-medium tracking-wide text-gold/90 transition-all hover:text-gold hover:underline hover:underline-offset-4"
             >
               {l.label}
-            </a>
+            </Link>
           ))}
           {isAuthenticated ? (
-            <a
+            <Link
               href="/dashboard"
-              className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-transform hover:-translate-y-0.5"
+              className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98]"
             >
               My Portal
-            </a>
+            </Link>
           ) : (
             <div className="flex items-center gap-4">
-              <a
+              <Link
                 href="/login"
                 className="text-sm font-medium tracking-wide text-gold/90 transition-all hover:text-gold hover:underline hover:underline-offset-4"
               >
                 Sign In
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/signup"
-                className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-transform hover:-translate-y-0.5"
+                className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98]"
               >
                 Sign Up
-              </a>
+              </Link>
             </div>
           )}
         </div>
@@ -96,48 +97,50 @@ export function Navbar({ isAuthenticated = false }: { isAuthenticated?: boolean 
             scrolled ? 'text-gold' : 'text-gold/90',
           )}
           aria-label={open ? 'Close menu' : 'Open menu'}
+          aria-expanded={open}
+          aria-controls="mobile-menu"
         >
           {open ? <X className="size-6" /> : <Menu className="size-6" />}
         </button>
       </nav>
 
       {open && (
-        <div className="border-t border-gold/20 bg-background/95 px-6 py-6 backdrop-blur-md lg:hidden">
+        <div id="mobile-menu" className="absolute top-full left-0 w-full border-t border-gold/20 bg-background/95 px-6 py-6 backdrop-blur-md lg:hidden shadow-lg shadow-black/5 animate-in slide-in-from-top-2 fade-in duration-200">
           <div className="flex flex-col gap-4">
             {links.map((l) => (
-              <a
+              <Link
                 key={l.href}
                 href={l.href}
                 onClick={() => setOpen(false)}
                 className="font-serif text-lg font-medium text-gold/90 transition-colors hover:text-gold"
               >
                 {l.label}
-              </a>
+              </Link>
             ))}
             {isAuthenticated ? (
-              <a
+              <Link
                 href="/dashboard"
                 onClick={() => setOpen(false)}
                 className="mt-2 rounded-full bg-primary px-5 py-2.5 text-center text-sm font-medium text-primary-foreground"
               >
                 My Portal
-              </a>
+              </Link>
             ) : (
               <div className="flex flex-col gap-3 mt-2">
-                <a
+                <Link
                   href="/login"
                   onClick={() => setOpen(false)}
-                  className="rounded-full border border-gold/50 px-5 py-2.5 text-center text-sm font-medium text-gold transition-colors hover:bg-gold/10"
+                  className="rounded-full border border-gold/50 px-5 py-2.5 text-center text-sm font-medium text-gold transition-all hover:bg-gold/10 active:scale-[0.98]"
                 >
                   Sign In
-                </a>
-                <a
+                </Link>
+                <Link
                   href="/signup"
                   onClick={() => setOpen(false)}
-                  className="rounded-full bg-primary px-5 py-2.5 text-center text-sm font-medium text-primary-foreground"
+                  className="rounded-full bg-primary px-5 py-2.5 text-center text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 active:scale-[0.98]"
                 >
                   Sign Up
-                </a>
+                </Link>
               </div>
             )}
           </div>

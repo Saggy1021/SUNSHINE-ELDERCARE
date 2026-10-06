@@ -27,3 +27,5 @@ private_storage/
 # Playwright Test Reports
 playwright-report/
 test-results/
+.vercel
+.env*

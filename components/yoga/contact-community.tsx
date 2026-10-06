@@ -120,12 +120,12 @@ export function ContactCommunity() {
                   rows={4}
                   required
                   placeholder="I would love to learn more about the TrueCare plan for my parents..."
-                  className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none transition-all duration-300 hover:border-primary/50 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:shadow-md"
                 />
               </div>
               <button
                 type="submit"
-                className="mt-6 inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3 text-base font-medium text-primary-foreground transition-transform hover:-translate-y-0.5 disabled:opacity-70"
+                className="mt-6 inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3 text-base font-medium text-primary-foreground transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98] disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:scale-100"
                 disabled={sent || loading}
               >
                 {sent ? (
@@ -159,11 +159,11 @@ export function ContactCommunity() {
                     type="email"
                     required
                     placeholder="Your email"
-                    className="w-full rounded-full border border-ivory/25 bg-ivory/10 px-4 py-2.5 text-sm text-ivory placeholder:text-ivory/50 outline-none focus:border-gold"
+                    className="w-full rounded-full border border-ivory/25 bg-ivory/10 px-4 py-2.5 text-sm text-ivory placeholder:text-ivory/50 outline-none transition-all duration-300 hover:border-ivory/40 focus:border-gold focus:ring-1 focus:ring-gold/50"
                   />
                   <button
                     type="submit"
-                    className="shrink-0 rounded-full bg-gold px-4 py-2.5 text-sm font-medium text-brown transition-colors hover:bg-ivory"
+                    className="shrink-0 rounded-full bg-gold px-5 py-2.5 text-sm font-medium text-brown transition-all duration-300 hover:bg-ivory hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98]"
                   >
                     {subscribed ? <Check className="size-4" /> : 'Join'}
                   </button>
@@ -174,7 +174,7 @@ export function ContactCommunity() {
                       key={label}
                       href="#"
                       aria-label={label}
-                      className="flex size-10 items-center justify-center rounded-full border border-ivory/25 text-ivory transition-colors hover:border-gold hover:text-gold"
+                      className="flex size-10 items-center justify-center rounded-full border border-ivory/25 text-ivory transition-all duration-300 hover:border-gold hover:text-gold hover:-translate-y-1 hover:shadow-lg active:scale-[0.98]"
                     >
                       <Icon className="size-5" />
                     </a>
@@ -237,7 +237,7 @@ function Field({
         type={type}
         required
         placeholder={placeholder}
-        className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
+        className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none transition-all duration-300 hover:border-primary/50 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:shadow-md"
       />
     </div>
   )

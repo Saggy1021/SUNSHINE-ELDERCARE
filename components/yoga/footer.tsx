@@ -79,7 +79,7 @@ export function Footer({ settings }: { settings?: Record<string, string> }) {
                   <li key={link.label}>
                     <Link
                       href={link.href}
-                      className="font-serif text-base text-ivory/70 transition-colors hover:text-gold"
+                      className="inline-block font-serif text-base text-ivory/70 transition-all duration-300 hover:text-gold hover:translate-x-1"
                     >
                       {link.label}
                     </Link>

@@ -12,11 +12,12 @@ import { PhilosophyLibrary } from "@/components/yoga/philosophy-library"
 import { ContactCommunity } from "@/components/yoga/contact-community"
 import { CmsService } from "@/lib/services/cms"
 
-export const dynamic = 'force-dynamic'
 
 export default async function Page() {
-  const testimonials = await CmsService.getTestimonials();
-  const faqs = await CmsService.getFaqs();
+  const [testimonials, faqs] = await Promise.all([
+    CmsService.getTestimonials(),
+    CmsService.getFaqs()
+  ]);
 
   return (
     <main className="relative overflow-x-clip min-h-screen">

@@ -69,7 +69,8 @@ export const documentService = {
     displayName: string,
     mimeType: string,
     documentType: string,
-    createdById: string
+    createdById: string,
+    tx?: any
   ) {
     const validatedDocType = validateDocumentType(documentType);
     
@@ -83,9 +84,10 @@ export const documentService = {
     });
 
     const providerName = process.env.STORAGE_PROVIDER ? process.env.STORAGE_PROVIDER.toUpperCase().replace("-", "_") : "LOCAL";
+    const dbClient = tx || prisma;
 
     try {
-      return await prisma.memberDocument.create({
+      return await dbClient.memberDocument.create({
         data: {
           userId,
           documentType: validatedDocType,

@@ -43,8 +43,10 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  const session = await auth()
-  const settingsMap = await CmsService.getSettingsMap().catch(() => ({}))
+  const [session, settingsMap] = await Promise.all([
+    auth(),
+    CmsService.getSettingsMap().catch(() => ({}))
+  ]);
   return (
     <html
       lang="en"

@@ -94,7 +94,7 @@ export function PhilosophyLibrary({ faqs }: { faqs?: any[] }) {
           <Reveal delay={120}>
             <article
               key={active}
-              className="rounded-[1.75rem] border border-gold/40 bg-card p-8 shadow-lg"
+              className="rounded-[1.75rem] border border-gold/40 bg-card p-8 shadow-lg animate-in fade-in slide-in-from-right-4 duration-500"
             >
               <p className="font-serif text-sm uppercase tracking-[0.3em] text-primary">
                 {displayBooks[active]?.author}
@@ -106,7 +106,7 @@ export function PhilosophyLibrary({ faqs }: { faqs?: any[] }) {
               <p className="font-serif text-lg leading-relaxed text-foreground/80">
                 {displayBooks[active]?.desc}
               </p>
-              <button className="mt-7 inline-flex items-center gap-2 rounded-full border border-primary px-6 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground">
+              <button className="mt-7 inline-flex items-center gap-2 rounded-full border border-primary px-6 py-2.5 text-sm font-medium text-primary transition-all duration-300 hover:bg-primary hover:text-primary-foreground hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98]">
                 <BookOpen className="size-4" />
                 Read All FAQs
               </button>
