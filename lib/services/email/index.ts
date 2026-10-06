@@ -16,6 +16,7 @@ import { logger } from '@/lib/logger'
 import { getEmailConfig, isEmailProviderConfigured } from './config'
 import { SendEmailRequest, SendEmailResult, EmailProviderAdapter } from './types'
 import { MockEmailAdapter } from './adapters/mock'
+import { SmtpAdapter } from './adapters/smtp'
 
 export class EmailService {
   private adapter: EmailProviderAdapter
@@ -33,10 +34,8 @@ export class EmailService {
         this.configured = false
         break
       case 'smtp':
-        // Future: import and instantiate SmtpAdapter
-        logger.warn('SMTP adapter not implemented, falling back to mock')
-        this.adapter = new MockEmailAdapter()
-        this.configured = false
+        this.adapter = new SmtpAdapter()
+        this.configured = true
         break
       case 'mock':
       default:
