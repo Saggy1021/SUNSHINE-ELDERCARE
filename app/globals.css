@@ -270,15 +270,15 @@
 @keyframes sunrise-logo {
   0% { 
     opacity: 0;
-    transform: translateY(120%);
+    transform: translateY(80%);
   }
-  20% {
-    opacity: 0;
-    transform: translateY(90%);
+  15% {
+    opacity: 0.3;
+    transform: translateY(60%);
   }
   80% {
     opacity: 1;
-    transform: translateY(30%);
+    transform: translateY(25%);
   }
   100% { 
     opacity: 1;
@@ -302,7 +302,7 @@
 
 /* Utilities for the new hero masking and animations */
 .animate-sunrise-logo {
-  animation: sunrise-logo 1.8s cubic-bezier(0.25, 1, 0.5, 1) 1.2s both, sunrise-ambient-pulse 8s ease-in-out 3.0s infinite;
+  animation: sunrise-logo 1.4s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both, sunrise-ambient-pulse 8s ease-in-out 1.5s infinite;
 }
 
 .sun-rays-long {
@@ -324,4 +324,18 @@
   border-radius: 50%;
   mask-image: radial-gradient(circle at center, black 25%, transparent 45%);
   -webkit-mask-image: radial-gradient(circle at center, black 25%, transparent 45%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-delay: -1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    background-attachment: initial !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+  }
 }

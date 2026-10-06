@@ -8,7 +8,7 @@ export function CaregiverNetwork() {
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         <div className="grid gap-12 lg:grid-cols-2 lg:gap-16 items-center">
           <Reveal className="order-2 lg:order-1 relative">
-            <div className="relative overflow-hidden rounded-[2rem] border border-gold/30 shadow-2xl">
+            <div className="relative overflow-hidden rounded-[2rem] border border-gold/30 shadow-2xl transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.2)]">
               <img
                 src="/images/caregiver-network.jpg"
                 alt="Compassionate caregiver assisting a senior"

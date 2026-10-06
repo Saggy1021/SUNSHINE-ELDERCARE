@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { ArrowDown } from 'lucide-react'
 import { FloatingPetals } from './floating-petals'
 
@@ -88,7 +89,7 @@ export function Hero() {
       </div>
 
       {/* ================= LAYER 6: TEXT CONTENT ================= */}
-      <div className="relative z-50 w-full max-w-7xl mx-auto px-6 lg:px-8 opacity-0 animate-[welcome-content_1s_ease-out_2.5s_both] mt-32">
+      <div className="relative z-40 w-full max-w-7xl mx-auto px-6 lg:px-8 animate-[welcome-content_1.2s_ease-out_0.3s_both] mt-32">
         <div className="max-w-xl text-left">
           <h1 className="flex flex-col font-display text-5xl font-bold text-primary drop-shadow-md sm:text-7xl lg:text-8xl">
             <span className="block text-primary">SUNSHINE</span>
@@ -98,18 +99,18 @@ export function Hero() {
             Compassionate care for your loved ones. We provide comprehensive, personalized care options to ensure the well-being, safety, and dignity of seniors.
           </p>
           <div className="mt-10 flex flex-col gap-4 sm:flex-row">
-            <a
+            <Link
               href="/membership"
-              className="w-full rounded-full bg-primary px-8 py-3.5 text-base font-medium text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5 hover:bg-primary/90 sm:w-auto text-center"
+              className="w-full rounded-full bg-primary px-8 py-3.5 text-base font-medium text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:bg-primary/90 active:scale-[0.98] sm:w-auto text-center"
             >
               Explore Care Plans
-            </a>
-            <a
+            </Link>
+            <Link
               href="/contact-us"
-              className="w-full rounded-full border border-primary/20 bg-white/10 px-8 py-3.5 text-base font-medium text-primary backdrop-blur-sm transition-all hover:bg-white/20 hover:-translate-y-0.5 sm:w-auto text-center"
+              className="w-full rounded-full border border-primary/20 bg-white/10 px-8 py-3.5 text-base font-medium text-primary backdrop-blur-sm transition-all hover:bg-white/20 hover:-translate-y-0.5 active:scale-[0.98] sm:w-auto text-center"
             >
               Contact Us
-            </a>
+            </Link>
           </div>
         </div>
       </div>

@@ -50,7 +50,7 @@ export function PracticeCollection() {
             const Icon = service.icon
             return (
               <Reveal key={service.name} delay={index * 100}>
-                <div className="group relative flex h-full flex-col rounded-2xl border border-gold/30 bg-card p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-md">
+                <div className="group relative flex h-full flex-col rounded-2xl border border-gold/30 bg-card p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg active:scale-[0.98]">
                   <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
                     <Icon className="h-6 w-6" />
                   </div>
@@ -67,7 +67,7 @@ export function PracticeCollection() {
         <Reveal className="mt-12 text-center">
           <Link
             href="/services"
-            className="inline-flex items-center gap-2 rounded-full border-2 border-primary px-6 py-3 text-sm font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
+            className="inline-flex items-center gap-2 rounded-full border-2 border-primary px-6 py-3 text-sm font-medium text-primary transition-all duration-300 hover:bg-primary hover:text-primary-foreground hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98]"
           >
             Explore All Services
             <ArrowRight className="h-4 w-4" />

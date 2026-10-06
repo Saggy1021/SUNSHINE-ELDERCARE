@@ -46,7 +46,7 @@ export function Testimonials({ testimonials }: { testimonials?: any[] }) {
           {displayNotes.map((n, i) => (
             <Reveal key={n.name + i} delay={i * 110}>
               <figure
-                className={`relative rounded-sm bg-sandstone p-8 shadow-lg shadow-brown/15 paper-texture transition-transform duration-500 ${n.rotate} hover:rotate-0`}
+                className={`relative rounded-sm bg-sandstone p-8 shadow-lg shadow-brown/15 paper-texture transition-all duration-500 ${n.rotate} hover:rotate-0 hover:-translate-y-2 hover:shadow-xl`}
               >
                 {/* tape */}
                 <span className="absolute -top-3 left-1/2 h-6 w-24 -translate-x-1/2 rotate-1 bg-gold/30 backdrop-blur-sm" />

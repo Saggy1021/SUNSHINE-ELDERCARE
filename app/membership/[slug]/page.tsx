@@ -68,7 +68,7 @@ export default async function CarePlanDetailPage({ params }: Props) {
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   {singleVariant && (
-                    <div className="rounded-2xl border border-gold/30 bg-card p-6">
+                    <div className="rounded-2xl border border-gold/30 bg-card p-6 transition-all duration-300 hover:shadow-md hover:-translate-y-1">
                       <p className="text-xs uppercase tracking-widest text-gold font-semibold">Single</p>
                       <p className="mt-3 text-3xl font-bold font-display">{formatINR(singleVariant.monthlyTotal)}<span className="text-sm font-normal text-foreground/50"> /mo</span></p>
                       <div className="mt-3 text-xs text-foreground/50 space-y-1">
@@ -78,7 +78,7 @@ export default async function CarePlanDetailPage({ params }: Props) {
                     </div>
                   )}
                   {coupleVariant && (
-                    <div className="rounded-2xl border border-gold/30 bg-card p-6">
+                    <div className="rounded-2xl border border-gold/30 bg-card p-6 transition-all duration-300 hover:shadow-md hover:-translate-y-1">
                       <p className="text-xs uppercase tracking-widest text-gold font-semibold">Couple</p>
                       <p className="mt-3 text-3xl font-bold font-display">{formatINR(coupleVariant.monthlyTotal)}<span className="text-sm font-normal text-foreground/50"> /mo</span></p>
                       <div className="mt-3 text-xs text-foreground/50 space-y-1">
