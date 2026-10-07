@@ -10,7 +10,7 @@ export class PdfService {
     const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
     
     // Draw Header
-    page.drawText('Sunshine Elder Care', { x: 50, y: height - 50, size: 24, font: boldFont })
+    page.drawText('Sunshine Eldercare', { x: 50, y: height - 50, size: 24, font: boldFont })
     page.drawText('INVOICE', { x: width - 150, y: height - 50, size: 24, font: boldFont })
     
     // Draw Invoice Details
@@ -61,7 +61,7 @@ export class PdfService {
     page.drawText(`Rs. ${Number(invoice.total).toLocaleString('en-IN')}`, { x: width - 150, y: currentY, size: 14, font: boldFont })
     
     // Footer
-    page.drawText('Thank you for choosing Sunshine Elder Care.', { x: 50, y: 50, size: 10, font })
+    page.drawText('Thank you for choosing Sunshine Eldercare.', { x: 50, y: 50, size: 10, font })
     
     const pdfBytes = await pdfDoc.save()
     return pdfBytes

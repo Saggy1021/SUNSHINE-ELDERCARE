@@ -1,5 +1,5 @@
 /**
- * Server-side structured logger for Sunshine Elder Care.
+ * Server-side structured logger for Sunshine Eldercare.
  *
  * Rules:
  * - All logging goes through this module — never console.log directly in services.

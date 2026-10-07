@@ -43,7 +43,7 @@ export class ReceiptDocumentService {
     
     // Business Info
     page.drawText('123 Sunshine Avenue, Care City, 400001', { x: 50, y: height - 70, size: 10, font });
-    page.drawText('contact@sunshineeldercare.com | +91 98765 43210', { x: 50, y: height - 85, size: 10, font });
+    page.drawText('info.sunshineeldercare@gmail.com | +91 98765 43210', { x: 50, y: height - 85, size: 10, font });
 
     // Receipt Details
     page.drawText(`Receipt Number: ${receipt.receiptNumber}`, { x: width - 200, y: height - 90, size: 10, font: boldFont });

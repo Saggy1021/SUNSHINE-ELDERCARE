@@ -3,8 +3,8 @@ import { Suspense } from "react"
 import { LoginForm } from "./login-form"
 
 export const metadata: Metadata = {
-  title: "Login | Sunshine Elder Care",
-  description: "Login to your Sunshine Elder Care member dashboard.",
+  title: "Login | Sunshine Eldercare",
+  description: "Login to your Sunshine Eldercare member dashboard.",
 }
 
 export default function LoginPage() {

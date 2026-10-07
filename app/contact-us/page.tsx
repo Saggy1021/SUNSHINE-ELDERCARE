@@ -2,7 +2,7 @@ import { ContactCommunity } from "@/components/yoga/contact-community"
 import { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: "Contact Us | Sunshine Elder Care",
+  title: "Contact Us | Sunshine Eldercare",
   description: "Reach out to us for immediate care, inquiries about our membership plans, or general questions.",
 }
 

@@ -16,7 +16,7 @@ export function ArmyTeam() {
           </h2>
           <div className="mt-6 space-y-5 font-serif text-lg leading-relaxed text-foreground/80">
             <p className="font-semibold text-primary">
-              All employees of Sunshine Elder Care, regardless of their position or role, are retired Army personnel.
+              All employees of Sunshine Eldercare, regardless of their position or role, are retired Army personnel.
             </p>
             <p>
               We bring the core values of our military service into the field of eldercare. Discipline, responsibility, preparedness, and accountability are not just words to us—they are the principles by which we operate every day.

@@ -2,8 +2,8 @@ import { Metadata } from 'next'
 import { Eyebrow } from '@/components/yoga/ornaments'
 
 export const metadata: Metadata = {
-  title: 'Terms and Conditions | Sunshine Elder Care',
-  description: 'Terms and Conditions for Sunshine Elder Care services.',
+  title: 'Terms and Conditions | Sunshine Eldercare',
+  description: 'Terms and Conditions for Sunshine Eldercare services.',
 }
 
 export default function TermsAndConditionsPage() {
@@ -26,21 +26,21 @@ export default function TermsAndConditionsPage() {
             <section className="mb-10">
               <h2 className="text-2xl font-bold mb-4">1. Acceptance of Terms</h2>
               <p>
-                By accessing and using the Sunshine Elder Care website (https://sunshineeldercare.in) and associated services, you agree to be bound by these Terms and Conditions. If you do not agree with any part of these terms, you may not use our services.
+                By accessing and using the Sunshine Eldercare website (https://sunshineeldercare.in) and associated services, you agree to be bound by these Terms and Conditions. If you do not agree with any part of these terms, you may not use our services.
               </p>
             </section>
 
             <section className="mb-10">
-              <h2 className="text-2xl font-bold mb-4">2. About Sunshine Elder Care</h2>
+              <h2 className="text-2xl font-bold mb-4">2. About Sunshine Eldercare</h2>
               <p>
-                Sunshine Elder Care provides elder-care and support services, emergency assistance coordination, daily wellbeing and check-in support, companionship, hospital visit support, medical appointment coordination, nursing support, physiotherapy coordination, diagnostic coordination, doctor-network coordination, hospital-network coordination, ambulance and emergency coordination, caregiver-related services, insurance and paperwork assistance, bill and payment assistance, and social engagement and wellbeing support. 
+                Sunshine Eldercare provides elder-care and support services, emergency assistance coordination, daily wellbeing and check-in support, companionship, hospital visit support, medical appointment coordination, nursing support, physiotherapy coordination, diagnostic coordination, doctor-network coordination, hospital-network coordination, ambulance and emergency coordination, caregiver-related services, insurance and paperwork assistance, bill and payment assistance, and social engagement and wellbeing support. 
               </p>
             </section>
 
             <section className="mb-10">
               <h2 className="text-2xl font-bold mb-4">3. Services</h2>
               <p>
-                Our services encompass various coordination and non-medical companionship roles. While we assist with health-related coordination (such as doctor, hospital, ambulance, or physiotherapy appointments), Sunshine Elder Care is a care coordinator. We do not provide direct medical treatment or act as a substitute for professional medical care. 
+                Our services encompass various coordination and non-medical companionship roles. While we assist with health-related coordination (such as doctor, hospital, ambulance, or physiotherapy appointments), Sunshine Eldercare is a care coordinator. We do not provide direct medical treatment or act as a substitute for professional medical care. 
               </p>
             </section>
 
@@ -54,7 +54,7 @@ export default function TermsAndConditionsPage() {
             <section className="mb-10">
               <h2 className="text-2xl font-bold mb-4">5. Member Responsibilities</h2>
               <p>
-                Members and their sponsors are responsible for providing complete, accurate, and up-to-date information, including emergency contacts and relevant health conditions. Sunshine Elder Care is not responsible for service delays or issues resulting from incorrect or incomplete information provided by the member.
+                Members and their sponsors are responsible for providing complete, accurate, and up-to-date information, including emergency contacts and relevant health conditions. Sunshine Eldercare is not responsible for service delays or issues resulting from incorrect or incomplete information provided by the member.
               </p>
             </section>
 
@@ -96,7 +96,7 @@ export default function TermsAndConditionsPage() {
             <section className="mb-10">
               <h2 className="text-2xl font-bold mb-4">11. Cancellation</h2>
               <p>
-                Cancellation must be requested in writing through the registered email or official account-supported channel. Cancellation becomes effective only after acknowledgement and processing by Sunshine Elder Care. Services already delivered prior to cancellation may be considered in determining any applicable charges or refunds.
+                Cancellation must be requested in writing through the registered email or official account-supported channel. Cancellation becomes effective only after acknowledgement and processing by Sunshine Eldercare. Services already delivered prior to cancellation may be considered in determining any applicable charges or refunds.
               </p>
             </section>
 
@@ -124,7 +124,7 @@ export default function TermsAndConditionsPage() {
             <section className="mb-10">
               <h2 className="text-2xl font-bold mb-4">15. Medical and Emergency-Service Disclaimer</h2>
               <p>
-                Our support and coordination services do not replace emergency medical treatment. Members must use appropriate emergency medical services (such as calling a local ambulance or hospital) when immediate medical attention is required. Sunshine Elder Care does not guarantee any particular medical outcome.
+                Our support and coordination services do not replace emergency medical treatment. Members must use appropriate emergency medical services (such as calling a local ambulance or hospital) when immediate medical attention is required. Sunshine Eldercare does not guarantee any particular medical outcome.
               </p>
             </section>
 
@@ -152,21 +152,21 @@ export default function TermsAndConditionsPage() {
             <section className="mb-10">
               <h2 className="text-2xl font-bold mb-4">19. Service Availability and Events Beyond Reasonable Control</h2>
               <p>
-                Sunshine Elder Care shall not be liable for any delay or failure in performance due to events beyond our reasonable control, including but not limited to acts of God, natural disasters, strikes, civil unrest, or severe weather conditions.
+                Sunshine Eldercare shall not be liable for any delay or failure in performance due to events beyond our reasonable control, including but not limited to acts of God, natural disasters, strikes, civil unrest, or severe weather conditions.
               </p>
             </section>
 
             <section className="mb-10">
               <h2 className="text-2xl font-bold mb-4">20. Limitation of Liability</h2>
               <p>
-                Sunshine Elder Care limits its liability for unforeseen circumstances, medical complications, service interruptions outside our reasonable control, acts of third-party providers, or issues arising from incorrect or incomplete information supplied by members. Liability relating to a particular paid service may be limited to the amount paid for that specific service, subject to applicable law.
+                Sunshine Eldercare limits its liability for unforeseen circumstances, medical complications, service interruptions outside our reasonable control, acts of third-party providers, or issues arising from incorrect or incomplete information supplied by members. Liability relating to a particular paid service may be limited to the amount paid for that specific service, subject to applicable law.
               </p>
             </section>
 
             <section className="mb-10">
               <h2 className="text-2xl font-bold mb-4">21. Member Responsibility for Incorrect Information</h2>
               <p>
-                Sunshine Elder Care accepts no liability for consequences arising from members providing false, inaccurate, or incomplete health, identity, or contact information.
+                Sunshine Eldercare accepts no liability for consequences arising from members providing false, inaccurate, or incomplete health, identity, or contact information.
               </p>
             </section>
 
@@ -204,7 +204,7 @@ export default function TermsAndConditionsPage() {
                 For any questions regarding these Terms, please contact us at:
               </p>
               <ul className="mt-4 space-y-2">
-                <li><strong>Company:</strong> SUNSHINE ELDER CARE</li>
+                <li><strong>Company:</strong> SUNSHINE ELDERCARE</li>
                 <li><strong>Phone:</strong> 8582907723</li>
                 <li><strong>Email:</strong> info.sunshineeldercare@gmail.com</li>
                 <li><strong>Website:</strong> https://sunshineeldercare.in</li>

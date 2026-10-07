@@ -5,7 +5,7 @@ import { AuthorizationService } from "@/lib/services/authorization";
 import { redirect } from "next/navigation";
 
 export const metadata = {
-  title: "Roles - Sunshine Elder Care",
+  title: "Roles - Sunshine Eldercare",
 };
 
 export default async function RolesPage() {

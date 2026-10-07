@@ -2,8 +2,8 @@ import { Metadata } from 'next'
 import { Eyebrow } from '@/components/yoga/ornaments'
 
 export const metadata: Metadata = {
-  title: 'Refund & Cancellation Policy | Sunshine Elder Care',
-  description: 'Refund & Cancellation Policy for Sunshine Elder Care services.',
+  title: 'Refund & Cancellation Policy | Sunshine Eldercare',
+  description: 'Refund & Cancellation Policy for Sunshine Eldercare services.',
 }
 
 export default function RefundCancellationPage() {
@@ -26,7 +26,7 @@ export default function RefundCancellationPage() {
             <section className="mb-10">
               <h2 className="text-2xl font-bold mb-4">1. Cancellation of Services</h2>
               <p>
-                A cancellation request must be submitted in writing through your registered email address to info.sunshineeldercare@gmail.com or via your official account-supported channel. The cancellation becomes effective once Sunshine Elder Care acknowledges and processes the request.
+                A cancellation request must be submitted in writing through your registered email address to info.sunshineeldercare@gmail.com or via your official account-supported channel. The cancellation becomes effective once Sunshine Eldercare acknowledges and processes the request.
               </p>
             </section>
 
@@ -87,7 +87,7 @@ export default function RefundCancellationPage() {
                 For questions about cancellations or refunds, please contact us at:
               </p>
               <ul className="mt-4 space-y-2">
-                <li><strong>Company:</strong> SUNSHINE ELDER CARE</li>
+                <li><strong>Company:</strong> SUNSHINE ELDERCARE</li>
                 <li><strong>Phone:</strong> 8582907723</li>
                 <li><strong>Email:</strong> info.sunshineeldercare@gmail.com</li>
                 <li><strong>Website:</strong> https://sunshineeldercare.in</li>

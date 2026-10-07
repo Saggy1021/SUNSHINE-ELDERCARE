@@ -1,5 +1,5 @@
 /**
- * Typed application error classes for Sunshine Elder Care.
+ * Typed application error classes for Sunshine Eldercare.
  *
  * Rules:
  * - Use typed errors instead of generic Error for predictable handling.

@@ -1,6 +1,6 @@
 /**
  * Phase 4 — COMPREHENSIVE Care Plan Pricing Verification
- * Source of Truth: Sunshine Elder Care Package document
+ * Source of Truth: Sunshine Eldercare Package document
  * Business owner confirmed: 1-month is a valid service/purchase option.
  *
  * Run: npx tsx prisma/verify-prices.ts

@@ -23,8 +23,8 @@ function processFile(filePath) {
   if (!filePath.match(/\.(tsx|ts|md|json|css)$/)) return;
   let content = fs.readFileSync(filePath, 'utf8');
   let newContent = content
-    .replace(/sankalpeldercare\.com/g, 'sunshineeldercare.com')
-    .replace(/facebook\.com\/sankalpeldercare/g, 'facebook.com/sunshineeldercare');
+    .replace(/sunshineeldercareeldercare\.com/g, 'sunshineeldercare.in')
+    .replace(/facebook\.com\/sunshineeldercareeldercare/g, 'facebook.com/sunshineeldercare');
   
   if (content !== newContent) {
     fs.writeFileSync(filePath, newContent, 'utf8');

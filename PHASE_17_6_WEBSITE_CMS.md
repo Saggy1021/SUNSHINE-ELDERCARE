@@ -1,7 +1,7 @@
 # Phase 17.6 — Website Content & Business Operations CMS
 
 ## Overview
-This phase introduces a minimal, structured Content Management System (CMS) for managing the public-facing sections of Sunshine Elder Care's website. It allows authorized administrative users to modify public content without altering code or performing a deployment, while keeping the UI presentation code and application logic strictly preserved.
+This phase introduces a minimal, structured Content Management System (CMS) for managing the public-facing sections of Sunshine Eldercare's website. It allows authorized administrative users to modify public content without altering code or performing a deployment, while keeping the UI presentation code and application logic strictly preserved.
 
 ## CMS Entities
 The system provides admin CRUD capabilities for the following entities:

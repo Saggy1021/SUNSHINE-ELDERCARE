@@ -14,7 +14,7 @@ const places = [
     left: '68%',
     tradition: 'Headquarters & Primary Care Center',
     history:
-      'Our primary operational hub providing the full spectrum of Sunshine Elder Care services, including rapid emergency response and daily companionship.',
+      'Our primary operational hub providing the full spectrum of Sunshine Eldercare services, including rapid emergency response and daily companionship.',
     image: '/images/tradition-varanasi.png',
   },
   {
@@ -61,7 +61,7 @@ export function TraditionsMap() {
             Our Coverage Areas
           </h2>
           <p className="mx-auto mt-5 max-w-2xl text-pretty font-serif text-lg text-foreground/75">
-            Sunshine Elder Care is expanding its reach to ensure that compassionate senior care is available across major metropolitan hubs.
+            Sunshine Eldercare is expanding its reach to ensure that compassionate senior care is available across major metropolitan hubs.
           </p>
         </Reveal>
 

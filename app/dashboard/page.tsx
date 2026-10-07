@@ -25,7 +25,7 @@ export default async function DashboardPage() {
             Welcome, {session?.user?.name || "Member"}
           </h1>
           <p className="text-slate-600 mt-2">
-            Manage your Sunshine Elder Care membership and services.
+            Manage your Sunshine Eldercare membership and services.
           </p>
         </div>
         <div className="bg-slate-50 border border-slate-100 rounded-lg p-3 px-5 flex items-center gap-3">

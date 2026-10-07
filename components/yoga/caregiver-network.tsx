@@ -29,7 +29,7 @@ export function CaregiverNetwork() {
               Our Caregiver Marketplace
             </h2>
             <p className="mt-6 font-serif text-lg leading-relaxed text-foreground/80">
-              Sunshine Elder Care provides access to a dedicated caregiver marketplace designed to match your loved ones with the right support.
+              Sunshine Eldercare provides access to a dedicated caregiver marketplace designed to match your loved ones with the right support.
             </p>
             <p className="mt-4 font-serif text-lg leading-relaxed text-foreground/80">
               Every caregiver in our network is subjected to a rigorous qualification and verification system before they are permitted to serve our members. This ensures that the individuals entering your home meet our strict standards for professionalism, capability, and empathy.

@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Public Website Smoke Tests', () => {
   test('Homepage loads successfully', async ({ page }) => {
     await page.goto('/');
-    await expect(page).toHaveTitle(/Sunshine Elder Care|Sunshine ElderCare/i);
+    await expect(page).toHaveTitle(/Sunshine Eldercare|Sunshine ElderCare/i);
     // Check main navigation
     const nav = page.locator('nav');
     await expect(nav).toBeVisible();

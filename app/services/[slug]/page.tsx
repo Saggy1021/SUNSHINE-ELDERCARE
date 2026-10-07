@@ -44,7 +44,7 @@ export default async function ServicePage({ params }: PageProps) {
           
           {/* Content Side */}
           <Reveal>
-            <Eyebrow>Sunshine Elder Care Services</Eyebrow>
+            <Eyebrow>Sunshine Eldercare Services</Eyebrow>
             <h1 className="mt-6 text-4xl sm:text-5xl font-display font-bold text-maroon leading-tight">
               {service.title}
             </h1>

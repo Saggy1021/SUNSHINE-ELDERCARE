@@ -23,11 +23,11 @@ function processFile(filePath) {
   if (!filePath.match(/\.(tsx|ts|md|json|css)$/)) return;
   let content = fs.readFileSync(filePath, 'utf8');
   let newContent = content
-    .replace(/Sankalp ElderCare/g, 'Sunshine Elder Care')
-    .replace(/Sankalp Elder Care/g, 'Sunshine Elder Care')
-    .replace(/SANKALP ELDERCARE/g, 'SUNSHINE ELDER CARE')
-    .replace(/SANKALP ELDER CARE/g, 'SUNSHINE ELDER CARE')
-    .replace(/Sankalp/g, 'Sunshine');
+    .replace(/Sunshine Eldercare/g, 'Sunshine Eldercare')
+    .replace(/Sunshine Eldercare/g, 'Sunshine Eldercare')
+    .replace(/Sunshine Eldercare/g, 'SUNSHINE ELDERCARE')
+    .replace(/Sunshine Eldercare/g, 'SUNSHINE ELDERCARE')
+    .replace(/Sunshine Eldercare/g, 'Sunshine');
   
   if (content !== newContent) {
     fs.writeFileSync(filePath, newContent, 'utf8');

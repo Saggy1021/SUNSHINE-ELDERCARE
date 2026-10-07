@@ -5,7 +5,7 @@
 - **Udyam / MSME**: Verified. Exactly displays "Udyam Registered Enterprise", "Micro Enterprise", and "UDYAM-WB-10-0225763". No sensitive/internal data is exposed.
 - **ISO 9001:2015**: Verified. Exactly displays "ISO 9001:2015 Certified" and "Quality Management System".
 - **IAF / Accreditation**: Verified. Correctly uses "Accredited Certification". No false direct-certification claims are made.
-- **Retired Army Personnel**: Verified. Explicitly states "All employees of Sunshine Elder Care, regardless of their position or role, are retired Army personnel." without inventing specifics.
+- **Retired Army Personnel**: Verified. Explicitly states "All employees of Sunshine Eldercare, regardless of their position or role, are retired Army personnel." without inventing specifics.
 - **Complete Service Ecosystem**: Verified. Present on both `Services` and `Home` pages. Correctly lists Core Eldercare, Health & Medical Support (Nursing, Physio, Diagnostics, Networks), and Caregiver Network using "coordinated" and "partner" wording where appropriate.
 - **Caregiver Qualification / Verification**: Verified. Mentions the system generally without inventing fabricated checks like Aadhaar or Police verification.
 - **24/7 Emergency Assistance**: Verified. Explicitly communicates 24/7 availability, on-ground executive presence, 30-minute target response, hospital/ambulance assistance.

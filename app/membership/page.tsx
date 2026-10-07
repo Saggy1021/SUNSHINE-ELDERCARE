@@ -11,7 +11,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const page = await CmsService.getPageBySlug('membership');
   const seo = page?.seoMetadata;
   return {
-    title: seo?.title || 'Membership Plans | Sunshine Elder Care',
+    title: seo?.title || 'Membership Plans | Sunshine Eldercare',
     description: seo?.description || 'View our membership plans tailored to provide essential, comprehensive, and holistic eldercare support.',
     ...(seo?.noIndex ? { robots: { index: false, follow: false } } : {}),
   }

@@ -4,7 +4,7 @@ const prisma = new PrismaClient()
 
 // ============================================================
 // AUTHORITATIVE CARE PLAN CATALOG
-// Source of Truth: Sunshine Elder Care Package document
+// Source of Truth: Sunshine Eldercare Package document
 // DO NOT recalculate, correct, or "fix" any value below.
 // All amounts are in INR.
 // ============================================================

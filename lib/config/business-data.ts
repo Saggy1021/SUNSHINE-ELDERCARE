@@ -1,5 +1,5 @@
 export const businessData = {
-  name: "Sunshine Elder Care",
+  name: "Sunshine Eldercare",
   phone: "",
   email: "INFO.SUNSHINEELDERCARE@GMAIL.COM",
   address: "1/67 NAKTALA, N.S.C BOSE ROAD, KOLKATA - 700047, WEST BENGAL, INDIA",

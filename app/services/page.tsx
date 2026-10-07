@@ -5,7 +5,7 @@ import { EmergencyAssistance } from "@/components/yoga/emergency-assistance"
 import { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: "Our Services & Programs | Sunshine Elder Care",
+  title: "Our Services & Programs | Sunshine Eldercare",
   description: "Explore our comprehensive care options, medical coordination, and structured eldercare programs.",
 }
 

@@ -29,9 +29,9 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'Sunshine Elder Care — Compassionate Care for Seniors',
+  title: 'Sunshine Eldercare — Compassionate Care for Seniors',
   description:
-    'Sunshine Elder Care provides comprehensive, compassionate care and companionship for seniors. Experience peace of mind with our dedicated eldercare programs.',
+    'Sunshine Eldercare provides comprehensive, compassionate care and companionship for seniors. Experience peace of mind with our dedicated eldercare programs.',
 }
 
 export const viewport: Viewport = {

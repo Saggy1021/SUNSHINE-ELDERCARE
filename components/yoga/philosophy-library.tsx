@@ -54,7 +54,7 @@ export function PhilosophyLibrary({ faqs }: { faqs?: any[] }) {
             Frequently Asked Questions
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-pretty font-serif text-lg text-foreground/75">
-            Pull a topic from the shelf to learn more about how Sunshine Elder Care works.
+            Pull a topic from the shelf to learn more about how Sunshine Eldercare works.
           </p>
         </Reveal>
 

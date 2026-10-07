@@ -22,7 +22,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const plan = catalog.find((p) => p.slug === slug)
   if (!plan) return {}
   return {
-    title: `${plan.name} | Sunshine Elder Care`,
+    title: `${plan.name} | Sunshine Eldercare`,
     description: `View ${plan.name} care plan pricing, included services, and available durations.`,
   }
 }

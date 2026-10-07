@@ -3,8 +3,8 @@ import { Suspense } from "react"
 import { SignupForm } from "./signup-form"
 
 export const metadata: Metadata = {
-  title: "Sign Up | Sunshine Elder Care",
-  description: "Create an account to manage your Sunshine Elder Care services.",
+  title: "Sign Up | Sunshine Eldercare",
+  description: "Create an account to manage your Sunshine Eldercare services.",
 }
 
 export default function SignupPage() {

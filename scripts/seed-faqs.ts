@@ -5,8 +5,8 @@ const prisma = new PrismaClient()
 async function main() {
   const faqs = [
     {
-      question: "What is Sunshine Elder Care?",
-      answer: "Sunshine Elder Care is a Kolkata-based eldercare organization dedicated to preserving senior dignity and providing family reassurance through structured support and a comprehensive service ecosystem."
+      question: "What is Sunshine Eldercare?",
+      answer: "Sunshine Eldercare is a Kolkata-based eldercare organization dedicated to preserving senior dignity and providing family reassurance through structured support and a comprehensive service ecosystem."
     },
     {
       question: "Where do you operate?",

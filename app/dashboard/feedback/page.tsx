@@ -11,7 +11,7 @@ export default async function FeedbackPage() {
           <MessageSquarePlus className="h-6 w-6 text-amber-500" />
           Feedback & Support
         </h1>
-        <p className="text-slate-600 mt-1">Let us know about your experience with Sunshine Elder Care.</p>
+        <p className="text-slate-600 mt-1">Let us know about your experience with Sunshine Eldercare.</p>
       </div>
 
       <div className="grid md:grid-cols-2 gap-8 items-start">

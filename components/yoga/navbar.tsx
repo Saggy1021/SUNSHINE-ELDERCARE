@@ -46,7 +46,7 @@ export function Navbar({ isAuthenticated = false }: { isAuthenticated?: boolean 
           <div className="relative h-12 w-[180px] sm:h-14 sm:w-[200px] lg:h-16 lg:w-[220px] max-w-[70vw] shrink-0">
             <Image 
               src="/images/logo-new.png" 
-              alt="Sunshine Elder Care Logo"
+              alt="Sunshine Eldercare Logo"
               fill
               priority
               sizes="(max-width: 640px) 170px, (max-width: 1024px) 200px, 220px"

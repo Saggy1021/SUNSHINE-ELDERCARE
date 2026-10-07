@@ -2,8 +2,8 @@ import { Metadata } from 'next'
 import { Eyebrow } from '@/components/yoga/ornaments'
 
 export const metadata: Metadata = {
-  title: 'Privacy Policy | Sunshine Elder Care',
-  description: 'Privacy Policy for Sunshine Elder Care services.',
+  title: 'Privacy Policy | Sunshine Eldercare',
+  description: 'Privacy Policy for Sunshine Eldercare services.',
 }
 
 export default function PrivacyPolicyPage() {
@@ -26,7 +26,7 @@ export default function PrivacyPolicyPage() {
             <section className="mb-10">
               <h2 className="text-2xl font-bold mb-4">1. Introduction</h2>
               <p>
-                At Sunshine Elder Care, we respect your privacy and are committed to protecting the personal data of our members. This Privacy Policy explains what information we collect, why we collect it, how it is used, and how it is secured when you use our website (https://sunshineeldercare.in) and associated services.
+                At Sunshine Eldercare, we respect your privacy and are committed to protecting the personal data of our members. This Privacy Policy explains what information we collect, why we collect it, how it is used, and how it is secured when you use our website (https://sunshineeldercare.in) and associated services.
               </p>
             </section>
 
@@ -67,7 +67,7 @@ export default function PrivacyPolicyPage() {
                 When you make a payment, we retain transaction-related information such as the invoice information, invoice number, receipt number, payment status, payment amount, plan and service information, payment date, transaction and reference identifiers, payment-provider order/payment references, refund information, and payment verification data. 
               </p>
               <p>
-                Sunshine Elder Care does not store raw payment-instrument credentials (such as full card numbers, CVV, UPI PIN, ATM PIN, or bank/netbanking passwords). Payment processing is securely handled by our third-party payment gateway processor.
+                Sunshine Eldercare does not store raw payment-instrument credentials (such as full card numbers, CVV, UPI PIN, ATM PIN, or bank/netbanking passwords). Payment processing is securely handled by our third-party payment gateway processor.
               </p>
             </section>
 
@@ -126,7 +126,7 @@ export default function PrivacyPolicyPage() {
                 If you have any questions or concerns regarding this Privacy Policy, you may contact us at:
               </p>
               <ul className="mt-4 space-y-2">
-                <li><strong>Company:</strong> SUNSHINE ELDER CARE</li>
+                <li><strong>Company:</strong> SUNSHINE ELDERCARE</li>
                 <li><strong>Phone:</strong> 8582907723</li>
                 <li><strong>Email:</strong> info.sunshineeldercare@gmail.com</li>
                 <li><strong>Website:</strong> https://sunshineeldercare.in</li>

@@ -1,7 +1,7 @@
-# Sunshine Elder Care - Project Implementation
+# Sunshine Eldercare - Project Implementation
 
 ## Reference Website
-* **URL Analyzed**: https://sunshineeldercare.com/
+* **URL Analyzed**: https://sunshineeldercare.in/
 * **Scope**: Homepage, About Us, Services, Moments of Care, Membership, Contact Us, FAQs, Privacy Policy, Terms & Conditions.
 
 ## Complete Pages

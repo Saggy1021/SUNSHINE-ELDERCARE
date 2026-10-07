@@ -1,4 +1,4 @@
-# Sunshine Elder Care — Backend Foundation Documentation
+# Sunshine Eldercare — Backend Foundation Documentation
 
 > Phase 1 Complete | Last Updated: September 2026
 
@@ -6,7 +6,7 @@
 
 ## Overview
 
-This document describes the production backend foundation for Sunshine Elder Care. It covers architecture decisions, database configuration, local development setup, migration workflow, environment variables, and known limitations.
+This document describes the production backend foundation for Sunshine Eldercare. It covers architecture decisions, database configuration, local development setup, migration workflow, environment variables, and known limitations.
 
 This is a **living document**. Each phase will update it.
 
@@ -109,7 +109,7 @@ The seed script uses `upsert` (idempotent — safe to run multiple times). It se
 - Standard membership plans (Basic, Premium) from `lib/config/business-data.ts`
 - A **development-only** test tax rule (`DEV_TEST_GST_18`)
 
-> ⚠️ **IMPORTANT:** The seeded `DEV_TEST_GST_18` tax rule is for local development and testing ONLY. Production tax rules must be configured by a certified accountant based on Sunshine Elder Care's exact GST registration, service classifications, and applicable Indian tax law. **Do NOT activate the development tax rule in production.**
+> ⚠️ **IMPORTANT:** The seeded `DEV_TEST_GST_18` tax rule is for local development and testing ONLY. Production tax rules must be configured by a certified accountant based on Sunshine Eldercare's exact GST registration, service classifications, and applicable Indian tax law. **Do NOT activate the development tax rule in production.**
 
 ---
 
@@ -130,8 +130,8 @@ docker compose up -d
 ```
 
 This starts PostgreSQL on port 5432 with:
-- Database: `sankalp`
-- User: `sankalp`
+- Database: `sunshineeldercare`
+- User: `sunshineeldercare`
 - Password: `localdevpassword`
 
 **2. Copy the example environment file:**
@@ -219,7 +219,7 @@ All required environment variable **names** are documented in `.env.example`. **
 |---|---|---|
 | `DATABASE_URL` | ✅ Required | PostgreSQL connection string |
 | `AUTH_SECRET` | ✅ Required (Phase 2) | NextAuth secret — generate with `npx auth secret` |
-| `NEXT_PUBLIC_APP_URL` | ✅ Required | Public base URL (e.g., `https://sunshineeldercare.com`) |
+| `NEXT_PUBLIC_APP_URL` | ✅ Required | Public base URL (e.g., `https://sunshineeldercare.in`) |
 | `EMAIL_PROVIDER` | Phase 3 | `mock`, `smtp`, or `resend` |
 | `EMAIL_API_KEY` | Phase 3 | API key for email provider |
 | `EMAIL_FROM` | Phase 3 | Sender email address |

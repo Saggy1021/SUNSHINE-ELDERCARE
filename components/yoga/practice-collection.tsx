@@ -41,7 +41,7 @@ export function PracticeCollection() {
             Core Eldercare Services
           </h2>
           <p className="mx-auto mt-5 max-w-2xl text-pretty font-serif text-lg text-foreground/80">
-            Our fundamental services provided directly by Sunshine Elder Care to guarantee continuous support, engagement, and safety.
+            Our fundamental services provided directly by Sunshine Eldercare to guarantee continuous support, engagement, and safety.
           </p>
         </Reveal>
 
