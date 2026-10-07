@@ -20,7 +20,7 @@ const nextConfig = {
       img-src 'self' blob: data:;
       font-src 'self';
       connect-src 'self' https://vitals.vercel-insights.com https://api.razorpay.com;
-      frame-src 'self' https://checkout.razorpay.com;
+      frame-src 'self' https://checkout.razorpay.com https://api.razorpay.com;
       object-src 'none';
       base-uri 'self';
       form-action 'self';
