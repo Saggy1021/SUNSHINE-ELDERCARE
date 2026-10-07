@@ -73,10 +73,9 @@ export async function POST(req: Request) {
         }
         
         const now = new Date();
+        // For legacy invoices where invoiceNumber is null, we intentionally do NOT fabricate
+        // a new SEC sequence number to preserve historical records.
         let officialInvoiceNumber = invoice.invoiceNumber;
-        if (!officialInvoiceNumber) {
-          officialInvoiceNumber = await DocumentSequenceService.generateInvoiceNumber(now, tx);
-        }
 
         await tx.invoice.update({
           where: { id: invoice.id },

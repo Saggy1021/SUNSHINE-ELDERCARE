@@ -3,6 +3,7 @@ import { PricingCalculationResult } from '../pricing'
 import { TaxCalculationResult, CarePlanTaxResult } from '../tax'
 import { CarePlanLookupResult } from '../care-plans'
 import { Prisma } from '@prisma/client'
+import { DocumentSequenceService } from '../document-sequence'
 
 export class InvoiceService {
   private generateUniqueInvoiceNumber(): string {
@@ -23,6 +24,9 @@ export class InvoiceService {
     idempotencyKey?: string | null
   ) {
     const maxRetries = 3;
+    const now = new Date();
+    const invoiceNumber = await DocumentSequenceService.generateInvoiceNumber(now);
+
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         const referenceNumber = this.generateUniqueInvoiceNumber();
@@ -30,6 +34,7 @@ export class InvoiceService {
         const invoice = await db.invoice.create({
           data: {
             referenceNumber,
+            invoiceNumber,
             userId,
             planId,
             idempotencyKey: idempotencyKey || null,
@@ -84,6 +89,9 @@ export class InvoiceService {
     const addOnsTotal = addOns.reduce((sum, a) => sum + a.price, 0);
     const finalTotal = new Prisma.Decimal(tax.total + addOnsTotal);
     
+    const now = new Date();
+    const invoiceNumber = await DocumentSequenceService.generateInvoiceNumber(now);
+
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         const referenceNumber = this.generateUniqueInvoiceNumber();
@@ -91,6 +99,7 @@ export class InvoiceService {
         const invoice = await db.invoice.create({
           data: {
             referenceNumber,
+            invoiceNumber,
             userId,
             planId: pricing.planSlug,
             idempotencyKey: idempotencyKey || null,

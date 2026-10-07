@@ -15,11 +15,12 @@ const nextConfig = {
     // Next.js dev server requires 'unsafe-eval' for hot reloading.
     const cspHeader = `
       default-src 'self';
-      script-src 'self' 'unsafe-inline' https://va.vercel-scripts.com ${isDev ? "'unsafe-eval'" : ""};
+      script-src 'self' 'unsafe-inline' https://va.vercel-scripts.com https://checkout.razorpay.com ${isDev ? "'unsafe-eval'" : ""};
       style-src 'self' 'unsafe-inline';
       img-src 'self' blob: data:;
       font-src 'self';
-      connect-src 'self' https://vitals.vercel-insights.com;
+      connect-src 'self' https://vitals.vercel-insights.com https://api.razorpay.com;
+      frame-src 'self' https://checkout.razorpay.com;
       object-src 'none';
       base-uri 'self';
       form-action 'self';

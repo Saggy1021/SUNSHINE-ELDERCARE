@@ -208,10 +208,9 @@ export async function systemVerifyPayment(paymentId: string, paymentReference: s
     }
 
     const now = new Date()
+    // For legacy invoices where invoiceNumber is null, we intentionally do NOT fabricate
+    // a new SEC sequence number to preserve historical records.
     let officialInvoiceNumber = invoice.invoiceNumber
-    if (!officialInvoiceNumber) {
-      officialInvoiceNumber = await DocumentSequenceService.generateInvoiceNumber(now, tx)
-    }
 
     const customerName = payment.user.name || "Member"
     const customerEmail = payment.user.email
@@ -349,10 +348,9 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
     }
 
     const now = new Date()
+    // For legacy invoices where invoiceNumber is null, we intentionally do NOT fabricate
+    // a new SEC sequence number to preserve historical records.
     let officialInvoiceNumber = invoice.invoiceNumber
-    if (!officialInvoiceNumber) {
-      officialInvoiceNumber = await DocumentSequenceService.generateInvoiceNumber(now, tx)
-    }
 
     const customerName = payment.user.name || "Member"
     const customerEmail = payment.user.email

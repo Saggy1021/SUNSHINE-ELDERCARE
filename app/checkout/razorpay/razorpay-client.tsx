@@ -19,6 +19,7 @@ interface RazorpayClientProps {
 
 export function RazorpayClient(props: RazorpayClientProps) {
   const [isLoaded, setIsLoaded] = useState(false)
+  const [hasError, setHasError] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -26,6 +27,7 @@ export function RazorpayClient(props: RazorpayClientProps) {
     script.src = 'https://checkout.razorpay.com/v1/checkout.js'
     script.async = true
     script.onload = () => setIsLoaded(true)
+    script.onerror = () => setHasError(true)
     document.body.appendChild(script)
 
     return () => {
@@ -74,6 +76,22 @@ export function RazorpayClient(props: RazorpayClientProps) {
       alert(`Payment Failed: ${response.error.description}`)
     })
     rzp.open()
+  }
+
+  if (hasError) {
+    return (
+      <div className="w-full rounded-xl bg-red-50 p-4 text-center border border-red-200">
+        <p className="text-sm font-medium text-red-800">
+          Failed to load the payment gateway. This may be due to a network issue or an ad blocker.
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-3 text-xs font-bold text-red-700 underline hover:text-red-900"
+        >
+          Click to refresh and try again
+        </button>
+      </div>
+    )
   }
 
   return (
