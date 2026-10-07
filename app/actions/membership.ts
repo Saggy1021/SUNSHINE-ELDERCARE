@@ -10,6 +10,7 @@ import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { notificationService } from "@/lib/services/notification"
 import { RateLimitService } from "@/lib/services/rate-limit"
+import { paymentService } from "@/lib/services/payment"
 
 export async function getUserSubscription() {
   const session = await auth()
@@ -148,54 +149,95 @@ export async function submitRenewalRequest(formData: FormData) {
     }
   }
 
+  // Idempotency: Check if there's already a pending request for these precise parameters
+  const existingRequest = await db.renewalRequest.findFirst({
+    where: {
+      userId: session.user.id,
+      status: "PENDING_PAYMENT",
+      carePlanId,
+      variantType,
+      durationMonths,
+      requestType,
+    },
+    orderBy: { createdAt: 'desc' },
+    include: { addOns: true }
+  });
+
   // Start Transaction
-  let createdRequest: any = null
-  // Get addOn details for invoice
-  let addOnsDetails: { id: string, name: string, price: number }[] = []
+  let createdRequest: any = existingRequest;
+  let addOnsDetails: { id: string, name: string, price: number }[] = [];
+  let invoice: any = null;
+
+  if (existingRequest) {
+    // Check if the add-ons match exactly
+    const existingAddOnIds = existingRequest.addOns.map((a: any) => a.addOnId).sort().join(',');
+    const newAddOnIds = [...addOnIds].sort().join(',');
+    
+    if (existingAddOnIds === newAddOnIds) {
+      // Find the associated invoice using idempotencyKey
+      invoice = await db.invoice.findUnique({
+        where: { idempotencyKey: existingRequest.id }
+      });
+    } else {
+      // Invalidated by different add-ons, create new
+      createdRequest = null;
+    }
+  }
   
-  await db.$transaction(async (tx) => {
-    createdRequest = await tx.renewalRequest.create({
-      data: {
-        userId: session.user.id,
-        currentSubscriptionId: currentSub?.id || null,
-        carePlanId,
-        variantType,
-        durationMonths,
-        requestedStartDate,
-        calculatedEndDate,
-        status: "PENDING_PAYMENT",
-        requestType,
-        planName: carePlan.name,
-        documentedTotal: pricingTotal.documentedTotal
+  if (!createdRequest || !invoice) {
+    await db.$transaction(async (tx) => {
+      createdRequest = await tx.renewalRequest.create({
+        data: {
+          userId: session.user.id,
+          currentSubscriptionId: currentSub?.id || null,
+          carePlanId,
+          variantType,
+          durationMonths,
+          requestedStartDate,
+          calculatedEndDate,
+          status: "PENDING_PAYMENT",
+          requestType,
+          planName: carePlan.name,
+          documentedTotal: pricingTotal.documentedTotal
+        }
+      })
+
+      if (addOnIds.length > 0) {
+        const dbAddOns = await tx.addOn.findMany({ where: { id: { in: addOnIds } } })
+        if (dbAddOns.length !== addOnIds.length) throw new Error("Invalid Add-ons")
+        
+        addOnsDetails = dbAddOns.map(a => ({ id: a.id, name: a.name, price: a.price }))
+        
+        await tx.renewalRequestAddOn.createMany({
+          data: dbAddOns.map(a => ({
+            renewalRequestId: createdRequest.id,
+            addOnId: a.id
+          }))
+        })
       }
     })
 
-    if (addOnIds.length > 0) {
-      const dbAddOns = await tx.addOn.findMany({ where: { id: { in: addOnIds } } })
-      if (dbAddOns.length !== addOnIds.length) throw new Error("Invalid Add-ons")
-      
-      addOnsDetails = dbAddOns.map(a => ({ id: a.id, name: a.name, price: a.price }))
-      
-      await tx.renewalRequestAddOn.createMany({
-        data: dbAddOns.map(a => ({
-          renewalRequestId: createdRequest.id,
-          addOnId: a.id
-        }))
-      })
-    }
+    // Calculate tax and create invoice with authoritative pricing
+    const taxResult = await taxService.calculateCarePlanTax(pricingTotal)
+    invoice = await invoiceService.createCarePlanInvoice(
+      session.user.id,
+      pricingTotal,
+      taxResult,
+      createdRequest.id,
+      addOnsDetails
+    )
+  }
+
+  // Use the PaymentService abstraction to initiate Razorpay
+  const response = await paymentService.createCheckoutSession({
+    userId: session.user.id,
+    invoiceId: invoice.id,
+    renewalRequestId: createdRequest.id,
+    successUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/dashboard?success=true`,
+    cancelUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/checkout/${invoice.id}` // Preserve fallback to old UI
   })
 
-  // Calculate tax and create invoice with authoritative pricing
-  const taxResult = await taxService.calculateCarePlanTax(pricingTotal)
-  const invoice = await invoiceService.createCarePlanInvoice(
-    session.user.id,
-    pricingTotal,
-    taxResult,
-    createdRequest.id,
-    addOnsDetails
-  )
-
-  redirect(`/checkout/${invoice.id}?renewal=${createdRequest.id}`)
+  redirect(response.checkoutUrl)
 }
 
 export async function getPlaceHolderAddOns() {

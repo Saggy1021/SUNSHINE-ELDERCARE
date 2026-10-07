@@ -4,6 +4,7 @@ import { useState, useMemo } from "react"
 import { submitRenewalRequest } from "@/app/actions/membership"
 import { calculateEndDate } from "@/lib/services/dates"
 import { CheckCircle2 } from "lucide-react"
+import { isRedirectError } from "next/dist/client/components/redirect-error"
 
 export default function RenewalWorkflow({ plans, addOns, isNew = false }: { plans: any[], addOns: any[], isNew?: boolean }) {
   const [step, setStep] = useState(1)
@@ -42,7 +43,10 @@ export default function RenewalWorkflow({ plans, addOns, isNew = false }: { plan
       
       await submitRenewalRequest(formData)
       // Redirect happens in the action
-    } catch (e) {
+    } catch (e: any) {
+      if (isRedirectError(e)) {
+        throw e
+      }
       console.error(e)
       alert("There was an error submitting your request. Please try again.")
       setIsSubmitting(false)
