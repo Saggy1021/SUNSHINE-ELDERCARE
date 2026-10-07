@@ -4,6 +4,7 @@ import { auth } from "@/auth"
 import Link from "next/link"
 import { Shield, Clock, CalendarDays, CheckCircle2, Receipt, AlertCircle, Fingerprint } from "lucide-react"
 import { initiateRenewalCheckout } from "@/app/actions/checkout"
+import { redirect } from "next/navigation"
 
 export default async function DashboardPage() {
   const session = await auth()
@@ -149,19 +150,39 @@ export default async function DashboardPage() {
               </div>
             )}
 
-            {!renewalState.payment && renewalState.renewal.status === 'APPROVED' && (
+            {renewalState.renewal.status === 'PENDING_PAYMENT' && (
               <div>
                 <div className="flex items-center gap-2 text-blue-700 bg-blue-50 px-3 py-2 rounded-md font-medium text-sm border border-blue-100 mb-4">
                   <AlertCircle className="h-4 w-4" /> Payment Required
                 </div>
                 <form action={async () => {
                   "use server"
-                  await initiateRenewalCheckout(renewalState.renewal.id)
+                  const existingInvoice = await db.invoice.findFirst({
+                    where: { idempotencyKey: renewalState.renewal.id, status: "DRAFT" },
+                    orderBy: { createdAt: 'desc' }
+                  })
+                  if (existingInvoice) {
+                    redirect(`/checkout/${existingInvoice.id}?renewal=${renewalState.renewal.id}`)
+                  } else {
+                    await initiateRenewalCheckout(renewalState.renewal.id)
+                  }
                 }}>
                   <button type="submit" className="bg-gold px-4 py-2 rounded-md font-bold text-brown text-sm hover:opacity-90 transition-opacity">
                     Proceed to Checkout
                   </button>
                 </form>
+              </div>
+            )}
+            
+            {renewalState.renewal.status === 'PAID_PENDING_APPROVAL' && (
+              <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 px-3 py-2 rounded-md font-medium text-sm border border-emerald-100">
+                <CheckCircle2 className="h-4 w-4" /> Payment Verified - Awaiting Admin Approval
+              </div>
+            )}
+
+            {renewalState.renewal.status === 'REJECTED_REFUND_DUE' && (
+              <div className="flex items-center gap-2 text-red-700 bg-red-50 px-3 py-2 rounded-md font-medium text-sm border border-red-100">
+                <AlertCircle className="h-4 w-4" /> Request Rejected - Refund Pending
               </div>
             )}
 

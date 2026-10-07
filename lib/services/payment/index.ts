@@ -253,42 +253,9 @@ export async function systemVerifyPayment(paymentId: string, paymentReference: s
     })
 
     if (renewalRequest) {
-      const isFuture = renewalRequest.requestedStartDate > now
-      
-      const newSubscription = await tx.subscription.create({
-        data: {
-          userId: renewalRequest.userId,
-          carePlanId: renewalRequest.carePlanId,
-          variantType: renewalRequest.variantType,
-          durationMonths: renewalRequest.durationMonths,
-          startDate: renewalRequest.requestedStartDate,
-          endDate: renewalRequest.calculatedEndDate,
-          status: isFuture ? "SCHEDULED" : "ACTIVE",
-        }
-      })
-
-      if (renewalRequest.addOns.length > 0) {
-        await tx.subscriptionAddOn.createMany({
-          data: renewalRequest.addOns.map(addon => ({
-            subscriptionId: newSubscription.id,
-            addOnId: addon.addOnId
-          }))
-        })
-      }
-
-      if (renewalRequest.currentSubscriptionId && !isFuture) {
-        await tx.subscription.update({
-          where: { id: renewalRequest.currentSubscriptionId },
-          data: {
-            status: "EXPIRED",
-            endDate: now
-          }
-        })
-      }
-
       await tx.renewalRequest.update({
         where: { id: renewalRequest.id },
-        data: { status: "COMPLETED" } 
+        data: { status: "PAID_PENDING_APPROVAL" } 
       })
 
       await tx.auditLog.create({
@@ -297,7 +264,7 @@ export async function systemVerifyPayment(paymentId: string, paymentReference: s
           action: "ONLINE_PAYMENT_VERIFIED",
           entityType: "Payment",
           entityId: payment.id,
-          metadata: { invoiceId: invoice.id, subscriptionId: newSubscription.id }
+          metadata: { invoiceId: invoice.id, renewalRequestId: renewalRequest.id }
         }
       })
     } else {
@@ -345,25 +312,7 @@ export async function systemVerifyPayment(paymentId: string, paymentReference: s
     }
   }
 
-  const newSub = renewalRequest ? await db.subscription.findFirst({
-    where: { userId: payment.userId },
-    include: { addOns: { include: { addOn: true } } },
-    orderBy: { createdAt: 'desc' }
-  }) : null;
-
-  if (newSub) {
-    notificationService.onPaymentVerified(payment, {
-      status: newSub.status,
-      startDate: newSub.startDate,
-      endDate: newSub.endDate,
-      carePlanId: newSub.carePlanId,
-      variantType: newSub.variantType,
-      durationMonths: newSub.durationMonths,
-      addOns: newSub.addOns,
-    }).catch(() => {})
-  } else {
-    notificationService.onPaymentVerified(payment, null).catch(() => {})
-  }
+  notificationService.onPaymentVerified(payment, null).catch(() => {})
 
   return payment;
 }
@@ -444,41 +393,9 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
       }
     })
 
-    const isFuture = renewalRequest.requestedStartDate > now
-    const newSubscription = await tx.subscription.create({
-      data: {
-        userId: renewalRequest.userId,
-        carePlanId: renewalRequest.carePlanId,
-        variantType: renewalRequest.variantType,
-        durationMonths: renewalRequest.durationMonths,
-        startDate: renewalRequest.requestedStartDate,
-        endDate: renewalRequest.calculatedEndDate,
-        status: isFuture ? "SCHEDULED" : "ACTIVE",
-      }
-    })
-
-    if (renewalRequest.addOns.length > 0) {
-      await tx.subscriptionAddOn.createMany({
-        data: renewalRequest.addOns.map(addon => ({
-          subscriptionId: newSubscription.id,
-          addOnId: addon.addOnId
-        }))
-      })
-    }
-
-    if (renewalRequest.currentSubscriptionId && !isFuture) {
-      await tx.subscription.update({
-        where: { id: renewalRequest.currentSubscriptionId },
-        data: {
-          status: "EXPIRED",
-          endDate: now
-        }
-      })
-    }
-
     await tx.renewalRequest.update({
       where: { id: renewalRequest.id },
-      data: { status: "COMPLETED" } 
+      data: { status: "PAID_PENDING_APPROVAL" } 
     })
 
     await tx.auditLog.create({
@@ -487,7 +404,7 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
         action: "PAYMENT_VERIFIED",
         entityType: "Payment",
         entityId: paymentId,
-        metadata: { invoiceId: invoice.id, subscriptionId: newSubscription.id }
+        metadata: { invoiceId: invoice.id, renewalRequestId: renewalRequest.id }
       }
     })
   })
@@ -524,23 +441,7 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
     }
   }
 
-  const newSub = await db.subscription.findFirst({
-    where: { userId: renewalRequest.userId },
-    include: { addOns: { include: { addOn: true } } },
-    orderBy: { createdAt: 'desc' }
-  })
-
-  if (newSub) {
-    notificationService.onPaymentVerified(payment, {
-      status: newSub.status,
-      startDate: newSub.startDate,
-      endDate: newSub.endDate,
-      carePlanId: newSub.carePlanId,
-      variantType: newSub.variantType,
-      durationMonths: newSub.durationMonths,
-      addOns: newSub.addOns,
-    }).catch(() => {})
-  }
+  notificationService.onPaymentVerified(payment, null).catch(() => {})
 
   return payment;
 }

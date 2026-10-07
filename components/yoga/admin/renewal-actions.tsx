@@ -8,11 +8,13 @@ export default function RenewalActions({ requestId, status, requestType }: { req
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  if (status !== "SUBMITTED") {
+  if (status !== "PAID_PENDING_APPROVAL") {
     return (
       <span className={`px-3 py-1 rounded-full text-xs font-medium tracking-wide
         ${status === 'APPROVED' ? 'bg-emerald-500/10 text-emerald-600' : 
           status === 'REJECTED' ? 'bg-red-500/10 text-red-600' :
+          status === 'REJECTED_REFUND_DUE' ? 'bg-red-700/10 text-red-800' :
+          status === 'PENDING_PAYMENT' ? 'bg-amber-500/10 text-amber-600' :
           status === 'SCHEDULED' ? 'bg-blue-500/10 text-blue-600' :
           'bg-slate-500/10 text-slate-600'}`}
       >
@@ -22,7 +24,7 @@ export default function RenewalActions({ requestId, status, requestType }: { req
   }
 
   const handleApprove = async () => {
-    if (!confirm("Are you sure you want to approve this request? This will stage it for payment/verification.")) return
+    if (!confirm("Are you sure you want to approve this membership? This will activate the subscription.")) return
     try {
       setLoading(true)
       setError(null)

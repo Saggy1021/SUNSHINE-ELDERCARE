@@ -24,9 +24,9 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   ]
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
+    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row pt-20 lg:pt-24">
       {/* Sidebar */}
-      <aside className="w-full md:w-64 bg-slate-900 text-white flex-shrink-0">
+      <aside className="w-full md:w-64 bg-slate-900 text-white flex-shrink-0 md:sticky md:top-24 md:h-[calc(100vh-6rem)] md:overflow-y-auto">
         <div className="p-6">
           <h2 className="text-xl font-bold tracking-tight text-white mb-2">Member Portal</h2>
           <p className="text-slate-400 text-sm truncate">{session.user.name || session.user.email}</p>

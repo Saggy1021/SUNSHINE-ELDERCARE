@@ -59,14 +59,28 @@ export default function RenewalWorkflow({ plans, addOns }: { plans: any[], addOn
       <div className="bg-white p-6 rounded-xl border border-slate-200">
         <h2 className="text-xl font-semibold mb-4 text-slate-900">Step 1: Choose Package</h2>
         <div className="grid gap-4">
-          {plans.map(p => (
-            <label key={p.id} className={`p-4 border rounded-lg cursor-pointer transition-colors ${carePlanId === p.id ? 'border-amber-500 bg-amber-50/50' : 'border-slate-200 hover:border-amber-300'}`}>
-              <div className="flex items-center gap-3">
-                <input type="radio" name="plan" checked={carePlanId === p.id} onChange={() => setCarePlanId(p.id)} className="h-4 w-4 text-amber-600 focus:ring-amber-600" />
-                <span className="font-semibold text-slate-900">{p.name}</span>
-              </div>
-            </label>
-          ))}
+          {plans.map(p => {
+            const singleVariant = p.variants.find((v: any) => v.variantType === 'SINGLE')
+            return (
+              <label key={p.id} className={`p-4 border rounded-lg cursor-pointer transition-colors ${carePlanId === p.id ? 'border-amber-500 bg-amber-50/50' : 'border-slate-200 hover:border-amber-300'}`}>
+                <div className="flex items-start gap-3">
+                  <input type="radio" name="plan" checked={carePlanId === p.id} onChange={() => setCarePlanId(p.id)} className="h-4 w-4 text-amber-600 focus:ring-amber-600 mt-1" />
+                  <div>
+                    <span className="font-semibold text-slate-900 block">{p.name}</span>
+                    {singleVariant && singleVariant.services.length > 0 && (
+                      <p className="text-sm text-slate-600 mt-1">
+                        {singleVariant.services
+                          .slice(0, 2)
+                          .map((s: any) => s.serviceName)
+                          .join(' · ')}
+                        {singleVariant.services.length > 2 && ` + ${singleVariant.services.length - 2} more`}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </label>
+            )
+          })}
         </div>
         <div className="mt-6 flex justify-end">
           <button disabled={!carePlanId} onClick={handleNext} className="bg-amber-500 text-white px-6 py-2 rounded-md font-semibold disabled:opacity-50 hover:bg-amber-600 transition-colors">Next</button>
@@ -98,24 +112,27 @@ export default function RenewalWorkflow({ plans, addOns }: { plans: any[], addOn
   }
 
   if (step === 3) {
+    const durations = selectedVariant?.durations || []
+    
     return (
       <div className="bg-white p-6 rounded-xl border border-slate-200">
         <h2 className="text-xl font-semibold mb-4 text-slate-900">Step 3: Choose Duration</h2>
         <div className="grid gap-4">
-          {[1, 3, 6, 12].map(d => (
-            <label key={d} className={`p-4 border rounded-lg cursor-pointer transition-colors ${durationMonths === d ? 'border-amber-500 bg-amber-50/50' : 'border-slate-200 hover:border-amber-300'}`}>
+          {durations.map((d: any) => (
+            <label key={d.months} className={`p-4 border rounded-lg cursor-pointer transition-colors ${durationMonths === d.months ? 'border-amber-500 bg-amber-50/50' : 'border-slate-200 hover:border-amber-300'}`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <input type="radio" name="duration" checked={durationMonths === d} onChange={() => setDurationMonths(d)} className="h-4 w-4 text-amber-600 focus:ring-amber-600" />
-                  <span className="font-semibold text-slate-900">{d} Month{d > 1 ? 's' : ''}</span>
+                  <input type="radio" name="duration" checked={durationMonths === d.months} onChange={() => setDurationMonths(d.months)} className="h-4 w-4 text-amber-600 focus:ring-amber-600" />
+                  <span className="font-semibold text-slate-900">{d.months} Month{d.months > 1 ? 's' : ''}</span>
                 </div>
+                <span className="font-bold text-slate-900">₹{d.documentedTotal.toLocaleString('en-IN')}</span>
               </div>
             </label>
           ))}
         </div>
         <div className="mt-6 flex justify-between">
           <button onClick={handleBack} className="text-slate-600 px-4 py-2 hover:bg-slate-100 rounded-md transition-colors">Back</button>
-          <button onClick={handleNext} className="bg-amber-500 text-white px-6 py-2 rounded-md font-semibold hover:bg-amber-600 transition-colors">Next</button>
+          <button onClick={handleNext} disabled={durations.length === 0} className="bg-amber-500 text-white px-6 py-2 rounded-md font-semibold hover:bg-amber-600 transition-colors disabled:opacity-50">Next</button>
         </div>
       </div>
     )
@@ -216,9 +233,25 @@ export default function RenewalWorkflow({ plans, addOns }: { plans: any[], addOn
         )}
         
         <div className="pt-4 flex justify-between items-center text-lg">
-          <span className="font-bold text-slate-900">Package Base Price</span>
-          <span className="font-bold text-slate-900">
+          <span className="font-semibold text-slate-900">Package Price</span>
+          <span className="font-semibold text-slate-900">
             {selectedDuration ? `₹${selectedDuration.documentedTotal.toLocaleString('en-IN')}` : '---'}
+          </span>
+        </div>
+        
+        {selectedAddOnIds.length > 0 && (
+          <div className="pt-2 flex justify-between items-center text-lg">
+            <span className="font-semibold text-slate-900">Add-ons Total</span>
+            <span className="font-semibold text-slate-900">
+              ₹{selectedAddOnIds.reduce((sum, id) => sum + (addOns.find(x => x.id === id)?.price || 0), 0).toLocaleString('en-IN')}
+            </span>
+          </div>
+        )}
+
+        <div className="pt-4 mt-2 border-t border-slate-200 flex justify-between items-center text-xl">
+          <span className="font-bold text-slate-900">Estimated Total</span>
+          <span className="font-bold text-emerald-700">
+            {selectedDuration ? `₹${(selectedDuration.documentedTotal + selectedAddOnIds.reduce((sum, id) => sum + (addOns.find(a => a.id === id)?.price || 0), 0)).toLocaleString('en-IN')}` : '---'}
           </span>
         </div>
       </div>

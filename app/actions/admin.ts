@@ -49,7 +49,7 @@ export async function getAdminDashboardMetrics() {
   ] = await Promise.all([
     db.user.count(),
     db.subscription.count({ where: { status: "ACTIVE" } }),
-    db.renewalRequest.count({ where: { status: "SUBMITTED" } }),
+    db.renewalRequest.count({ where: { status: "PAID_PENDING_APPROVAL" } }),
     db.subscription.count({ where: { status: "SCHEDULED" } }),
     db.subscription.count({ where: { status: "EXPIRING" } }),
     db.subscription.count({ where: { status: "EXPIRED" } }),
@@ -75,7 +75,7 @@ export async function getNeedsAttentionQueue() {
   await requirePermission("MEMBER_VIEW")
 
   const pendingRenewals = await db.renewalRequest.findMany({
-    where: { status: "SUBMITTED" },
+    where: { status: "PAID_PENDING_APPROVAL" },
     include: { user: { select: { name: true, email: true } } },
     orderBy: { createdAt: 'asc' },
     take: 5
@@ -210,70 +210,70 @@ export async function approveRenewalRequest(formData: FormData) {
 
   const requestId = formData.get("requestId") as string
 
-  const request = await db.renewalRequest.findUnique({ where: { id: requestId } })
+  const request = await db.renewalRequest.findUnique({ 
+    where: { id: requestId },
+    include: { addOns: true, carePlan: true, user: true }
+  })
+  
   if (!request) throw new Error("Renewal request not found")
-  if (request.status !== "SUBMITTED") throw new Error("Can only approve SUBMITTED requests")
-
-  let customPrice = undefined
-  if (request.requestType === "UPGRADE") {
-    if (!request.currentSubscriptionId) {
-      throw new Error("Business rule missing: Mid-cycle upgrade calculation is not defined for subscriptions without history.")
-    }
-    
-    const currentSub = await db.subscription.findUnique({
-      where: { id: request.currentSubscriptionId },
-      include: { carePlan: true }
-    })
-    
-    if (!currentSub || !currentSub.carePlan) {
-      throw new Error("Business rule missing: Cannot calculate upgrade without an active standard care plan.")
-    }
-    
-    const { carePricingService } = await import('@/lib/services/care-plans')
-    
-    // Authoritative current pricing lookup
-    const currentPricing = await carePricingService.lookupPrice({
-      planSlug: currentSub.carePlan.slug,
-      variantType: (currentSub.variantType as "SINGLE" | "COUPLE") || "SINGLE",
-      months: currentSub.durationMonths || 1
-    })
-    
-    // Authoritative target pricing lookup
-    const targetPlan = await db.carePlan.findUnique({ where: { id: request.carePlanId } })
-    if (!targetPlan) throw new Error("Target plan no longer exists")
-
-    const targetPricing = await carePricingService.lookupPrice({
-      planSlug: targetPlan.slug,
-      variantType: (request.variantType as "SINGLE" | "COUPLE") || "SINGLE",
-      months: request.durationMonths || 1
-    })
-    
-    const targetTotal = targetPricing.documentedTotal
-    const currentTotal = currentPricing.documentedTotal
-    
-    const diff = targetTotal - currentTotal
-    if (diff < 0) {
-      throw new Error("Mid-cycle downgrade is not allowed.")
-    }
-    
-    customPrice = diff
+  if (request.status !== "PAID_PENDING_APPROVAL") {
+    throw new Error("Can only approve PAID_PENDING_APPROVAL requests")
   }
 
-  // Transition RenewalRequest to APPROVED
-  await db.renewalRequest.update({
-    where: { id: requestId },
-    data: { 
-      status: "APPROVED",
-      ...(customPrice !== undefined && { customPrice })
-    }
-  })
+  const now = new Date()
 
-  await logAudit(adminId, "RENEWAL_APPROVED", "RenewalRequest", requestId, { 
-    planName: request.planName, 
-    variant: request.variantType 
+  await db.$transaction(async (tx) => {
+    // 1. Create the subscription
+    const isFuture = request.requestedStartDate > now
+    const newSubscription = await tx.subscription.create({
+      data: {
+        userId: request.userId,
+        carePlanId: request.carePlanId,
+        variantType: request.variantType,
+        durationMonths: request.durationMonths,
+        startDate: request.requestedStartDate,
+        endDate: request.calculatedEndDate,
+        status: isFuture ? "SCHEDULED" : "ACTIVE",
+      }
+    })
+
+    // 2. Add Add-ons
+    if (request.addOns.length > 0) {
+      await tx.subscriptionAddOn.createMany({
+        data: request.addOns.map(addon => ({
+          subscriptionId: newSubscription.id,
+          addOnId: addon.addOnId
+        }))
+      })
+    }
+
+    // 3. Update current subscription if replacing mid-cycle
+    if (request.currentSubscriptionId && !isFuture) {
+      await tx.subscription.update({
+        where: { id: request.currentSubscriptionId },
+        data: {
+          status: "EXPIRED",
+          endDate: now
+        }
+      })
+    }
+
+    // 4. Mark request as APPROVED
+    await tx.renewalRequest.update({
+      where: { id: requestId },
+      data: { status: "APPROVED" }
+    })
+
+    await logAudit(adminId, "RENEWAL_APPROVED", "RenewalRequest", requestId, { 
+      planName: request.planName, 
+      variant: request.variantType,
+      subscriptionId: newSubscription.id
+    })
   })
   
   revalidatePath('/admin/renewals')
+  
+  // Send activation email
   notificationService.onRenewalApproved(request).catch(() => {})
 }
 
@@ -282,14 +282,22 @@ export async function rejectRenewalRequest(requestId: string) {
 
   const request = await db.renewalRequest.findUnique({ where: { id: requestId } })
   if (!request) throw new Error("Renewal request not found")
-  if (request.status !== "SUBMITTED") throw new Error("Can only reject SUBMITTED requests")
+  
+  if (request.status === "PAID_PENDING_APPROVAL") {
+    await db.renewalRequest.update({
+      where: { id: requestId },
+      data: { status: "REJECTED_REFUND_DUE" }
+    })
+  } else if (request.status === "SUBMITTED" || request.status === "PENDING_PAYMENT") {
+    await db.renewalRequest.update({
+      where: { id: requestId },
+      data: { status: "REJECTED" }
+    })
+  } else {
+    throw new Error("Can only reject pending requests")
+  }
 
-  await db.renewalRequest.update({
-    where: { id: requestId },
-    data: { status: "REJECTED" }
-  })
-
-  await logAudit(adminId, "RENEWAL_REJECTED", "RenewalRequest", requestId)
+  await logAudit(adminId, "RENEWAL_REJECTED", "RenewalRequest", requestId, { finalStatus: request.status === "PAID_PENDING_APPROVAL" ? "REJECTED_REFUND_DUE" : "REJECTED" })
   
   revalidatePath('/admin/renewals')
   notificationService.onRenewalRejected(request).catch(() => {})

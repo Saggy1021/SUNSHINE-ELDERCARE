@@ -75,9 +75,14 @@ export class InvoiceService {
     userId: string,
     pricing: CarePlanLookupResult,
     tax: CarePlanTaxResult,
-    idempotencyKey?: string | null
+    idempotencyKey?: string | null,
+    addOns: { id: string, name: string, price: number }[] = []
   ) {
     const maxRetries = 3;
+    
+    // Calculate total including add-ons
+    const addOnsTotal = addOns.reduce((sum, a) => sum + a.price, 0);
+    const finalTotal = new Prisma.Decimal(tax.total + addOnsTotal);
     
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
@@ -91,25 +96,37 @@ export class InvoiceService {
             idempotencyKey: idempotencyKey || null,
             subtotal: tax.subtotal !== null ? new Prisma.Decimal(tax.subtotal) : null,
             taxAmount: tax.taxAmount !== null ? new Prisma.Decimal(tax.taxAmount) : null,
-            total: new Prisma.Decimal(tax.total),
+            total: finalTotal,
             currency: 'INR',
             status: 'DRAFT',
             paymentStatus: 'UNPAID',
             lineItems: {
-              create: [{
-                description: `${pricing.planName} - ${pricing.variantType} (${pricing.months} Month${pricing.months > 1 ? 's' : ''})`,
-                planName: pricing.planName,
-                variantType: pricing.variantType,
-                durationMonths: pricing.months,
-                discountNote: pricing.discountNote,
-                quantity: 1,
-                unitPrice: new Prisma.Decimal(tax.subtotal ?? tax.total),
-                discount: new Prisma.Decimal(0),
-                taxClassification: 'CARE_PLAN_GST',
-                taxRateApplied: tax.taxRateApplied !== null ? new Prisma.Decimal(tax.taxRateApplied) : new Prisma.Decimal(0),
-                taxAmount: tax.taxAmount !== null ? new Prisma.Decimal(tax.taxAmount) : null,
-                lineTotal: new Prisma.Decimal(tax.total)
-              }]
+              create: [
+                {
+                  description: `${pricing.planName} - ${pricing.variantType} (${pricing.months} Month${pricing.months > 1 ? 's' : ''})`,
+                  planName: pricing.planName,
+                  variantType: pricing.variantType,
+                  durationMonths: pricing.months,
+                  discountNote: pricing.discountNote,
+                  quantity: 1,
+                  unitPrice: new Prisma.Decimal(tax.subtotal ?? tax.total),
+                  discount: new Prisma.Decimal(0),
+                  taxClassification: 'CARE_PLAN_GST',
+                  taxRateApplied: tax.taxRateApplied !== null ? new Prisma.Decimal(tax.taxRateApplied) : new Prisma.Decimal(0),
+                  taxAmount: tax.taxAmount !== null ? new Prisma.Decimal(tax.taxAmount) : null,
+                  lineTotal: new Prisma.Decimal(tax.total)
+                },
+                ...addOns.map(a => ({
+                  description: `Add-on: ${a.name}`,
+                  quantity: 1,
+                  unitPrice: new Prisma.Decimal(a.price),
+                  discount: new Prisma.Decimal(0),
+                  taxClassification: 'ADDON_GST',
+                  taxRateApplied: new Prisma.Decimal(0), // Simplified; assumes inclusive
+                  taxAmount: new Prisma.Decimal(0),
+                  lineTotal: new Prisma.Decimal(a.price)
+                }))
+              ]
             }
           },
           include: {

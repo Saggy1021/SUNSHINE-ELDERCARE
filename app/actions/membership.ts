@@ -4,6 +4,8 @@ import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { calculateEndDate } from "@/lib/services/dates"
 import { carePricingService } from "@/lib/services/care-plans"
+import { taxService } from "@/lib/services/tax"
+import { invoiceService } from "@/lib/services/invoice"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { notificationService } from "@/lib/services/notification"
@@ -148,6 +150,9 @@ export async function submitRenewalRequest(formData: FormData) {
 
   // Start Transaction
   let createdRequest: any = null
+  // Get addOn details for invoice
+  let addOnsDetails: { id: string, name: string, price: number }[] = []
+  
   await db.$transaction(async (tx) => {
     createdRequest = await tx.renewalRequest.create({
       data: {
@@ -158,7 +163,7 @@ export async function submitRenewalRequest(formData: FormData) {
         durationMonths,
         requestedStartDate,
         calculatedEndDate,
-        status: "SUBMITTED",
+        status: "PENDING_PAYMENT",
         requestType,
         planName: carePlan.name,
         documentedTotal: pricingTotal.documentedTotal
@@ -169,6 +174,8 @@ export async function submitRenewalRequest(formData: FormData) {
       const dbAddOns = await tx.addOn.findMany({ where: { id: { in: addOnIds } } })
       if (dbAddOns.length !== addOnIds.length) throw new Error("Invalid Add-ons")
       
+      addOnsDetails = dbAddOns.map(a => ({ id: a.id, name: a.name, price: a.price }))
+      
       await tx.renewalRequestAddOn.createMany({
         data: dbAddOns.map(a => ({
           renewalRequestId: createdRequest.id,
@@ -178,12 +185,17 @@ export async function submitRenewalRequest(formData: FormData) {
     }
   })
 
-  // Fire notification AFTER transaction succeeds
-  if (createdRequest) {
-    notificationService.onRenewalSubmitted(createdRequest).catch(() => {})
-  }
+  // Calculate tax and create invoice with authoritative pricing
+  const taxResult = await taxService.calculateCarePlanTax(pricingTotal)
+  const invoice = await invoiceService.createCarePlanInvoice(
+    session.user.id,
+    pricingTotal,
+    taxResult,
+    createdRequest.id,
+    addOnsDetails
+  )
 
-  redirect('/dashboard?renewal=success')
+  redirect(`/checkout/${invoice.id}?renewal=${createdRequest.id}`)
 }
 
 export async function getPlaceHolderAddOns() {
@@ -210,7 +222,7 @@ export async function getUserRenewalState() {
   const pendingRenewal = await db.renewalRequest.findFirst({
     where: { 
       userId: session.user.id,
-      status: { in: ['SUBMITTED', 'APPROVED'] }
+      status: { in: ['SUBMITTED', 'APPROVED', 'PENDING_PAYMENT', 'PAID_PENDING_APPROVAL', 'REJECTED_REFUND_DUE'] }
     },
     orderBy: { createdAt: 'desc' }
   })
