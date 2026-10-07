@@ -52,9 +52,8 @@ export class PaymentService {
         this.adapter = new MockPaymentAdapter();
         break;
       case 'razorpay':
-        // this.adapter = new RazorpayAdapter();
-        console.warn('Razorpay adapter not fully implemented yet, falling back to mock');
-        this.adapter = new MockPaymentAdapter();
+        const { RazorpayPaymentAdapter } = require('@/lib/services/payment/razorpay-adapter');
+        this.adapter = new RazorpayPaymentAdapter();
         break;
       case 'mock':
       default:
@@ -177,8 +176,199 @@ export async function submitOfflinePayment(
   return payment
 }
 
+export async function systemVerifyPayment(paymentId: string, paymentReference: string) {
+  const payment = await db.payment.findUnique({ 
+    where: { id: paymentId },
+    include: { 
+      invoice: true, 
+      renewalRequest: { include: { addOns: true, carePlan: true } },
+      user: { include: { memberProfile: true } }
+    }
+  })
+  
+  if (!payment) throw new Error("Payment not found")
+  if (payment.status === "VERIFIED") return payment
+  if (!payment.invoice) throw new Error("Incomplete payment references")
+
+  const { invoice, renewalRequest } = payment
+  let createdReceipt: any = null;
+
+  await db.$transaction(async (tx) => {
+    const updateResult = await tx.payment.updateMany({
+      where: { id: paymentId, status: { in: ["PENDING", "VERIFICATION_PENDING"] } },
+      data: {
+        status: "VERIFIED",
+        verifiedAt: new Date(),
+        reference: paymentReference
+      }
+    })
+
+    if (updateResult.count === 0) {
+      throw new Error("Payment could not be verified. It may have already been processed.")
+    }
+
+    const now = new Date()
+    let officialInvoiceNumber = invoice.invoiceNumber
+    if (!officialInvoiceNumber) {
+      officialInvoiceNumber = await DocumentSequenceService.generateInvoiceNumber(now, tx)
+    }
+
+    const customerName = payment.user.name || "Member"
+    const customerEmail = payment.user.email
+    const customerAddress = payment.user.memberProfile?.serviceAddress || ""
+    const customerPhone = payment.user.memberProfile?.mobileNumber || ""
+
+    await tx.invoice.update({
+      where: { id: invoice.id },
+      data: {
+        status: "ISSUED",
+        paymentStatus: "PAID",
+        paidDate: now,
+        issueDate: invoice.status === "DRAFT" ? now : invoice.issueDate,
+        invoiceNumber: officialInvoiceNumber,
+        customerName: invoice.customerName || customerName,
+        customerEmail: invoice.customerEmail || customerEmail,
+        customerAddress: invoice.customerAddress || customerAddress,
+        customerPhone: invoice.customerPhone || customerPhone,
+      }
+    })
+
+    const receiptNumber = await DocumentSequenceService.generateReceiptNumber(now, tx)
+    createdReceipt = await tx.receipt.create({
+      data: {
+        receiptNumber,
+        invoiceId: invoice.id,
+        paymentId: payment.id,
+        userId: payment.userId,
+        customerName,
+        customerEmail,
+        customerAddress,
+        amount: payment.amount,
+        currency: payment.currency,
+        paymentMethod: payment.paymentMethod,
+        paymentReference: paymentReference,
+        paymentDate: now,
+        relatedPlanName: renewalRequest?.carePlan?.name || "Membership Plan"
+      }
+    })
+
+    if (renewalRequest) {
+      const isFuture = renewalRequest.requestedStartDate > now
+      
+      const newSubscription = await tx.subscription.create({
+        data: {
+          userId: renewalRequest.userId,
+          carePlanId: renewalRequest.carePlanId,
+          variantType: renewalRequest.variantType,
+          durationMonths: renewalRequest.durationMonths,
+          startDate: renewalRequest.requestedStartDate,
+          endDate: renewalRequest.calculatedEndDate,
+          status: isFuture ? "SCHEDULED" : "ACTIVE",
+        }
+      })
+
+      if (renewalRequest.addOns.length > 0) {
+        await tx.subscriptionAddOn.createMany({
+          data: renewalRequest.addOns.map(addon => ({
+            subscriptionId: newSubscription.id,
+            addOnId: addon.addOnId
+          }))
+        })
+      }
+
+      if (renewalRequest.currentSubscriptionId && !isFuture) {
+        await tx.subscription.update({
+          where: { id: renewalRequest.currentSubscriptionId },
+          data: {
+            status: "EXPIRED",
+            endDate: now
+          }
+        })
+      }
+
+      await tx.renewalRequest.update({
+        where: { id: renewalRequest.id },
+        data: { status: "COMPLETED" } 
+      })
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: payment.userId,
+          action: "ONLINE_PAYMENT_VERIFIED",
+          entityType: "Payment",
+          entityId: payment.id,
+          metadata: { invoiceId: invoice.id, subscriptionId: newSubscription.id }
+        }
+      })
+    } else {
+      await tx.auditLog.create({
+        data: {
+          actorUserId: payment.userId,
+          action: "ONLINE_PAYMENT_VERIFIED",
+          entityType: "Payment",
+          entityId: payment.id,
+          metadata: { invoiceId: invoice.id }
+        }
+      })
+    }
+  })
+
+  if (createdReceipt) {
+    try {
+      const { ReceiptDocumentService } = await import('@/lib/services/receipt-document');
+      const { storageService } = await import('@/lib/services/storage');
+      
+      const pdfBytes = await ReceiptDocumentService.generateReceiptPdf(createdReceipt.id);
+      
+      const fileKey = await storageService.upload(Buffer.from(pdfBytes), {
+        fileName: `${createdReceipt.receiptNumber.replace(/\//g, '-')}.pdf`,
+        mimeType: 'application/pdf',
+        userId: payment.userId,
+        documentType: 'RECEIPT'
+      });
+
+      await db.memberDocument.create({
+        data: {
+          userId: payment.userId,
+          documentType: 'RECEIPT',
+          displayName: `Receipt ${createdReceipt.receiptNumber}`,
+          storageKey: fileKey,
+          mimeType: 'application/pdf',
+          sizeBytes: pdfBytes.length,
+          receiptId: createdReceipt.id,
+          storageProvider: process.env.STORAGE_PROVIDER === 'r2' ? 'R2' : 'LOCAL'
+        }
+      });
+      console.log(`[Receipt] PDF generated and uploaded to R2 for ${createdReceipt.receiptNumber}`);
+    } catch (err) {
+      console.error(`[Receipt] Failed to generate/upload receipt PDF for ${createdReceipt.id}:`, err);
+    }
+  }
+
+  const newSub = renewalRequest ? await db.subscription.findFirst({
+    where: { userId: payment.userId },
+    include: { addOns: { include: { addOn: true } } },
+    orderBy: { createdAt: 'desc' }
+  }) : null;
+
+  if (newSub) {
+    notificationService.onPaymentVerified(payment, {
+      status: newSub.status,
+      startDate: newSub.startDate,
+      endDate: newSub.endDate,
+      carePlanId: newSub.carePlanId,
+      variantType: newSub.variantType,
+      durationMonths: newSub.durationMonths,
+      addOns: newSub.addOns,
+    }).catch(() => {})
+  } else {
+    notificationService.onPaymentVerified(payment, null).catch(() => {})
+  }
+
+  return payment;
+}
+
 export async function adminVerifyPayment(paymentId: string, adminUserId: string) {
-  // 1. Fetch payment and relations
   const payment = await db.payment.findUnique({ 
     where: { id: paymentId },
     include: { 
@@ -193,11 +383,9 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
   if (!payment.invoice || !payment.renewalRequest) throw new Error("Incomplete payment references")
 
   const { invoice, renewalRequest } = payment
+  let createdReceipt: any = null;
 
-  // 2. Perform Transactional settlement
   await db.$transaction(async (tx) => {
-    
-    // A. Mark Payment Verified (Atomic concurrency check)
     const updateResult = await tx.payment.updateMany({
       where: { id: paymentId, status: "VERIFICATION_PENDING" },
       data: {
@@ -211,9 +399,7 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
       throw new Error("Payment could not be verified. It may have already been processed.")
     }
 
-    // B. Finalize Invoice (Snapshot and Numbering)
     const now = new Date()
-    
     let officialInvoiceNumber = invoice.invoiceNumber
     if (!officialInvoiceNumber) {
       officialInvoiceNumber = await DocumentSequenceService.generateInvoiceNumber(now, tx)
@@ -227,7 +413,7 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
     await tx.invoice.update({
       where: { id: invoice.id },
       data: {
-        status: "ISSUED", // Automatically issue the invoice upon payment verification if not already issued
+        status: "ISSUED",
         paymentStatus: "PAID",
         paidDate: now,
         issueDate: invoice.status === "DRAFT" ? now : invoice.issueDate,
@@ -239,9 +425,8 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
       }
     })
 
-    // B2. Create Receipt
     const receiptNumber = await DocumentSequenceService.generateReceiptNumber(now, tx)
-    await tx.receipt.create({
+    createdReceipt = await tx.receipt.create({
       data: {
         receiptNumber,
         invoiceId: invoice.id,
@@ -259,10 +444,7 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
       }
     })
 
-    // C. Handle Subscription Lifecycle Transition
     const isFuture = renewalRequest.requestedStartDate > now
-    
-    // We create a new Subscription record to cleanly separate historical from new memberships
     const newSubscription = await tx.subscription.create({
       data: {
         userId: renewalRequest.userId,
@@ -284,7 +466,6 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
       })
     }
 
-    // C2. Expire old subscription to prevent overlapping active memberships
     if (renewalRequest.currentSubscriptionId && !isFuture) {
       await tx.subscription.update({
         where: { id: renewalRequest.currentSubscriptionId },
@@ -295,13 +476,11 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
       })
     }
 
-    // D. Finalize Renewal Request
     await tx.renewalRequest.update({
       where: { id: renewalRequest.id },
       data: { status: "COMPLETED" } 
     })
 
-    // E. Create Audit Log
     await tx.auditLog.create({
       data: {
         actorUserId: adminUserId,
@@ -313,8 +492,38 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
     })
   })
 
-  // Fire notifications AFTER successful transaction — never inside $transaction
-  // Re-fetch the created subscription for notification context
+  if (createdReceipt) {
+    try {
+      const { ReceiptDocumentService } = await import('@/lib/services/receipt-document');
+      const { storageService } = await import('@/lib/services/storage');
+      
+      const pdfBytes = await ReceiptDocumentService.generateReceiptPdf(createdReceipt.id);
+      
+      const fileKey = await storageService.upload(Buffer.from(pdfBytes), {
+        fileName: `${createdReceipt.receiptNumber.replace(/\//g, '-')}.pdf`,
+        mimeType: 'application/pdf',
+        userId: payment.userId,
+        documentType: 'RECEIPT'
+      });
+
+      await db.memberDocument.create({
+        data: {
+          userId: payment.userId,
+          documentType: 'RECEIPT',
+          displayName: `Receipt ${createdReceipt.receiptNumber}`,
+          storageKey: fileKey,
+          mimeType: 'application/pdf',
+          sizeBytes: pdfBytes.length,
+          receiptId: createdReceipt.id,
+          storageProvider: process.env.STORAGE_PROVIDER === 'r2' ? 'R2' : 'LOCAL'
+        }
+      });
+      console.log(`[Receipt] PDF generated and uploaded to R2 for ${createdReceipt.receiptNumber}`);
+    } catch (err) {
+      console.error(`[Receipt] Failed to generate/upload receipt PDF for ${createdReceipt.id}:`, err);
+    }
+  }
+
   const newSub = await db.subscription.findFirst({
     where: { userId: renewalRequest.userId },
     include: { addOns: { include: { addOn: true } } },
@@ -332,6 +541,8 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
       addOns: newSub.addOns,
     }).catch(() => {})
   }
+
+  return payment;
 }
 
 export async function adminRejectPayment(paymentId: string, adminUserId: string, reason: string) {

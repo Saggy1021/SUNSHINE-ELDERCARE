@@ -521,7 +521,7 @@ model MemberProfile {
   // Section A: Member Details
   firstName       String
   lastName        String
-  idProofType     String? // e.g., Aadhar, PAN, Voter ID
+  idProofType     String? // e.g., PAN, Voter ID, Passport
   idProofNumber   String? // Sensitive
   dateOfBirth     DateTime?
   gender          String? // "Male", "Female", "Other"
