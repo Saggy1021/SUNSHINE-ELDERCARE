@@ -93,7 +93,7 @@ export function Hero() {
         <div className="max-w-xl text-left">
           <h1 className="flex flex-col font-display text-5xl font-bold text-primary drop-shadow-md sm:text-7xl lg:text-8xl">
             <span className="block text-primary">SUNSHINE</span>
-            <span className="block mt-2 text-3xl tracking-[0.2em] text-primary/90 sm:text-4xl lg:text-5xl">ELDER CARE</span>
+            <span className="block mt-2 text-3xl tracking-[0.2em] text-primary/90 sm:text-4xl lg:text-5xl">ELDERCARE</span>
           </h1>
           <p className="mt-6 text-pretty font-serif text-xl italic leading-relaxed text-foreground/85 drop-shadow-sm sm:text-2xl">
             Compassionate care for your loved ones. We provide comprehensive, personalized care options to ensure the well-being, safety, and dignity of seniors.
