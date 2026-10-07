@@ -38,15 +38,12 @@ export function Footer({ settings }: { settings?: Record<string, string> }) {
   const name = settings?.['public_name'] || businessData.name;
   return (
     <footer className="relative overflow-hidden bg-brown text-ivory paper-texture">
-      {/* Lotus watermark */}
-      <Mandala className="pointer-events-none absolute -bottom-24 left-1/2 h-96 w-96 -translate-x-1/2 text-gold opacity-[0.06]" />
-
       <div className="relative mx-auto max-w-7xl px-5 py-16 sm:px-8">
         <div className="grid gap-12 lg:grid-cols-5">
           {/* Brand */}
           <div className="lg:col-span-2">
-            <div className="flex items-center gap-2.5">
-              <Lotus className="h-8 w-auto text-gold" />
+            <div className="flex items-center gap-3">
+              <img src="/images/emblem-transparent.png" alt="Sunshine Eldercare Logo" className="h-14 w-14 rounded-full object-cover shadow-sm bg-white" />
               <span className="font-display text-2xl font-bold tracking-[0.18em] text-ivory">
                 {name.toUpperCase()}
               </span>
