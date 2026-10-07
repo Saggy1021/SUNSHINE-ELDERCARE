@@ -309,7 +309,7 @@ export const notificationService = {
     variantType: string | null
     durationMonths: number | null
     addOns?: { addOn: { name: string } }[]
-  }) {
+  } | null) {
     const config = getEmailConfig()
     const user = await db.user.findUnique({ where: { id: payment.userId }, select: { name: true, email: true } })
     if (!user?.email) return
@@ -318,7 +318,7 @@ export const notificationService = {
       ? await db.invoice.findUnique({ where: { id: payment.invoiceId }, select: { invoiceNumber: true, referenceNumber: true } })
       : null
 
-    const carePlan = subscription.carePlanId
+    const carePlan = subscription?.carePlanId
       ? await db.carePlan.findUnique({ where: { id: subscription.carePlanId }, select: { name: true } })
       : null
 
@@ -330,19 +330,19 @@ export const notificationService = {
       amount: formatINR(payment.amount),
       invoiceNumber: invoice?.invoiceNumber || invoice?.referenceNumber || 'N/A',
       paymentMethod: payment.paymentMethod,
-      membershipStatus: subscription.status,
+      membershipStatus: subscription?.status || 'N/A',
       planName,
-      startDate: subscription.startDate ? formatDate(subscription.startDate) : 'N/A',
-      endDate: subscription.endDate ? formatDate(subscription.endDate) : 'N/A',
+      startDate: subscription?.startDate ? formatDate(subscription.startDate) : 'N/A',
+      endDate: subscription?.endDate ? formatDate(subscription.endDate) : 'N/A',
       dashboardUrl: `${config.appBaseUrl}/dashboard`,
     })
 
     await safeSend('PAYMENT_VERIFIED', 'Payment', payment.id, user.email, verifiedTemplate)
 
     // Membership activation/scheduled email
-    const addOnNames = subscription.addOns?.map(a => a.addOn.name) || []
+    const addOnNames = subscription?.addOns?.map(a => a.addOn.name) || []
 
-    if (subscription.status === 'ACTIVE') {
+    if (subscription?.status === 'ACTIVE') {
       const activatedTemplate = await templateService.getTemplateContent('MEMBERSHIP_ACTIVATED', {
         memberName: user.name || 'Member',
         planName,
@@ -354,7 +354,7 @@ export const notificationService = {
         dashboardUrl: `${config.appBaseUrl}/dashboard`,
       })
       await safeSend('MEMBERSHIP_ACTIVATED', 'Subscription', payment.id, user.email, activatedTemplate)
-    } else if (subscription.status === 'SCHEDULED') {
+    } else if (subscription?.status === 'SCHEDULED') {
       const scheduledTemplate = await templateService.getTemplateContent('MEMBERSHIP_SCHEDULED', {
         memberName: user.name || 'Member',
         planName,
