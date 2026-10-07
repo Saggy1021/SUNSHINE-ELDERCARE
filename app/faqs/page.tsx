@@ -1,4 +1,4 @@
-import { PhilosophyLibrary } from "@/components/yoga/philosophy-library"
+import { FaqList } from "@/components/yoga/faq-list"
 import { Metadata } from "next"
 import { CmsService } from "@/lib/services/cms"
 
@@ -16,8 +16,8 @@ export default async function FAQsPage() {
   const faqs = await CmsService.getFaqs();
   
   return (
-    <main className="relative overflow-x-clip min-h-screen pt-24">
-      <PhilosophyLibrary faqs={faqs} />
+    <main className="relative overflow-x-clip">
+      <FaqList faqs={faqs} />
     </main>
   )
 }
