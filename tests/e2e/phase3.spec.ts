@@ -22,8 +22,8 @@ test.describe('Phase 3 Focused Tests', () => {
       await searchInput.fill('xyz123nonexistent');
       await expect(page.locator('text=No members found')).toBeVisible({ timeout: 10000 });
 
-      await searchInput.fill('Searchable Test Member');
-      await expect(page.locator('text=Searchable Test Member')).toBeVisible();
+      await searchInput.fill('userA@test.com');
+      await expect(page.locator('text=userA@test.com')).toBeVisible();
     });
   });
 

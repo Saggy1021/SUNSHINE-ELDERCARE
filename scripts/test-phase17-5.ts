@@ -96,30 +96,33 @@ async function runTests() {
 
   const allOwners = await prisma.user.findMany({ where: { userRoles: { some: { roleId: ownerRole!.id } }, status: 'ACTIVE' } });
   const temporarilyDeactivated: string[] = [];
-  for (const o of allOwners) {
-    if (o.id !== owner.id) {
-      await AdminUserService.setAdminStatus(owner.id, o.id, 'INACTIVE');
-      temporarilyDeactivated.push(o.id);
+  try {
+    for (const o of allOwners) {
+      if (o.id !== owner.id) {
+        await AdminUserService.setAdminStatus(owner.id, o.id, 'INACTIVE');
+        temporarilyDeactivated.push(o.id);
+      }
     }
-  }
 
-  // Last owner protection
-  try {
-    await AdminUserService.setAdminStatus(owner.id, owner.id, 'INACTIVE');
-    console.error('[FAIL] Last owner was able to deactivate themselves!');
-  } catch (e: any) {
-    console.log(`[PASS] Last Owner Protection: Blocked deactivation. (${e.message})`);
-  }
+    // Last owner protection
+    try {
+      await AdminUserService.setAdminStatus(owner.id, owner.id, 'INACTIVE');
+      console.error('[FAIL] Last owner was able to deactivate themselves!');
+    } catch (e: any) {
+      console.log(`[PASS] Last Owner Protection: Blocked deactivation. (${e.message})`);
+    }
 
-  try {
-    await AdminUserService.updateAdminUser(owner.id, owner.id, [newRole!.id], null);
-    console.error('[FAIL] Last owner was able to remove their owner role!');
-  } catch (e: any) {
-    console.log(`[PASS] Last Owner Protection: Blocked removing owner role. (${e.message})`);
-  }
-
-  for (const id of temporarilyDeactivated) {
-    await prisma.user.update({ where: { id }, data: { status: 'ACTIVE' } });
+    try {
+      await AdminUserService.updateAdminUser(owner.id, owner.id, [newRole!.id], null);
+      console.error('[FAIL] Last owner was able to remove their owner role!');
+    } catch (e: any) {
+      console.log(`[PASS] Last Owner Protection: Blocked removing owner role. (${e.message})`);
+    }
+  } finally {
+    // Reactivate any owners we temporarily disabled so subsequent tests aren't broken
+    for (const id of temporarilyDeactivated) {
+      await prisma.user.update({ where: { id }, data: { status: 'ACTIVE' } });
+    }
   }
 
   console.log('\nAll tests completed.');
