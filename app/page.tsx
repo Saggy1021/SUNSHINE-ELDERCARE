@@ -7,18 +7,10 @@ import { MedicalNetwork } from "@/components/yoga/medical-network"
 import { CaregiverNetwork } from "@/components/yoga/caregiver-network"
 import { EmergencyAssistance } from "@/components/yoga/emergency-assistance"
 import { CarePlansSection } from "@/components/yoga/care-plans-section"
-import { Testimonials } from "@/components/yoga/testimonials"
-import { PhilosophyLibrary } from "@/components/yoga/philosophy-library"
 import { ContactCommunity } from "@/components/yoga/contact-community"
-import { CmsService } from "@/lib/services/cms"
+import { TestimonialsSection, FaqsSection } from "@/components/yoga/cms-sections"
 
-
-export default async function Page() {
-  const [testimonials, faqs] = await Promise.all([
-    CmsService.getTestimonials(),
-    CmsService.getFaqs()
-  ]);
-
+export default function Page() {
   return (
     <main className="relative overflow-x-clip min-h-screen">
       {/* 1. Brand / Hero */}
@@ -49,10 +41,10 @@ export default async function Page() {
       <CarePlansSection />
       
       {/* 10. Moments of Care / Testimonials */}
-      <Testimonials testimonials={testimonials} />
+      <TestimonialsSection />
       
       {/* 11. FAQs */}
-      <PhilosophyLibrary faqs={faqs} />
+      <FaqsSection />
       
       {/* 12. Contact */}
       <ContactCommunity />

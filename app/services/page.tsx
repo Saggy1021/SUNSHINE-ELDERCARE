@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default function ServicesPage() {
   return (
     <main className="relative overflow-x-clip min-h-screen pt-24">
-      <PracticeCollection />
+      <PracticeCollection hideCta={true} />
       <MedicalNetwork />
       <CaregiverNetwork />
       <EmergencyAssistance />

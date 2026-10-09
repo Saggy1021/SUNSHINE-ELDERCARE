@@ -8,7 +8,7 @@ import bcrypt from "bcryptjs"
 const DUMMY_HASH = "$2a$10$w8uQe0bY8R4uU9m4F9w/u.bM/zHwS0E5V1q7xH0O9A3zX1sXwO0cK";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PrismaAdapter(db),
+  adapter: PrismaAdapter(db) as any,
   session: { strategy: "jwt" },
   providers: [
     CredentialsProvider({

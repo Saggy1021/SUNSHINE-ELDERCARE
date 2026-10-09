@@ -58,3 +58,11 @@ export async function getPendingPayments() {
     orderBy: { createdAt: 'desc' }
   })
 }
+
+export async function getPaymentById(id: string) {
+  const session = await auth()
+  if (!session?.user?.id) throw new Error("Unauthorized")
+  const authorized = await AuthorizationService.can(session.user.id, PERMISSIONS.PAYMENT_VIEW)
+  if (!authorized) throw new Error("Forbidden")
+  return await db.payment.findUnique({ where: { id }, include: { user: { include: { memberProfile: true } }, invoice: true, renewalRequest: { include: { carePlan: true } }, verifiedBy: true } })
+}

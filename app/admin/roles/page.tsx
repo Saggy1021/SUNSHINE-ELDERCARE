@@ -10,8 +10,8 @@ export const metadata = {
 
 export default async function RolesPage() {
   const user = await requireAuth();
-  const isOwner = await AuthorizationService.isOwner(user.id);
-  if (!isOwner) {
+  const canManage = await AuthorizationService.can(user.id, 'ROLE_MANAGE');
+  if (!canManage) {
     redirect("/admin");
   }
 

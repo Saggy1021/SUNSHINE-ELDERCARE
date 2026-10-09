@@ -18,9 +18,9 @@ test.describe('Email Verification OTP', () => {
     await page.fill('input[name="idProofNumber"]', 'ABCDE1234F');
     // Upload a mock file
     await page.setInputFiles('input[name="idProofFile"]', {
-      name: 'id.pdf',
-      mimeType: 'application/pdf',
-      buffer: Buffer.from('mock pdf content')
+      name: 'id.jpg',
+      mimeType: 'image/jpeg',
+      buffer: Buffer.from([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01])
     });
     await page.fill('input[name="dateOfBirth"]', '1990-01-01');
     await page.selectOption('select[name="gender"]', 'Male');
@@ -35,6 +35,11 @@ test.describe('Email Verification OTP', () => {
     await page.check('input[type="checkbox"]');
     
     await page.click('button[type="submit"]');
+
+    // Wait a bit for server action
+    await page.waitForTimeout(2000);
+    const errorMsg = await page.locator('.text-red-600').first().textContent().catch(() => null);
+    if (errorMsg) console.log('Signup Error:', errorMsg);
 
     // Should redirect to verify-email
     await expect(page).toHaveURL(/\/verify-email\?email=/);

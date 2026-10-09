@@ -18,7 +18,6 @@ export default async function ContentDashboard() {
     { title: "Website Pages", description: "Manage content for Home, About Us, Services, etc.", href: "/admin/content/pages", icon: FileText },
     { title: "FAQs", description: "Manage frequently asked questions", href: "/admin/content/faqs", icon: MessageCircle },
     { title: "Testimonials", description: "Manage client reviews and testimonials", href: "/admin/content/testimonials", icon: Star },
-    { title: "Public Employees", description: "Manage public profiles for employees", href: "/admin/content/employees", icon: Users },
     { title: "Settings", description: "Manage global website settings (contact info, footer)", href: "/admin/content/settings", icon: Settings },
   ];
 

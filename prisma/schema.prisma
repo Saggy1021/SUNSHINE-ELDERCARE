@@ -33,6 +33,7 @@ model User {
   renewalRequests  RenewalRequest[]
   payments         Payment[]
   verifiedPayments Payment[]         @relation("PaymentVerifiedBy")
+  sentInvitations  AdminInvitation[] @relation("InvitationsSent")
 
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -665,6 +666,22 @@ model UserRole {
   role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@id([userId, roleId])
+}
+
+model AdminInvitation {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  tokenHash String   @unique
+  roleIds   String   @db.Text
+  employeeId String?
+  status    String   @default("PENDING") // PENDING, ACCEPTED, REVOKED, EXPIRED
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invitedById String?
+  invitedBy User? @relation("InvitationsSent", fields: [invitedById], references: [id], onDelete: SetNull)
 }
 
 model CustomPlanAgreement {

@@ -34,8 +34,12 @@ export async function GET(
     }
 
     // Strict ownership check
-    if (invoice.userId !== session.user.id && session.user.role !== 'ADMIN') {
-      return new NextResponse('Forbidden', { status: 403 })
+    if (invoice.userId !== session.user.id) {
+      const { AuthorizationService } = await import('@/lib/services/authorization');
+      const canView = await AuthorizationService.can(session.user.id, 'PAYMENT_VIEW');
+      if (!canView) {
+        return new NextResponse('Forbidden', { status: 403 })
+      }
     }
 
     // Optional: Only allow download of PAID invoices? Or DRAFT/ISSUED is okay too?

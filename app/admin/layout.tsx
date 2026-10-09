@@ -43,16 +43,18 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     navItems.push({ name: "Documents", href: "/admin/documents", icon: ClipboardList });
   }
 
-  const isOwner = await AuthorizationService.isOwner(session.user.id);
-  if (isOwner) {
-    navItems.push(
-      { name: "Admin Users", href: "/admin/admin-users", icon: Users },
-      { name: "Roles", href: "/admin/roles", icon: Shield }
-    );
+  const hasAdminUserManage = await AuthorizationService.can(session.user.id, 'ADMIN_USER_MANAGE');
+  if (hasAdminUserManage) {
+    navItems.push({ name: "Admin Users", href: "/admin/admin-users", icon: Users });
+  }
+
+  const hasRoleManage = await AuthorizationService.can(session.user.id, 'ROLE_MANAGE');
+  if (hasRoleManage) {
+    navItems.push({ name: "Roles", href: "/admin/roles", icon: Shield });
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col md:flex-row">
+    <div className="min-h-screen bg-gray-100 flex flex-col md:flex-row pt-24">
       {/* Sidebar */}
       <aside className="w-full md:w-64 bg-slate-950 text-white flex-shrink-0">
         <div className="p-6">
@@ -77,7 +79,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-6 md:p-8 overflow-auto h-screen">
+      <main className="flex-1 p-6 md:p-8 overflow-auto h-[calc(100vh-6rem)]">
         <div className="max-w-7xl mx-auto space-y-8">
           {children}
         </div>

@@ -18,11 +18,11 @@ export function AboutSunshine() {
 
         <div className="mt-16 grid gap-12 lg:grid-cols-2 lg:gap-16 items-center">
           <Reveal className="relative">
-            <div className="relative overflow-hidden rounded-[2rem] border border-gold/30 shadow-2xl">
+            <div className="group relative overflow-hidden rounded-[2rem] border border-gold/30 shadow-2xl">
               <img
                 src="/images/about-sunshine.jpg"
                 alt="Happy senior with a caregiver"
-                className="aspect-[4/3] w-full object-cover"
+                className="aspect-[4/3] w-full object-cover transition-transform duration-700 group-hover:scale-105"
 
               />
               <div className="absolute inset-0 bg-gradient-to-t from-brown/50 to-transparent" />
@@ -45,21 +45,21 @@ export function AboutSunshine() {
             </div>
 
             <div className="mt-8 grid gap-4 sm:grid-cols-2">
-              <div className="flex items-start gap-3 rounded-xl border border-gold/20 bg-secondary/20 p-4">
+              <div className="flex items-start gap-3 rounded-xl border border-gold/20 bg-secondary/20 p-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-md hover:bg-gold/5">
                 <ShieldCheck className="size-6 text-gold shrink-0" />
                 <div>
                   <h4 className="font-bold font-display text-sm">Family Reassurance</h4>
                   <p className="mt-1 text-xs text-muted-foreground">Complete transparency and continuous communication.</p>
                 </div>
               </div>
-              <div className="flex items-start gap-3 rounded-xl border border-gold/20 bg-secondary/20 p-4">
+              <div className="flex items-start gap-3 rounded-xl border border-gold/20 bg-secondary/20 p-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-md hover:bg-gold/5">
                 <Heart className="size-6 text-gold shrink-0" />
                 <div>
                   <h4 className="font-bold font-display text-sm">Senior Dignity</h4>
                   <p className="mt-1 text-xs text-muted-foreground">Upholding independence and respect at all times.</p>
                 </div>
               </div>
-              <div className="flex items-start gap-3 rounded-xl border border-gold/20 bg-secondary/20 p-4 sm:col-span-2">
+              <div className="flex items-start gap-3 rounded-xl border border-gold/20 bg-secondary/20 p-4 sm:col-span-2 transition-all duration-300 hover:-translate-y-1 hover:shadow-md hover:bg-gold/5">
                 <MapPin className="size-6 text-gold shrink-0" />
                 <div>
                   <h4 className="font-bold font-display text-sm">Kolkata-Based</h4>

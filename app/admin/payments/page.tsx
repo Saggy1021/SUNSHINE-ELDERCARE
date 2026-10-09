@@ -65,7 +65,13 @@ export default async function AdminPaymentsPage() {
                   <td className="px-6 py-4 text-slate-500 text-xs">
                     {payment.createdAt.toLocaleDateString('en-GB')}
                   </td>
-                  <td className="px-6 py-4 flex justify-end">
+                  <td className="px-6 py-4 flex justify-end gap-2">
+                    <a
+                      href={`/admin/payments/${payment.id}`}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
+                    >
+                      View Details
+                    </a>
                     <PaymentVerificationActions paymentId={payment.id} />
                   </td>
                 </tr>

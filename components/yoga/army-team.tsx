@@ -28,7 +28,7 @@ export function ArmyTeam() {
 
           <div className="mt-8 flex flex-wrap gap-4">
             {['Discipline', 'Responsibility', 'Preparedness', 'Accountability', 'Service', 'Respect'].map((value) => (
-              <div key={value} className="flex items-center gap-2 rounded-full border border-gold/30 bg-secondary/30 px-4 py-2 text-sm font-medium text-primary">
+              <div key={value} className="flex items-center gap-2 rounded-full border border-gold/30 bg-secondary/30 px-4 py-2 text-sm font-medium text-primary transition-all duration-300 hover:-translate-y-0.5 hover:shadow-sm hover:bg-gold/10">
                 <ShieldCheck className="size-4 text-gold" />
                 {value}
               </div>
@@ -38,11 +38,11 @@ export function ArmyTeam() {
 
         {/* Image */}
         <Reveal delay={120} className="relative">
-          <div className="relative overflow-hidden rounded-[2rem] border border-gold/30 shadow-2xl">
+          <div className="group relative overflow-hidden rounded-[2rem] border border-gold/30 shadow-2xl">
             <img
               src="/images/army-team.jpg"
               alt="Retired Army personnel standing together"
-              className="aspect-[4/3] w-full object-cover"
+              className="aspect-[4/3] w-full object-cover transition-transform duration-700 group-hover:scale-105"
 
             />
             <div className="absolute inset-0 bg-gradient-to-t from-brown/50 to-transparent" />

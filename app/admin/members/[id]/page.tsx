@@ -3,8 +3,9 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, UserSquare2, Shield, ShieldAlert, CheckCircle2, Clock, CalendarDays, Receipt, FileText, ClipboardList, Activity } from "lucide-react"
 
-export default async function MemberDetailPage({ params }: { params: { id: string } }) {
-  const memberResult = await getMemberDetails(params.id)
+export default async function MemberDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const memberResult = await getMemberDetails(id)
   
   if (!memberResult) notFound()
   const member: any = memberResult;
@@ -286,9 +287,14 @@ export default async function MemberDetailPage({ params }: { params: { id: strin
                 ) : (
                   <div className="space-y-2">
                     {member.invoices.map((invoice: any) => (
-                      <div key={invoice.id} className="flex justify-between text-sm bg-slate-50 p-2 rounded border border-slate-100">
-                        <span className="font-mono text-slate-700 text-xs">{invoice.invoiceNumber}</span>
-                        <span className="text-slate-500 text-xs">{invoice.issueDate.toLocaleDateString('en-GB')}</span>
+                      <div key={invoice.id} className="flex justify-between items-center text-sm bg-slate-50 p-2 rounded border border-slate-100">
+                        <div>
+                          <span className="font-mono text-slate-700 text-xs">{invoice.invoiceNumber || invoice.referenceNumber}</span>
+                          <span className="text-slate-500 text-xs ml-2">{invoice.issueDate.toLocaleDateString('en-GB')}</span>
+                        </div>
+                        <a href={`/api/invoices/${invoice.id}/download`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-indigo-600 hover:text-indigo-800">
+                          Download
+                        </a>
                       </div>
                     ))}
                   </div>
@@ -305,6 +311,27 @@ export default async function MemberDetailPage({ params }: { params: { id: strin
                       <div key={receipt.id} className="flex justify-between text-sm bg-slate-50 p-2 rounded border border-slate-100">
                         <span className="font-mono text-slate-700 text-xs">{receipt.receiptNumber}</span>
                         <span className="text-slate-500 text-xs">₹{receipt.amount.toString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2"><FileText className="h-4 w-4" /> Documents</h3>
+                {member.ownedDocuments?.length === 0 ? (
+                  <p className="text-slate-500 text-xs">No documents found.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {member.ownedDocuments?.map((doc: any) => (
+                      <div key={doc.id} className="flex justify-between items-center text-sm bg-slate-50 p-2 rounded border border-slate-100">
+                        <div>
+                          <span className="font-medium text-slate-700 text-xs">{doc.displayName}</span>
+                          <span className="text-slate-500 text-[10px] ml-2 px-1.5 py-0.5 bg-slate-200 rounded">{doc.documentType}</span>
+                        </div>
+                        <a href={`/api/documents/download?docId=${doc.id}`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-indigo-600 hover:text-indigo-800">
+                          Download
+                        </a>
                       </div>
                     ))}
                   </div>

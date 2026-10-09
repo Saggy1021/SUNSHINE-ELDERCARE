@@ -68,10 +68,4 @@ export async function upsertSetting(key: string, value: string, description?: st
   return res;
 }
 
-export async function updateEmployeePublicProfile(id: string, data: any) {
-  const actor = await getActor();
-  const res = await CmsService.updateEmployeePublicProfile(actor, id, data);
-  revalidatePath('/about-us');
-  revalidatePath('/admin/content');
-  return res;
-}
+

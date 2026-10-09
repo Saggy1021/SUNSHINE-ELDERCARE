@@ -74,41 +74,46 @@ export async function getAdminDashboardMetrics() {
 export async function getNeedsAttentionQueue() {
   await requirePermission("MEMBER_VIEW")
 
-  const pendingRenewals = await db.renewalRequest.findMany({
-    where: { status: "SUBMITTED" },
-    include: { user: { select: { name: true, email: true } } },
-    orderBy: { createdAt: 'asc' },
-    take: 5
-  })
-
-  const newInquiries = await db.inquiry.findMany({
-    where: { status: "NEW" },
-    orderBy: { createdAt: 'desc' },
-    take: 5
-  })
-
-  const unresolvedFeedback = await db.feedback.findMany({
-    where: { status: { in: ["SUBMITTED", "UNDER_REVIEW"] } },
-    include: { user: { select: { name: true, email: true } } },
-    orderBy: { createdAt: 'desc' },
-    take: 5
-  })
-
-  const pendingPayments = await db.payment.findMany({
-    where: { status: "VERIFICATION_PENDING" },
-    include: { user: { select: { name: true, email: true } }, invoice: true },
-    orderBy: { createdAt: 'desc' },
-    take: 5
-  })
+  const [pendingRenewals, newInquiries, unresolvedFeedback, pendingPayments] = await Promise.all([
+    db.renewalRequest.findMany({
+      where: { status: "SUBMITTED" },
+      include: { user: { select: { name: true, email: true } } },
+      orderBy: { createdAt: 'asc' },
+      take: 5
+    }),
+    db.inquiry.findMany({
+      where: { status: "NEW" },
+      orderBy: { createdAt: 'desc' },
+      take: 5
+    }),
+    db.feedback.findMany({
+      where: { status: { in: ["SUBMITTED", "UNDER_REVIEW"] } },
+      include: { user: { select: { name: true, email: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 5
+    }),
+    db.payment.findMany({
+      where: { status: "VERIFICATION_PENDING" },
+      include: { user: { select: { name: true, email: true } }, invoice: true },
+      orderBy: { createdAt: 'desc' },
+      take: 5
+    })
+  ])
 
   return { pendingRenewals, newInquiries, unresolvedFeedback, pendingPayments }
 }
 
 // --- Members ---
-export async function getMembers() {
+export async function getMembers(query?: string) {
   await requirePermission("MEMBER_VIEW")
   
   return db.user.findMany({
+    where: query ? {
+      OR: [
+        { name: { contains: query, mode: 'insensitive' } },
+        { email: { contains: query, mode: 'insensitive' } }
+      ]
+    } : undefined,
     include: {
       subscriptions: {
         orderBy: { createdAt: 'desc' },
@@ -156,28 +161,33 @@ export async function getMemberDetails(userId: string) {
       },
       payments: {
         orderBy: { createdAt: 'desc' }
+      },
+      ownedDocuments: {
+        orderBy: { createdAt: 'desc' }
       }
     }
   })
 
-  let auditLogs: any[] = []
-  if (user) {
-    auditLogs = await db.auditLog.findMany({
-      where: {
-        OR: [
-          { actorUserId: userId },
-          { entityId: userId, entityType: 'USER' },
-          { entityId: user.memberProfile?.id, entityType: 'MEMBER_PROFILE' }
-        ]
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 20
-    })
+  if (!user) {
+    return null;
   }
 
-  if (user && !hasSensitiveView) {
+  let auditLogs: any[] = []
+  auditLogs = await db.auditLog.findMany({
+    where: {
+      OR: [
+        { actorUserId: userId },
+        { entityId: userId, entityType: 'USER' },
+        { entityId: user.memberProfile?.id || 'NO_ID', entityType: 'MEMBER_PROFILE' }
+      ]
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 20
+  })
+
+  if (!hasSensitiveView) {
     if (user.memberProfile) {
-      user.memberProfile.idProofNumber = null;
+      user.memberProfile.idProofNumber = null as any;
     }
     if (user.memberProfile?.insuranceDetails) {
       user.memberProfile.insuranceDetails.policyNumber = "HIDDEN";

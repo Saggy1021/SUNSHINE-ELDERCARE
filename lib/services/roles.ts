@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 
 export class RoleService {
   static async getRoles(actorUserId: string) {
-    await AuthorizationService.requireOwner(actorUserId);
+    await AuthorizationService.require(actorUserId, 'ROLE_MANAGE');
     return db.role.findMany({
       include: {
         _count: {
@@ -19,14 +19,14 @@ export class RoleService {
   }
 
   static async getPermissions(actorUserId: string) {
-    await AuthorizationService.requireOwner(actorUserId);
+    await AuthorizationService.require(actorUserId, 'ROLE_MANAGE');
     return db.permission.findMany({
       orderBy: { code: 'asc' }
     });
   }
 
   static async createRole(actorUserId: string, name: string, description: string, permissionCodes: string[]) {
-    await AuthorizationService.requireOwner(actorUserId);
+    await AuthorizationService.require(actorUserId, 'ROLE_MANAGE');
     
     // Find permission IDs
     const perms = await db.permission.findMany({
@@ -60,7 +60,7 @@ export class RoleService {
   }
 
   static async updateRole(actorUserId: string, roleId: string, description: string, permissionCodes: string[]) {
-    await AuthorizationService.requireOwner(actorUserId);
+    await AuthorizationService.require(actorUserId, 'ROLE_MANAGE');
 
     const role = await db.role.findUnique({ where: { id: roleId } });
     if (!role) throw new Error("Role not found");

@@ -53,15 +53,16 @@ async function main() {
     console.log('Creating new OWNER user...');
     const passwordHash = await bcrypt.hash(password, 10);
     
-    user = await prisma.user.create({
-      data: {
-        email,
-        name: 'Owner',
-        passwordHash,
-        role: 'ADMIN',
-        status: 'ACTIVE',
-      },
-    });
+      user = await prisma.user.create({
+        data: {
+          email,
+          name: 'Owner',
+          passwordHash,
+          role: 'ADMIN',
+          status: 'ACTIVE',
+          emailVerified: new Date(),
+        },
+      });
 
     await prisma.userRole.create({
       data: {

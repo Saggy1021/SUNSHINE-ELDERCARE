@@ -35,7 +35,7 @@ test.describe('Public Website Smoke Tests', () => {
 
   test('FAQs loads', async ({ page }) => {
     await page.goto('/faqs');
-    await expect(page.getByRole('heading', { level: 1, name: 'Frequently Asked Questions' }).first()).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Complete FAQs' }).first()).toBeVisible();
   });
 
   test('Contact page loads', async ({ page }) => {
@@ -45,7 +45,7 @@ test.describe('Public Website Smoke Tests', () => {
 
   test('Legal pages load', async ({ page }) => {
     await page.goto('/legal/privacy-policy');
-    await expect(page.locator('text=DRAFT FOR LAWYER REVIEW').first()).toBeVisible();
+    await expect(page.locator('text=Last Updated:').first()).toBeVisible();
   });
 
   test('Invalid route returns 404', async ({ page }) => {

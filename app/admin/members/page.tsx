@@ -1,9 +1,15 @@
 import { getMembers } from "@/app/actions/admin"
 import Link from "next/link"
 import { Users, Search, Shield, ChevronRight } from "lucide-react"
+import { MembersSearch } from "./members-search"
 
-export default async function AdminMembersPage() {
-  const members = await getMembers()
+export default async function AdminMembersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>
+}) {
+  const { q } = await searchParams;
+  const members = await getMembers(q)
 
   return (
     <div className="space-y-6">
@@ -24,15 +30,7 @@ export default async function AdminMembersPage() {
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex items-center gap-4 bg-slate-50">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="Search members... (static demo)" 
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              disabled
-            />
-          </div>
+          <MembersSearch />
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">

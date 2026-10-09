@@ -31,7 +31,7 @@ const coreServices = [
   },
 ]
 
-export function PracticeCollection() {
+export function PracticeCollection({ hideCta = false }: { hideCta?: boolean }) {
   return (
     <section className="relative overflow-hidden py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
@@ -64,15 +64,17 @@ export function PracticeCollection() {
           })}
         </div>
 
-        <Reveal className="mt-12 text-center">
-          <Link
-            href="/services"
-            className="inline-flex items-center gap-2 rounded-full border-2 border-primary px-6 py-3 text-sm font-medium text-primary transition-all duration-300 hover:bg-primary hover:text-primary-foreground hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98]"
-          >
-            Explore All Services
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </Reveal>
+        {!hideCta && (
+          <Reveal className="mt-12 text-center">
+            <Link
+              href="/services"
+              className="inline-flex items-center gap-2 rounded-full border-2 border-primary px-6 py-3 text-sm font-medium text-primary transition-all duration-300 hover:bg-primary hover:text-primary-foreground hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98]"
+            >
+              Explore All Services
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </Reveal>
+        )}
       </div>
     </section>
   )

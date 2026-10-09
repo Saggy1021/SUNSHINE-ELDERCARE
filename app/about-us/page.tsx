@@ -1,6 +1,5 @@
 import { AboutSunshine } from "@/components/yoga/about-sunshine"
 import { ArmyTeam } from "@/components/yoga/army-team"
-import { Gurus } from "@/components/yoga/gurus"
 import { Credentials } from "@/components/yoga/credentials"
 import { Metadata } from "next"
 import { CmsService } from "@/lib/services/cms"
@@ -18,13 +17,11 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function AboutUsPage() {
-  const employees = await CmsService.getPublicEmployees();
 
   return (
     <main className="relative overflow-x-clip min-h-screen pt-24">
       <AboutSunshine />
       <ArmyTeam />
-      <Gurus employees={employees} />
       <Credentials />
     </main>
   )
