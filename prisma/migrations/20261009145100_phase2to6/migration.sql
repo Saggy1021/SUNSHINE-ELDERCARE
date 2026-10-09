@@ -1,4 +1,4 @@
-﻿-- CreateTable
+-- CreateTable
 CREATE TABLE "AdminInvitation" (
     "id" TEXT NOT NULL,
     "email" TEXT NOT NULL,

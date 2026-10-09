@@ -1,8 +1,15 @@
-import { getAuditLogs } from "@/app/actions/admin"
-import { Shield } from "lucide-react"
 
-export default async function AdminAuditLogPage() {
-  const logs = await getAuditLogs()
+import { getAuditLogs } from "@/app/actions/admin"
+import { Shield, ChevronLeft, ChevronRight, Search } from "lucide-react"
+import Link from "next/link"
+
+export default async function AdminAuditLogPage({ searchParams }: { searchParams: { page?: string, action?: string, entityType?: string } }) {
+  const page = parseInt(searchParams.page || "1", 10)
+  const action = searchParams.action || undefined
+  const entityType = searchParams.entityType || undefined
+  const pageSize = 50
+
+  const { logs, total, pages } = await getAuditLogs({ page, pageSize, action, entityType })
 
   return (
     <div className="space-y-6">
@@ -11,8 +18,24 @@ export default async function AdminAuditLogPage() {
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
             <Shield className="h-6 w-6 text-slate-700" /> Audit Log
           </h1>
-          <p className="text-slate-600 mt-1">Immutable record of administrative operations.</p>
+          <p>Immutable record of administrative operations.</p>
         </div>
+      </div>
+
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <form className="flex flex-wrap gap-4 items-end">
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Action</label>
+            <input name="action" defaultValue={action} placeholder="e.g. ADMIN_USER_CREATED" className="border-slate-300 rounded-md shadow-sm sm:text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Entity Type</label>
+            <input name="entityType" defaultValue={entityType} placeholder="e.g. USER" className="border-slate-300 rounded-md shadow-sm sm:text-sm" />
+          </div>
+          <button type="submit" className="bg-slate-900 text-white px-4 py-2 rounded-md sm:text-sm flex items-center gap-2">
+            <Search className="w-4 h-4" /> Filter
+          </button>
+        </form>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -63,6 +86,32 @@ export default async function AdminAuditLogPage() {
           </table>
         </div>
       </div>
+
+      {pages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-slate-600">Showing page {page} of {pages} ({total} total)</p>
+          <div className="flex gap-2">
+            {page > 1 ? (
+              <Link href={`?page=${page - 1}${action ? '&action='+action : ''}${entityType ? '&entityType='+entityType : ''}`} className="px-3 py-1 bg-white border border-slate-300 rounded text-slate-700 hover:bg-slate-50 flex items-center">
+                <ChevronLeft className="w-4 h-4 mr-1" /> Prev
+              </Link>
+            ) : (
+              <button disabled className="px-3 py-1 bg-slate-50 border border-slate-200 rounded text-slate-400 flex items-center cursor-not-allowed">
+                <ChevronLeft className="w-4 h-4 mr-1" /> Prev
+              </button>
+            )}
+            {page < pages ? (
+              <Link href={`?page=${page + 1}${action ? '&action='+action : ''}${entityType ? '&entityType='+entityType : ''}`} className="px-3 py-1 bg-white border border-slate-300 rounded text-slate-700 hover:bg-slate-50 flex items-center">
+                Next <ChevronRight className="w-4 h-4 ml-1" />
+              </Link>
+            ) : (
+              <button disabled className="px-3 py-1 bg-slate-50 border border-slate-200 rounded text-slate-400 flex items-center cursor-not-allowed">
+                Next <ChevronRight className="w-4 h-4 ml-1" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

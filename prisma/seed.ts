@@ -259,9 +259,14 @@ async function main() {
     })
   }
 
-  // Super Admin gets all permissions EXCEPT ROLE_MANAGE
+  // Ensure Super Admin does not have prohibited permissions (for existing databases)
+    await prisma.rolePermission.deleteMany({
+      where: { roleId: adminRole.id, permission: { code: { in: ['ROLE_MANAGE', 'AUDIT_VIEW'] } } }
+    })
+
+    // Super Admin gets all permissions EXCEPT ROLE_MANAGE and AUDIT_VIEW
   for (const perm of allPermissions) {
-    if (perm.code === 'ROLE_MANAGE') continue;
+    if (perm.code === 'ROLE_MANAGE' || perm.code === 'AUDIT_VIEW') continue;
     await prisma.rolePermission.upsert({
       where: { roleId_permissionId: { roleId: adminRole.id, permissionId: perm.id } },
       update: {},

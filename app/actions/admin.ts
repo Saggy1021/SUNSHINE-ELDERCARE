@@ -348,12 +348,28 @@ export async function toggleAddOnStatus(id: string, active: boolean) {
 }
 
 // --- Audit Log ---
-export async function getAuditLogs() {
-  await requirePermission("AUDIT_VIEW")
-  return db.auditLog.findMany({
-    include: { actor: { select: { name: true, email: true } } },
-    orderBy: { createdAt: 'desc' }
-  })
+export async function getAuditLogs(postData?: { page?: number; pageSize?: number; action?: string; entityType?: string }) {
+  await requirePermission("AUDIT_VIEW");
+
+  const page = Math.max(1, postData?.page || 1);
+  const pageSize = Math.min(100, Math.max(1, postData?.pageSize || 50));
+
+  const where: any = {};
+  if (postData?.action) where.action = postData.action;
+  if (postData?.entityType) where.entityType = postData.entityType;
+
+  const [logs, total] = await Promise.all([
+    db.auditLog.findMany({
+      where,
+      include: { actor: { select: { name: true, email: true } } },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize
+    }),
+    db.auditLog.count({ where })
+  ]);
+
+  return { logs, total, page, pages: Math.ceil(total / pageSize) };
 }
 
 import { adminVerifyPayment, adminRejectPayment } from "@/lib/services/payment"
