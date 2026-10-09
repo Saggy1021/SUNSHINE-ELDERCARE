@@ -72,6 +72,33 @@ async function runTests() {
     console.error('[FAIL] Owner failed to create admin user:', e);
   }
 
+  // Add a second owner for the positive test
+  let secondOwner = await prisma.user.create({
+    data: {
+      email: 'second_owner_' + Date.now() + '@example.com',
+      name: 'Second Owner',
+      role: 'ADMIN',
+      status: 'ACTIVE',
+      passwordHash: 'dummy',
+      userRoles: { create: { roleId: ownerRole!.id } }
+    }
+  });
+
+  // Verify legitimate Owner-management behavior still works when more than one eligible Owner exists.
+  try {
+    await AdminUserService.setAdminStatus(owner.id, secondOwner.id, 'INACTIVE');
+    console.log('[PASS] Owner successfully deactivated another Owner.');
+  } catch (e: any) {
+    console.error('[FAIL] Owner failed to deactivate another Owner when they are not the last.', e);
+  }
+
+  // Ensure owner is the last active owner to test the protection correctly
+
+  const allOwners = await prisma.user.findMany({ where: { userRoles: { some: { roleId: ownerRole!.id } }, status: 'ACTIVE' } });
+  for (const o of allOwners) {
+    if (o.id !== owner.id) await AdminUserService.setAdminStatus(owner.id, o.id, 'INACTIVE');
+  }
+
   // Last owner protection
   try {
     await AdminUserService.setAdminStatus(owner.id, owner.id, 'INACTIVE');
