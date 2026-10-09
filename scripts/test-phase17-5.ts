@@ -95,8 +95,12 @@ async function runTests() {
   // Ensure owner is the last active owner to test the protection correctly
 
   const allOwners = await prisma.user.findMany({ where: { userRoles: { some: { roleId: ownerRole!.id } }, status: 'ACTIVE' } });
+  const temporarilyDeactivated: string[] = [];
   for (const o of allOwners) {
-    if (o.id !== owner.id) await AdminUserService.setAdminStatus(owner.id, o.id, 'INACTIVE');
+    if (o.id !== owner.id) {
+      await AdminUserService.setAdminStatus(owner.id, o.id, 'INACTIVE');
+      temporarilyDeactivated.push(o.id);
+    }
   }
 
   // Last owner protection
@@ -114,6 +118,10 @@ async function runTests() {
     console.log(`[PASS] Last Owner Protection: Blocked removing owner role. (${e.message})`);
   }
 
+  for (const id of temporarilyDeactivated) {
+    await prisma.user.update({ where: { id }, data: { status: 'ACTIVE' } });
+  }
+
   console.log('\nAll tests completed.');
   await prisma.$disconnect();
 }
@@ -122,3 +130,4 @@ runTests().catch(e => {
   console.error(e);
   process.exit(1);
 });
+
