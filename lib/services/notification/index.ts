@@ -426,12 +426,9 @@ export const notificationService = {
    */
   async onAccountVerification(email: string, name: string, token: string) {
     const config = getEmailConfig()
-    // Canonical origin
-    const verificationUrl = `${config.appBaseUrl}/verify-email?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`
-
     const template = await templateService.getTemplateContent('ACCOUNT_VERIFICATION', {
       memberName: name,
-      verificationUrl
+      otp: token
     })
 
     // Entity ID is a hash or pseudo-ID since User might not be fully active, but we can just use the email

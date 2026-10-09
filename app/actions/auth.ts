@@ -13,6 +13,7 @@ import { generateEmailVerificationToken, generatePasswordResetToken, hashToken }
 import { RateLimitService } from '@/lib/services/rate-limit'
 import { memberRegistrationSchema } from '@/lib/validations/member'
 import { notificationService } from '@/lib/services/notification'
+import { after } from 'next/server'
 
 export async function registerUser(formData: FormData) {
   try {
@@ -51,6 +52,7 @@ export async function registerUser(formData: FormData) {
           email: normalizedEmail,
           passwordHash,
           role: ROLES.USER,
+          status: 'PENDING_VERIFICATION',
         }
       })
 
@@ -146,7 +148,7 @@ export async function registerUser(formData: FormData) {
 
     // Generate email verification token and trigger email safely
     const rawToken = await generateEmailVerificationToken(normalizedEmail)
-    await notificationService.onAccountVerification(normalizedEmail, user.name || 'Member', rawToken)
+    after(() => notificationService.onAccountVerification(normalizedEmail, user.name || 'Member', rawToken))
 
     // Audit log
     await db.auditLog.create({
@@ -206,7 +208,18 @@ export async function requestPasswordReset(formData: FormData) {
 
 export async function verifyEmail(email: string, rawToken: string) {
   try {
-    await RateLimitService.checkLimit('AUTHENTICATION')
+    try {
+      await RateLimitService.checkLimit('OTP_VERIFICATION', email)
+    } catch (rateLimitError: any) {
+      if (rateLimitError?.name === 'RateLimitError') {
+        await db.verificationToken.deleteMany({
+          where: { identifier: `verify_${email}` }
+        })
+        return { success: false, error: 'Too many failed attempts. OTP invalidated. Please request a new one.' }
+      }
+      throw rateLimitError;
+    }
+
     const hashedToken = hashToken(rawToken)
     const identifier = `verify_${email}`
 
@@ -224,7 +237,10 @@ export async function verifyEmail(email: string, rawToken: string) {
 
     await db.user.update({
       where: { email },
-      data: { emailVerified: new Date() }
+      data: { 
+        emailVerified: new Date(),
+        status: 'ACTIVE'
+      }
     })
 
     await db.verificationToken.delete({
@@ -286,5 +302,32 @@ export async function resetPassword(formData: FormData) {
       return { success: false, error: 'Too many requests. Please try again later.' }
     }
     return { success: false, error: "Password reset failed" }
+  }
+}
+
+export async function resendVerificationEmail(email: string) {
+  try {
+    const normalizedEmail = email.toLowerCase()
+    await RateLimitService.checkLimit('OTP_RESEND', normalizedEmail)
+    await RateLimitService.checkLimit('OTP_RESEND_COOLDOWN', normalizedEmail)
+
+    const user = await db.user.findUnique({
+      where: { email: normalizedEmail }
+    })
+
+    if (!user || user.status !== 'PENDING_VERIFICATION') {
+      // Do not reveal account existence or state
+      return { success: true }
+    }
+
+    const rawToken = await generateEmailVerificationToken(normalizedEmail)
+    await notificationService.onAccountVerification(normalizedEmail, user.name || 'Member', rawToken)
+
+    return { success: true }
+  } catch (error: any) {
+    if (error?.name === 'RateLimitError') {
+      return { success: false, error: 'Please wait a moment before requesting another OTP.' }
+    }
+    return { success: false, error: 'Failed to resend OTP.' }
   }
 }

@@ -57,6 +57,7 @@ test.describe('Signup Flow (Local)', () => {
     await page.selectOption('select[name="gender"]', 'Male');
     await page.fill('textarea[name="serviceAddress"]', '123 Test St');
     await page.fill('input[name="mobileNumber"]', '1234567890');
+    await page.fill('input[name="bloodGroup"]', 'O+');
     
     // Emergency Contact
     await page.fill('input[name="emergencyContactName"]', 'Emergency Contact');

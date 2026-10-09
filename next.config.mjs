@@ -19,8 +19,9 @@ const nextConfig = {
       style-src 'self' 'unsafe-inline';
       img-src 'self' blob: data:;
       font-src 'self';
-      connect-src 'self' https://vitals.vercel-insights.com;
+      connect-src 'self' https://vitals.vercel-insights.com https://api.razorpay.com;
       object-src 'none';
+      frame-src 'self' https://checkout.razorpay.com https://api.razorpay.com;
       base-uri 'self';
       form-action 'self';
       frame-ancestors 'none';
@@ -63,6 +64,15 @@ const nextConfig = {
         source: '/(.*)',
         headers
       }
+    ];
+  },
+  async redirects() {
+    return [
+      {
+        source: '/admin/login',
+        destination: '/login?callbackUrl=/admin',
+        permanent: false,
+      },
     ];
   }
 }

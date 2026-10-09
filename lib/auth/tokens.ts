@@ -6,10 +6,11 @@ export function hashToken(token: string) {
 }
 
 export async function generateEmailVerificationToken(email: string) {
-  const rawToken = crypto.randomUUID();
+  // Generate a cryptographically secure 6-digit OTP
+  const rawToken = crypto.randomInt(0, 1000000).toString().padStart(6, '0');
   const hashedToken = hashToken(rawToken);
-  // Expire in 24 hours
-  const expires = new Date(new Date().getTime() + 1000 * 60 * 60 * 24); 
+  // Expire in 15 minutes
+  const expires = new Date(new Date().getTime() + 1000 * 60 * 15); 
   const identifier = `verify_${email}`;
 
   const existingToken = await db.verificationToken.findFirst({

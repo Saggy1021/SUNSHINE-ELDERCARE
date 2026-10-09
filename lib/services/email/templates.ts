@@ -438,17 +438,20 @@ export function adminInquiryReceivedEmail(data: {
 
 export function accountVerificationEmail(data: {
   memberName: string
-  verificationUrl: string
+  otp: string
 }): { subject: string; html: string; text: string } {
   const subject = 'Verify your email address'
   const html = baseLayout(`
     ${heading('Verify Your Email')}
     ${paragraph(`Dear ${data.memberName},`)}
-    ${paragraph('Thank you for registering with us. Please verify your email address to complete your registration.')}
-    ${ctaButton('Verify Email', data.verificationUrl)}
-    ${securityNotice('This link will expire in 24 hours. If you did not create an account, you can safely ignore this email.')}
+    ${paragraph('Thank you for registering with SUNSHINE ELDERCARE. Please verify your email address using the 6-digit code below:')}
+    <div style="margin:24px 0;text-align:center;">
+      <span style="display:inline-block;padding:16px 32px;background-color:#f8fafc;color:#1e293b;font-size:32px;font-weight:700;letter-spacing:8px;border:1px solid #e2e8f0;border-radius:12px;">${data.otp}</span>
+    </div>
+    ${securityNotice('This code will expire in 15 minutes. Do not share this OTP with anyone. Our support team will never ask for your OTP.')}
+    ${paragraph('If you need assistance, please contact our support team.')}
   `)
-  const text = `Dear ${data.memberName},\n\nPlease verify your email address by visiting this link: ${data.verificationUrl}\n\nThis link will expire in 24 hours.`
+  const text = `Dear ${data.memberName},\n\nPlease verify your email address using this 6-digit code: ${data.otp}\n\nThis code will expire in 15 minutes. Do not share it with anyone.`
   return { subject, html, text }
 }
 

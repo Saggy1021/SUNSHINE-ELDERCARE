@@ -49,7 +49,7 @@ test.describe('Authentication Security & Hardening', () => {
       '0000000058 00000 n \n0000000115 00000 n \n' +
       'trailer<</Size 4 /Root 1 0 R>>\nstartxref\n190\n%%EOF'
     );
-    await page.selectOption('select[name="idProofType"]', 'Aadhaar');
+    await page.selectOption('select[name="idProofType"]', 'PAN');
     await page.fill('input[name="idProofNumber"]', '123456789012');
     await page.locator('input[name="idProofFile"]').setInputFiles({
       name: 'id-proof.pdf',

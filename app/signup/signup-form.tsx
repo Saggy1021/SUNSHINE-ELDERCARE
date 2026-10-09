@@ -48,19 +48,8 @@ export function SignupForm() {
         return
       }
 
-      // Auto login after signup
-      const signInResult = await signIn('credentials', {
-        redirect: false,
-        email,
-        password,
-      })
-
-      if (signInResult?.error) {
-        router.push(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`)
-      } else {
-        router.push(callbackUrl)
-        router.refresh()
-      }
+      // Redirect to OTP verification page
+      router.push(`/verify-email?email=${encodeURIComponent(email)}&callbackUrl=${encodeURIComponent(callbackUrl)}`)
     } catch (err) {
       setError("An unexpected error occurred.")
       setLoading(false)
@@ -103,10 +92,10 @@ export function SignupForm() {
             <input name="lastName" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none transition-all duration-300 hover:border-primary/50 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:shadow-md" />
           </div>
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground/80">ID Proof Type *</label>
-            <select name="idProofType" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none transition-all duration-300 hover:border-primary/50 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:shadow-md">
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">ID Proof Type</label>
+            <select name="idProofType" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none transition-all duration-300 hover:border-primary/50 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:shadow-md">
               <option value="">Select ID Proof</option>
-              <option value="Aadhaar">Aadhaar</option>
+
               <option value="Voter ID">Voter ID</option>
               <option value="Passport">Passport</option>
               <option value="PAN">PAN</option>
@@ -114,12 +103,12 @@ export function SignupForm() {
             </select>
           </div>
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground/80">ID Proof Number *</label>
-            <input name="idProofNumber" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none transition-all duration-300 hover:border-primary/50 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:shadow-md" />
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">ID Proof Number</label>
+            <input name="idProofNumber" type="text" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none transition-all duration-300 hover:border-primary/50 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:shadow-md" />
           </div>
           <div className="md:col-span-2">
-            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Upload ID Proof (Max 2MB) *</label>
-            <input name="idProofFile" type="file" required accept=".pdf,image/jpeg,image/png" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none transition-all duration-300 hover:border-primary/50 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:shadow-md" />
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Upload ID Proof (Max 2MB)</label>
+            <input name="idProofFile" type="file" accept=".pdf,image/jpeg,image/png" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none transition-all duration-300 hover:border-primary/50 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:shadow-md" />
             <p className="mt-1 text-xs text-foreground/60">Accepted formats: PDF, JPEG, PNG. Size limit: 2MB.</p>
           </div>
           <div>

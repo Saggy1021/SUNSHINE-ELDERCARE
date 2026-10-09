@@ -45,7 +45,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           user?.passwordHash || DUMMY_HASH
         )
 
-        if (!user || !user.passwordHash || user.status === 'INACTIVE') {
+        if (!user || !user.passwordHash || user.status === 'INACTIVE' || user.status === 'PENDING_VERIFICATION') {
           return null
         }
 
@@ -84,8 +84,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           select: { role: true, sessionVersion: true, status: true }
         })
 
-        // Invalidate session if user deleted, INACTIVE, or sessionVersion incremented (e.g., password reset)
-        if (!dbUser || dbUser.status === 'INACTIVE' || dbUser.sessionVersion !== token.sessionVersion) {
+        // Invalidate session if user deleted, INACTIVE, PENDING_VERIFICATION, or sessionVersion incremented (e.g., password reset)
+        if (!dbUser || dbUser.status === 'INACTIVE' || dbUser.status === 'PENDING_VERIFICATION' || dbUser.sessionVersion !== token.sessionVersion) {
           // Returning an empty token effectively revokes the session
           return {} as any
         }

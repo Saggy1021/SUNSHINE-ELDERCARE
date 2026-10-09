@@ -24,7 +24,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   ]
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
+    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row pt-16">
       {/* Sidebar */}
       <aside className="w-full md:w-64 bg-slate-900 text-white flex-shrink-0">
         <div className="p-6">

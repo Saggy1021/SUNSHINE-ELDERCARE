@@ -68,7 +68,7 @@ export function AdminMemberForm() {
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground/80">ID Proof Type</label>
-            <input name="idProofType" type="text" placeholder="e.g. Aadhar" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+            <input name="idProofType" type="text" placeholder="e.g. PAN" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground/80">ID Proof Number</label>

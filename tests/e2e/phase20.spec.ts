@@ -23,12 +23,13 @@ test.describe('Phase 20 Requirements', () => {
     // Verify submission with large file fails
     await page.fill('input[name="email"]', 'testoversize@example.com');
     await page.fill('input[name="password"]', 'Password123!');
-    await page.selectOption('select[name="idProofType"]', 'Aadhaar');
+    await page.selectOption('select[name="idProofType"]', 'PAN');
     await page.fill('input[name="idProofNumber"]', '12345678');
     await page.fill('input[name="dateOfBirth"]', '1950-01-01');
     await page.selectOption('select[name="gender"]', 'Male');
     await page.fill('textarea[name="serviceAddress"]', 'Test Addr');
     await page.fill('input[name="mobileNumber"]', '9999999999');
+    await page.fill('input[name="bloodGroup"]', 'O+');
     await page.fill('input[name="emergencyContactName"]', 'Emg');
     await page.fill('input[name="emergencyContactRelationship"]', 'Son');
     await page.fill('input[name="emergencyContactMobile"]', '9999999999');

@@ -10,7 +10,10 @@ export type RateLimitCategory =
   | 'FINANCIAL'
   | 'SENSITIVE_FILES'
   | 'ADMINISTRATIVE'
-  | 'PUBLIC_PRICING';
+  | 'PUBLIC_PRICING'
+  | 'OTP_VERIFICATION'
+  | 'OTP_RESEND'
+  | 'OTP_RESEND_COOLDOWN';
 
 interface RateLimitConfig {
   maxRequests: number;
@@ -24,13 +27,18 @@ const CATEGORY_CONFIG: Record<RateLimitCategory, RateLimitConfig> = {
   SENSITIVE_FILES: { maxRequests: 30, windowMs: 60 * 60 * 1000 }, // 30 files per 1 hour
   ADMINISTRATIVE: { maxRequests: 50, windowMs: 60 * 60 * 1000 }, // 50 ops per 1 hour
   PUBLIC_PRICING: { maxRequests: process.env.NODE_ENV === 'test' ? 10 : 100, windowMs: 15 * 60 * 1000 }, // 100 pricing requests per 15 min
+  OTP_VERIFICATION: { maxRequests: 5, windowMs: 15 * 60 * 1000 }, // 5 attempts per 15 minutes
+  OTP_RESEND: { maxRequests: 5, windowMs: 15 * 60 * 1000 },       // Max 5 resends per 15 min
+  OTP_RESEND_COOLDOWN: { maxRequests: 1, windowMs: 60 * 1000 },   // 60-second server-side cooldown
 };
 
 const SECURITY_CRITICAL_CATEGORIES = new Set<RateLimitCategory>([
   'AUTHENTICATION',
   'FINANCIAL',
   'ADMINISTRATIVE',
-  'SENSITIVE_FILES'
+  'SENSITIVE_FILES',
+  'OTP_VERIFICATION',
+  'OTP_RESEND'
 ]);
 
 interface RateLimitRecord {
@@ -85,7 +93,8 @@ class UpstashRedisRateLimitStore implements RateLimitStore {
   }
 
   async increment(key: string, windowMs: number): Promise<RateLimitRecord> {
-    const prefix = process.env.NODE_ENV === 'test' ? 'test:rate-limit:' : 'rate-limit:';
+    const envPrefix = process.env.VERCEL_ENV || process.env.NODE_ENV || 'development';
+    const prefix = `${envPrefix}:rate-limit:`;
     const redisKey = `${prefix}${key}`;
     
     const pipeline = this.redis.pipeline();
@@ -109,7 +118,8 @@ class UpstashRedisRateLimitStore implements RateLimitStore {
   }
 
   async reset(key: string): Promise<void> {
-    const prefix = process.env.NODE_ENV === 'test' ? 'test:rate-limit:' : 'rate-limit:';
+    const envPrefix = process.env.VERCEL_ENV || process.env.NODE_ENV || 'development';
+    const prefix = `${envPrefix}:rate-limit:`;
     const redisKey = `${prefix}${key}`;
     await this.redis.del(redisKey);
   }
@@ -147,12 +157,12 @@ export class RateLimitService {
    * Evaluates the rate limit for a specific action and category.
    * Throws RateLimitError if exceeded.
    */
-  static async checkLimit(category: RateLimitCategory): Promise<void> {
+  static async checkLimit(category: RateLimitCategory, customIdentifier?: string): Promise<void> {
     if (process.env.RATE_LIMIT_ENABLED === 'false') {
       return; 
     }
 
-    const identifier = await this.getIdentifier();
+    const identifier = customIdentifier || await this.getIdentifier();
     const key = `${category}:${identifier}`;
     const config = CATEGORY_CONFIG[category];
 
