@@ -25,15 +25,23 @@ async function runTests() {
   console.log("=== PHASE 19E.1: PAYMENT SECURITY AUTOMATED TESTS ===");
 
   // Setup initial data
-  await db.payment.deleteMany();
-  await db.receipt.deleteMany();
-  await db.invoice.deleteMany();
-  await db.subscription.deleteMany();
-  await db.user.deleteMany();
-  await db.role.deleteMany();
+  await db.$transaction(async (tx) => {
+    const testEmails = ['userA@test.com', 'userBDtest.com', 'admin@test.com'];
+    const users = await tx.user.findMany({ where: { email: { in: testEmails } } });
+    const userIds = users.map(u => u.id);
+    await tx.auditLog.deleteMany({ where: { actorUserId: { in: userIds } } });
+    await tx.auditLog.deleteMany({ where: { entityType: 'USER', entityId: { in: userIds } } });
+    const receipts = await tx.receipt.findMany({ where: { OR: [{ user: { email: { in: testEmails } } }, { userId: { in: userIds } }] } });
+    await tx.receipt.deleteMany({ where: { id: { in: receipts.map(r => r.id) } } });
+    await tx.invoice.deleteMany({ where: { userId: { in: userIds } } });
+    await tx.payment.deleteMany({ where: { userId: { in: userIds } } });
+    await tx.subscription.deleteMany({ where: { userId: { in: userIds } } });
+    await tx.user.deleteMany({ where: { id: { in: userIds } } });
+  });
+
   
-  const adminRole = await db.role.create({ data: { name: 'Admin', description: 'Admin', isSystem: true } });
-  const ownerRole = await db.role.create({ data: { name: 'Owner', description: 'Owner', isSystem: true } });
+  let adminRole = await db.role.findUnique({ where: { name: 'Admin' } }); if (!adminRole) adminRole = await db.role.create({ data: { name: 'Admin', description: 'Admin', isSystem: true } });
+  let ownerRole = await db.role.findUnique({ where: { name: 'Owner' } }); if (!ownerRole) ownerRole = await db.role.create({ data: { name: 'Owner', description: 'Owner', isSystem: true } });
 
   const userA = await db.user.create({ data: { email: 'userA@test.com', name: 'User A', role: 'USER' } });
   const userB = await db.user.create({ data: { email: 'userB@test.com', name: 'User B', role: 'USER' } });
