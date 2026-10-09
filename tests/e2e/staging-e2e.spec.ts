@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+﻿import { test, expect } from '@playwright/test';
 import { PrismaClient } from '@prisma/client';
 import path from 'path';
 import fs from 'fs';
@@ -6,7 +6,7 @@ import os from 'os';
 
 const prisma = new PrismaClient();
 // NOTE: This test runs against localhost:3000 (configured in playwright.config.ts baseURL).
-// The LIVE_URL is intentionally removed — use local Docker + Next.js dev server for E2E.
+// The LIVE_URL is intentionally removed â€” use local Docker + Next.js dev server for E2E.
 // Staging deployment is verified separately via Vercel CLI / deployment checks.
 
 test.describe('Signup Flow (Local)', () => {
@@ -17,7 +17,7 @@ test.describe('Signup Flow (Local)', () => {
   test.beforeAll(async () => {
     // Create a dummy ID proof file for testing
     testFile = path.join(os.tmpdir(), 'dummy-id-proof.pdf');
-    fs.writeFileSync(testFile, '%PDF-1.4\n%âãÏÓ\ndummy pdf content for testing');
+    fs.writeFileSync(testFile, '%PDF-1.4\n%Ã¢Ã£ÃÃ“\ndummy pdf content for testing');
   });
 
   test.afterAll(async () => {
@@ -40,7 +40,7 @@ test.describe('Signup Flow (Local)', () => {
       'x-real-ip': fakeIp
     });
 
-    console.log(`[signup-e2e] navigating to /signup — email: ${testEmail} — ip: ${fakeIp}`);
+    console.log(`[signup-e2e] navigating to /signup â€” email: ${testEmail} â€” ip: ${fakeIp}`);
     await page.goto('/signup');
     
     // Fill out the required form fields
@@ -74,7 +74,7 @@ test.describe('Signup Flow (Local)', () => {
 
     console.log('[signup-e2e] Waiting for hydration...');
     await page.waitForLoadState('networkidle');
-    // Small random stagger (0–800ms) to reduce rate-limit collisions when multiple
+    // Small random stagger (0â€“800ms) to reduce rate-limit collisions when multiple
     // signup tests run in parallel under fullyParallel: true
     await page.waitForTimeout(500 + Math.floor(Math.random() * 800));
 
@@ -103,28 +103,37 @@ test.describe('Signup Flow (Local)', () => {
       throw new Error(`[signup-e2e] registerUser() returned an error: "${errorText}"`);
     } catch (e: any) {
       if (e.message.startsWith('[signup-e2e]')) throw e; // re-throw our error
-      // No error message visible — continue to wait for navigation
+      // No error message visible â€” continue to wait for navigation
     }
 
     // Wait for either /dashboard (success + auto-login) or /login (success + rate-limited auto-login)
     // Both outcomes mean the backend registration SUCCEEDED.
     // Timeout raised to 60s to accommodate local Next.js startup + bcrypt + file upload latency.
-    await expect(page).toHaveURL(new RegExp('.*/(dashboard|login)'), { timeout: 60_000 });
+    // After OTP email-verification was introduced, successful signup redirects to /verify-email.
+    // Both /verify-email (OTP flow) and the legacy /dashboard or /login are accepted as
+    // evidence that registration succeeded — the backend transaction completed in all cases.
+    await expect(page).toHaveURL(
+      new RegExp('.*/(verify-email|dashboard|login)'),
+      { timeout: 60_000 }
+    );
 
     const currentUrl = page.url();
     console.log(`[signup-e2e] Navigation landed on: ${currentUrl}`);
 
-    if (currentUrl.includes('/dashboard')) {
-      // Auto-login succeeded
+    if (currentUrl.includes('/verify-email')) {
+      // OTP email-verification flow: signup succeeded and server redirected to verify-email.
+      // This is the expected production behaviour since the OTP feature was introduced.
+      console.log('[signup-e2e] OTP flow active -- landed on /verify-email. Signup backend succeeded.');
+      expect(currentUrl).toMatch(/\/verify-email\?email=/);
+    } else if (currentUrl.includes('/dashboard')) {
+      // Auto-login succeeded (legacy or OTP not required)
       await expect(page.locator('text=Dashboard').first()).toBeVisible({ timeout: 10_000 });
-      console.log('[signup-e2e] Auto-login succeeded — dashboard visible.');
+      console.log('[signup-e2e] Auto-login succeeded -- dashboard visible.');
     } else {
       // Auto-login was rate-limited; signup itself still succeeded.
-      // The form redirected to /login?callbackUrl=/dashboard which is the correct fallback.
-      console.log('[signup-e2e] Auto-login was rate-limited — landed on /login. Signup backend succeeded.');
+      console.log('[signup-e2e] Rate-limited auto-login -- landed on /login. Signup backend succeeded.');
       expect(currentUrl).toMatch(/\/login/);
     }
-
     // Verify database state
     console.log("Verifying Database State...");
     const user = await prisma.user.findUnique({
@@ -156,3 +165,4 @@ test.describe('Signup Flow (Local)', () => {
     console.log("Database Verification Successful!");
   });
 });
+
