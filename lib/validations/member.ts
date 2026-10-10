@@ -8,7 +8,7 @@ export const memberRegistrationSchema = z.object({
   // SECTION A: MEMBER DETAILS
   firstName: z.string().min(1, "First Name is required"),
   lastName: z.string().min(1, "Surname / Last Name is required"),
-  idProofType: z.enum(["Voter ID", "Passport", "PAN", "Driving Licence"], {
+  idProofType: z.enum(["Voter ID", "Passport", "PAN", "Driving Licence", "Other"], {
     message: "Invalid ID Proof Type"
   }).optional(),
   idProofNumber: z.string().min(1, "ID Proof Number is required").optional(),

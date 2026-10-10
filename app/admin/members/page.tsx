@@ -6,10 +6,11 @@ import { MembersSearch } from "./members-search"
 export default async function AdminMembersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>
+  searchParams: Promise<{ q?: string, p?: string }>
 }) {
-  const { q } = await searchParams;
-  const members = await getMembers(q)
+  const { q, p } = await searchParams;
+  const page = p ? parseInt(p, 10) : 1;
+  const { members, total, pages } = await getMembers(q, page)
 
   return (
     <div className="space-y-6">
@@ -98,6 +99,23 @@ export default async function AdminMembersPage({
               ))}
             </tbody>
           </table>
+        </div>
+        <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50 text-sm">
+          <div className="text-slate-500">
+            Showing <span className="font-medium text-slate-900">{members.length}</span> of <span className="font-medium text-slate-900">{total}</span> members
+          </div>
+          <div className="flex gap-2">
+            {page > 1 && (
+              <Link href={`/admin/members?${q ? 'q=' + q + '&' : ''}p=${page - 1}`} className="px-3 py-1 bg-white border border-slate-200 rounded-md hover:bg-slate-50">
+                Previous
+              </Link>
+            )}
+            {page < pages && (
+              <Link href={`/admin/members?${q ? 'q=' + q + '&' : ''}p=${page + 1}`} className="px-3 py-1 bg-white border border-slate-200 rounded-md hover:bg-slate-50">
+                Next
+              </Link>
+            )}
+          </div>
         </div>
       </div>
     </div>
