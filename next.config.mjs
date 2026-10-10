@@ -73,6 +73,11 @@ const nextConfig = {
         destination: '/login?callbackUrl=/admin',
         permanent: false,
       },
+      {
+        source: '/admin/users',
+        destination: '/admin/admin-users',
+        permanent: true,
+      },
     ];
   }
 }

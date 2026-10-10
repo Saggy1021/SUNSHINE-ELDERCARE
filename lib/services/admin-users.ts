@@ -3,10 +3,12 @@ import { AuthorizationService } from "./authorization";
 import bcrypt from "bcryptjs";
 
 export class AdminUserService {
-  static async getAdminUsers(actorUserId: string) {
+  static async getEmployeeUsers(actorUserId: string) {
     await AuthorizationService.require(actorUserId, 'ADMIN_USER_MANAGE');
     return db.user.findMany({
-      where: { role: 'ADMIN' },
+      where: { 
+        role: { in: ['ADMIN', 'STAFF', 'CAREGIVER', 'COORDINATOR', 'SUPER_ADMIN', 'EMPLOYEE'] }
+      },
       include: {
         employee: true,
         userRoles: {
@@ -114,7 +116,7 @@ export class AdminUserService {
       data: {
         email,
         name,
-        role: 'ADMIN',
+        role: 'EMPLOYEE',
         status: 'ACTIVE',
         passwordHash,
         userRoles: { create: roleIds.map(id => ({ roleId: id })) },
@@ -166,7 +168,7 @@ export class AdminUserService {
         data: {
           email: validInvitation.email,
           name: validInvitation.name,
-          role: 'ADMIN',
+          role: 'EMPLOYEE',
           status: 'ACTIVE',
           passwordHash,
           userRoles: {
@@ -223,9 +225,13 @@ export class AdminUserService {
     await AuthorizationService.require(actorUserId, 'ADMIN_USER_MANAGE');
     
     const user = await db.$transaction(async (tx) => {
-      const ownerRole = await tx.role.findUnique({ where: { name: 'Owner' } });
-      
+      const targetUser = await tx.user.findUnique({ where: { id: userId }, select: { email: true } });
       const isActorOwner = await AuthorizationService.isOwner(actorUserId);
+      if (targetUser?.email === 'info.sunshineeldercare@gmail.com' && !isActorOwner) {
+        throw new Error("Only Owners can modify the Owner account.");
+      }
+
+      const ownerRole = await tx.role.findUnique({ where: { name: 'Owner' } });
 
       // Protect against granting or removing Owner role without being an Owner
       if (ownerRole) {
@@ -289,6 +295,13 @@ export class AdminUserService {
     await AuthorizationService.require(actorUserId, 'ADMIN_USER_MANAGE');
 
     const user = await db.$transaction(async (tx) => {
+      const targetUser = await tx.user.findUnique({ where: { id: userId }, select: { email: true } });
+      const isActorOwner = await AuthorizationService.isOwner(actorUserId);
+      if (targetUser?.email === 'info.sunshineeldercare@gmail.com') {
+        if (!isActorOwner) throw new Error("Only Owners can modify Owner status.");
+        if (status === 'INACTIVE') throw new Error("Cannot deactivate the canonical Owner account.");
+      }
+
       const ownerRole = await tx.role.findUnique({ where: { name: 'Owner' } });
       if (ownerRole) {
         const isTargetOwner = await tx.userRole.findUnique({
@@ -342,16 +355,19 @@ export class AdminUserService {
   static async resetAdminPassword(actorUserId: string, userId: string, newPasswordPlain: string) {
     await AuthorizationService.require(actorUserId, 'ADMIN_USER_MANAGE');
     
+    const targetUser = await db.user.findUnique({ where: { id: userId }, select: { email: true } });
+    const isActorOwner = await AuthorizationService.isOwner(actorUserId);
+    if (targetUser?.email === 'info.sunshineeldercare@gmail.com' && !isActorOwner) {
+      throw new Error("Only Owners can reset passwords for the canonical Owner.");
+    }
+
     const ownerRole = await db.role.findUnique({ where: { name: 'Owner' } });
     if (ownerRole) {
       const isTargetOwner = await db.userRole.findUnique({
         where: { userId_roleId: { userId, roleId: ownerRole.id } }
       });
-      if (isTargetOwner) {
-        const isActorOwner = await AuthorizationService.isOwner(actorUserId);
-        if (!isActorOwner) {
-          throw new Error("Only Owners can reset passwords for other Owners.");
-        }
+      if (isTargetOwner && !isActorOwner) {
+        throw new Error("Only Owners can reset passwords for other Owners.");
       }
     }
 

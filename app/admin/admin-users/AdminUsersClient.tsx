@@ -1,18 +1,36 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Edit2, Shield, Lock, Activity, UserX } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Plus, Edit2, Shield, Lock, Activity, UserX, Search } from "lucide-react";
 import { inviteAdminUserAction, updateAdminUserAction, toggleAdminStatusAction, resetAdminPasswordAction, revokeAdminInvitationAction } from "@/app/actions/admin-users";
 import { useRouter } from "next/navigation";
 
 export function AdminUsersClient({ initialUsers, initialInvitations, roles, employees }: any) {
-  const users = initialUsers;
   const invitations = initialInvitations;
   const [isCreating, setIsCreating] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [passwordResetUser, setPasswordResetUser] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  
+  // Search and filter state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  
   const router = useRouter();
+
+  // Filter and sort users client-side since this list is typically small
+  const filteredUsers = useMemo(() => {
+    return initialUsers.filter((user: any) => {
+      const matchesSearch = !searchQuery || 
+        user.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        user.email.toLowerCase().includes(searchQuery.toLowerCase());
+        
+      const matchesRole = !roleFilter || 
+        user.userRoles.some((ur: any) => ur.roleId === roleFilter);
+        
+      return matchesSearch && matchesRole;
+    }).sort((a: any, b: any) => a.name.localeCompare(b.name));
+  }, [initialUsers, searchQuery, roleFilter]);
 
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -146,6 +164,35 @@ export function AdminUsersClient({ initialUsers, initialInvitations, roles, empl
       )}
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        {/* Search and Filters */}
+        <div className="p-4 border-b border-slate-100 bg-slate-50 flex flex-wrap gap-4 items-center justify-between">
+          <div className="flex flex-wrap gap-4 w-full md:w-auto">
+            <div className="relative w-full md:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search admins by name/email..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value="">All Roles</option>
+              {roles.map((r: any) => (
+                <option key={r.id} value={r.id}>{r.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="text-sm text-slate-500">
+            {filteredUsers.length} admin{filteredUsers.length !== 1 ? 's' : ''}
+          </div>
+        </div>
+
         <table className="w-full text-sm text-left">
           <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
             <tr>
@@ -157,52 +204,61 @@ export function AdminUsersClient({ initialUsers, initialInvitations, roles, empl
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {initialUsers.map((user: any) => (
-              <tr key={user.id} className="hover:bg-slate-50">
-                <td className="px-6 py-4">
-                  <div className="font-medium text-slate-900">{user.name}</div>
-                  <div className="text-slate-500 text-xs">{user.email}</div>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex flex-wrap gap-1">
-                    {user.userRoles.map((ur: any) => (
-                      <span key={ur.roleId} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs font-medium border border-indigo-100">
-                        {ur.role.name}
-                      </span>
-                    ))}
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  {user.employee ? (
-                    <span className="text-slate-700">{user.employee.firstName} {user.employee.lastName}</span>
-                  ) : (
-                    <span className="text-slate-400 italic">None</span>
-                  )}
-                </td>
-                <td className="px-6 py-4">
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                    user.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
-                  }`}>
-                    {user.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-right space-x-2">
-                  <button onClick={() => setEditingUser(user)} className="text-slate-400 hover:text-indigo-600">
-                    <Edit2 className="h-4 w-4" />
-                  </button>
-                  <button onClick={() => setPasswordResetUser(user)} className="text-slate-400 hover:text-amber-600">
-                    <Lock className="h-4 w-4" />
-                  </button>
-                  <button onClick={() => handleToggleStatus(user)} className="text-slate-400 hover:text-rose-600">
-                    {user.status === 'ACTIVE' ? <UserX className="h-4 w-4" /> : <Activity className="h-4 w-4" />}
-                  </button>
+            {filteredUsers.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                  No administrative users match your search criteria.
                 </td>
               </tr>
-            ))}
+            ) : (
+              filteredUsers.map((user: any) => (
+                <tr key={user.id} className="hover:bg-slate-50">
+                  <td className="px-6 py-4">
+                    <div className="font-medium text-slate-900">{user.name}</div>
+                    <div className="text-slate-500 text-xs">{user.email}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex flex-wrap gap-1">
+                      {user.userRoles.map((ur: any) => (
+                        <span key={ur.roleId} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs font-medium border border-indigo-100">
+                          {ur.role.name}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    {user.employee ? (
+                      <span className="text-slate-700">{user.employee.firstName} {user.employee.lastName}</span>
+                    ) : (
+                      <span className="text-slate-400 italic">None</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                      user.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                    }`}>
+                      {user.status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-right space-x-2">
+                    <button onClick={() => setEditingUser(user)} className="text-slate-400 hover:text-indigo-600">
+                      <Edit2 className="h-4 w-4" />
+                    </button>
+                    <button onClick={() => setPasswordResetUser(user)} className="text-slate-400 hover:text-amber-600">
+                      <Lock className="h-4 w-4" />
+                    </button>
+                    <button onClick={() => handleToggleStatus(user)} className="text-slate-400 hover:text-rose-600">
+                      {user.status === 'ACTIVE' ? <UserX className="h-4 w-4" /> : <Activity className="h-4 w-4" />}
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
 
+      {/* Creation Modal */}
       {isCreating && (
         <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-md w-full p-6">
@@ -210,15 +266,15 @@ export function AdminUsersClient({ initialUsers, initialInvitations, roles, empl
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
-                <input name="name" required className="w-full px-3 py-2 border rounded-lg" />
+                <input name="name" required className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-                <input type="email" name="email" required className="w-full px-3 py-2 border rounded-lg" />
+                <input type="email" name="email" required className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Employee Link (Optional)</label>
-                <select name="employeeId" className="w-full px-3 py-2 border rounded-lg">
+                <select name="employeeId" className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
                   <option value="">-- No Link --</option>
                   {employees.map((e: any) => (
                     <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>
@@ -245,6 +301,7 @@ export function AdminUsersClient({ initialUsers, initialInvitations, roles, empl
         </div>
       )}
 
+      {/* Editing Modal */}
       {editingUser && (
         <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-md w-full p-6">
@@ -252,7 +309,7 @@ export function AdminUsersClient({ initialUsers, initialInvitations, roles, empl
             <form onSubmit={handleUpdate} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Employee Link (Optional)</label>
-                <select name="employeeId" defaultValue={editingUser.employeeId || ""} className="w-full px-3 py-2 border rounded-lg">
+                <select name="employeeId" defaultValue={editingUser.employeeId || ""} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
                   <option value="">-- No Link --</option>
                   {employees.map((e: any) => (
                     <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>
@@ -282,6 +339,7 @@ export function AdminUsersClient({ initialUsers, initialInvitations, roles, empl
         </div>
       )}
 
+      {/* Password Reset Modal */}
       {passwordResetUser && (
         <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-md w-full p-6">
@@ -289,7 +347,7 @@ export function AdminUsersClient({ initialUsers, initialInvitations, roles, empl
             <form onSubmit={handlePasswordReset} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">New Password</label>
-                <input type="password" name="newPassword" required className="w-full px-3 py-2 border rounded-lg" />
+                <input type="password" name="newPassword" required className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500 outline-none" />
               </div>
               <div className="flex justify-end gap-3 mt-6">
                 <button type="button" onClick={() => setPasswordResetUser(null)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>

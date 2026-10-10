@@ -186,11 +186,10 @@ export async function submitRenewalRequest(formData: FormData) {
   redirect('/dashboard?renewal=success')
 }
 
-export async function getPlaceHolderAddOns() {
+export async function getActiveAddOns() {
   return db.addOn.findMany({
-    where: {
-      name: { in: ['Care Visit Plus', 'Doctor Consultation', 'Wellness Support'] }
-    }
+    where: { active: true },
+    orderBy: { name: 'asc' }
   })
 }
 
