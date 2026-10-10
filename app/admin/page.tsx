@@ -3,8 +3,10 @@ import Link from "next/link"
 import { Users, Activity, AlertCircle, RefreshCw, ClipboardList, MessageSquare } from "lucide-react"
 
 export default async function AdminDashboardPage() {
-  const metrics = await getAdminDashboardMetrics()
-  const queue = await getNeedsAttentionQueue()
+  const [metrics, queue] = await Promise.all([
+    getAdminDashboardMetrics(),
+    getNeedsAttentionQueue()
+  ]);
 
   const statCards = [
     { name: "Total Members", value: metrics.totalMembers, icon: Users, color: "text-blue-600", bg: "bg-blue-100" },

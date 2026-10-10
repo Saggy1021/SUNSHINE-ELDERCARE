@@ -17,7 +17,19 @@ export default async function EmployeesPage() {
   }
 
   const users = await AdminUserService.getEmployeeUsers(user.id);
-  const invitations = await AdminUserService.getAdminInvitations(user.id);
+  let invitations: any = [];
+  let invitationError = false;
+  try {
+    invitations = await AdminUserService.getAdminInvitations(user.id);
+  } catch (error: any) {
+    if (error.code === 'P2021') {
+      invitationError = true;
+      console.error("AdminInvitation table missing - skipping invitations query.");
+    } else {
+      throw error;
+    }
+  }
+
   const roles = await db.role.findMany({ orderBy: { name: 'asc' } });
   const employees = await db.employee.findMany({ orderBy: { lastName: 'asc' } });
 
@@ -27,7 +39,7 @@ export default async function EmployeesPage() {
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Employees</h1>
         <p className="text-slate-500">Manage organizational staff, administrative access, and assign roles.</p>
       </div>
-      <EmployeesClient initialUsers={users} initialInvitations={invitations} roles={roles} employees={employees} />
+      <EmployeesClient initialUsers={users} initialInvitations={invitations} invitationError={invitationError} roles={roles} employees={employees} />
     </div>
   );
 }

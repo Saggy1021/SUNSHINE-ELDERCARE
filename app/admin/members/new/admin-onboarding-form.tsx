@@ -136,8 +136,134 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
             <input name="alternateNumber" type="tel" className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
           </div>
           <div className="md:col-span-2">
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Nearest Landmark</label>
+            <input name="nearestLandmark" type="text" className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div className="md:col-span-2">
             <label className="mb-1.5 block text-sm font-medium text-foreground/80">Service Address *</label>
             <textarea name="serviceAddress" required rows={2} className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+        </div>
+      </div>
+
+      {/* IDENTITY PROOF */}
+      <div className="space-y-4 bg-slate-50 p-6 rounded-xl border border-slate-200">
+        <h3 className="font-serif text-xl border-b border-slate-200 pb-2 text-slate-800">Identity Proof</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">ID Proof Type</label>
+            <select name="idProofType" className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20">
+              <option value="">Select ID Type</option>
+              <option value="Voter ID">Voter ID</option>
+              <option value="Passport">Passport</option>
+              <option value="PAN">PAN</option>
+              <option value="Driving Licence">Driving Licence</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">ID Proof Number</label>
+            <input name="idProofNumber" type="text" className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+        </div>
+      </div>
+
+      {/* EMERGENCY CONTACT */}
+      <div className="space-y-4 bg-slate-50 p-6 rounded-xl border border-slate-200">
+        <h3 className="font-serif text-xl border-b border-slate-200 pb-2 text-slate-800">Emergency Contact</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Name *</label>
+            <input name="emergencyContactName" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Relationship *</label>
+            <input name="emergencyContactRelationship" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Primary Mobile *</label>
+            <input name="emergencyContactMobile" type="tel" required className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Alternate Mobile</label>
+            <input name="emergencyContactOther" type="tel" className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Email</label>
+            <input name="emergencyContactEmail" type="email" className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+        </div>
+      </div>
+
+      {/* SPONSOR DETAILS */}
+      <div className="space-y-4 bg-slate-50 p-6 rounded-xl border border-slate-200">
+        <h3 className="font-serif text-xl border-b border-slate-200 pb-2 text-slate-800">Sponsor Details</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Sponsor Name *</label>
+            <input name="sponsorName" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Relationship *</label>
+            <input name="sponsorRelationship" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Sponsor Mobile *</label>
+            <input name="sponsorMobile" type="tel" required className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Alternate Mobile</label>
+            <input name="sponsorOther" type="tel" className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Sponsor Email</label>
+            <input name="sponsorEmail" type="email" className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+        </div>
+      </div>
+
+      {/* HEALTH INSURANCE */}
+      <div className="space-y-4 bg-slate-50 p-6 rounded-xl border border-slate-200">
+        <h3 className="font-serif text-xl border-b border-slate-200 pb-2 text-slate-800">Health Insurance</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Provider Name</label>
+            <input name="insuranceProvider" type="text" className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Policy Number</label>
+            <input name="policyNumber" type="text" className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Coverage Amount</label>
+            <input name="coverageAmount" type="text" className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+        </div>
+      </div>
+
+      {/* MEDICAL ALERT & SOS */}
+      <div className="space-y-4 bg-slate-50 p-6 rounded-xl border border-slate-200">
+        <h3 className="font-serif text-xl border-b border-slate-200 pb-2 text-slate-800">Medical Alert & SOS</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Preferred Hospital for SOS</label>
+            <input name="hospitalForSos" type="text" className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Local Nominee Contact</label>
+            <input name="nomineeLocalContact" type="text" className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div className="md:col-span-2">
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Medical Conditions (Optional)</label>
+            <textarea name="medicalConditions" rows={2} className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Blood Group</label>
+            <input name="bloodGroup" type="text" className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div className="md:col-span-2 pt-2 flex items-center gap-3">
+            <input type="checkbox" name="shiftAuthorization" id="shiftAuthorization" className="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+            <label htmlFor="shiftAuthorization" className="text-sm font-medium text-slate-700">Authorize shifting to hospital during emergencies</label>
           </div>
         </div>
       </div>
@@ -249,3 +375,7 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
     </form>
   )
 }
+
+
+
+

@@ -5,8 +5,8 @@ import { Plus, Edit2, Shield, Lock, Activity, UserX, Search } from "lucide-react
 import { inviteAdminUserAction, updateAdminUserAction, toggleAdminStatusAction, resetAdminPasswordAction, revokeAdminInvitationAction } from "@/app/actions/admin-users";
 import { useRouter } from "next/navigation";
 
-export function EmployeesClient({ initialUsers, initialInvitations, roles, employees }: any) {
-  const invitations = initialInvitations;
+export function EmployeesClient({ initialUsers, initialInvitations, invitationError, roles, employees }: any) {
+  const invitations = initialInvitations || [];
   const [isCreating, setIsCreating] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [passwordResetUser, setPasswordResetUser] = useState<any>(null);
@@ -113,7 +113,14 @@ export function EmployeesClient({ initialUsers, initialInvitations, roles, emplo
         </button>
       </div>
 
-      {invitations.length > 0 && (
+      {invitationError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl mb-6">
+          <p className="text-sm font-medium">Pending invitations cannot be displayed.</p>
+          <p className="text-sm">The system is currently undergoing a database upgrade. This section will be restored shortly.</p>
+        </div>
+      )}
+
+      {!invitationError && invitations.length > 0 && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
           <table className="w-full text-sm text-left">
             <thead className="bg-amber-50 text-amber-700 font-medium border-b border-amber-200">

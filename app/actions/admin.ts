@@ -104,24 +104,33 @@ export async function getNeedsAttentionQueue() {
 }
 
 // --- Members ---
-export async function getMembers(query?: string) {
+export async function getMembers(query?: string, page: number = 1, limit: number = 50) {
   await requirePermission("MEMBER_VIEW")
   
-  return db.user.findMany({
-    where: query ? {
-      OR: [
-        { name: { contains: query, mode: 'insensitive' } },
-        { email: { contains: query, mode: 'insensitive' } }
-      ]
-    } : undefined,
-    include: {
-      subscriptions: {
-        orderBy: { createdAt: 'desc' },
-        take: 1
-      }
-    },
-    orderBy: { createdAt: 'desc' }
-  })
+  const where = query ? {
+    OR: [
+      { name: { contains: query, mode: 'insensitive' as const } },
+      { email: { contains: query, mode: 'insensitive' as const } }
+    ]
+  } : undefined;
+
+  const [members, total] = await Promise.all([
+    db.user.findMany({
+      where,
+      include: {
+        subscriptions: {
+          orderBy: { createdAt: 'desc' },
+          take: 1
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit
+    }),
+    db.user.count({ where })
+  ]);
+
+  return { members, total, pages: Math.ceil(total / limit) };
 }
 
 export async function getMemberDetails(userId: string) {
@@ -400,6 +409,10 @@ export async function adminCreateMember(formData: FormData) {
   } else {
     data.shiftAuthorization = false as any;
   }
+  
+  if (data.idProofType === '') delete data.idProofType;
+  if (data.idProofNumber === '') delete data.idProofNumber;
+  if (data.gender === '') delete data.gender;
 
   const validationResult = memberRegistrationSchema.safeParse(data)
   if (!validationResult.success) {
@@ -458,3 +471,4 @@ export async function adminCreateMember(formData: FormData) {
   revalidatePath('/admin/members')
   return { success: true, userId: user.id }
 }
+
