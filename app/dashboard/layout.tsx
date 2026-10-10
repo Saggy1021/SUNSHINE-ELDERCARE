@@ -4,12 +4,41 @@ import { redirect } from "next/navigation"
 import Link from "next/link"
 import { LayoutDashboard, UserSquare2, ShieldAlert, MessageSquarePlus, RefreshCw, LogOut } from "lucide-react"
 
+import { AuthorizationService } from "@/lib/services/authorization"
+
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
   const session = await auth()
   
   if (!session?.user?.id) {
     redirect("/login?callbackUrl=/dashboard")
   }
+
+  const isOwner = session.user.email === 'info.sunshineeldercare@gmail.com';
+  
+  if (isOwner) {
+    redirect('/admin');
+  }
+
+  // Canonical classification handling
+  if (
+    session.user.role === 'EMPLOYEE' ||
+    // Legacy backwards compatibility strings
+    session.user.role === 'ADMIN' || 
+    session.user.role === 'SUPER_ADMIN' || 
+    session.user.role === 'COORDINATOR' ||
+    session.user.role === 'STAFF' || 
+    session.user.role === 'CAREGIVER'
+  ) {
+    const hasAdminAccess = await AuthorizationService.hasAdminPortalAccess(session.user.id);
+    if (hasAdminAccess) {
+      redirect('/admin');
+    } else {
+      redirect('/employee');
+    }
+  }
+
+  // MEMBER and USER stay on /dashboard
+
 
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },

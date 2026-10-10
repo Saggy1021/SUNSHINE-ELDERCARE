@@ -51,7 +51,7 @@ export async function registerUser(formData: FormData) {
           name: `${validatedData.firstName} ${validatedData.lastName}`,
           email: normalizedEmail,
           passwordHash,
-          role: ROLES.USER,
+          role: ROLES.MEMBER,
           status: 'PENDING_VERIFICATION',
         }
       })

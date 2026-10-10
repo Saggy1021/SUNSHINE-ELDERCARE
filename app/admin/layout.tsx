@@ -12,8 +12,18 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     redirect("/login?callbackUrl=/admin")
   }
   
-  if (session.user.role !== "ADMIN") {
-    redirect("/dashboard")
+  const hasAdminAccess = await AuthorizationService.hasAdminPortalAccess(session.user.id);
+  if (!hasAdminAccess) {
+    // If they don't have admin access, check if they are an employee (for the operational portal)
+    if (
+      session.user.role === 'EMPLOYEE' ||
+      session.user.role === 'STAFF' || 
+      session.user.role === 'CAREGIVER'
+    ) {
+      redirect("/employee");
+    }
+    // Otherwise, standard member
+    redirect("/dashboard");
   }
 
   const navItems = [
@@ -45,7 +55,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
 
   const hasAdminUserManage = await AuthorizationService.can(session.user.id, 'ADMIN_USER_MANAGE');
   if (hasAdminUserManage) {
-    navItems.push({ name: "Admin Users", href: "/admin/admin-users", icon: Users });
+    navItems.push({ name: "Employees", href: "/admin/employees", icon: Users });
   }
 
   const hasRoleManage = await AuthorizationService.can(session.user.id, 'ROLE_MANAGE');

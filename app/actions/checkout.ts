@@ -10,6 +10,23 @@ import { invoiceService } from '@/lib/services/invoice'
 import { redirect } from 'next/navigation'
 import { RateLimitService } from '@/lib/services/rate-limit'
 
+export async function calculateCheckoutPreview(planId: string, addOnIds: string[] = []) {
+  try {
+    const pricingResult = await pricingService.calculateSubtotal({ planId, addOnIds })
+    try {
+      const taxResult = await taxService.calculateTax(pricingResult)
+      return { success: true, pricingResult, taxResult, taxPending: false }
+    } catch (e: any) {
+      if (e.message === 'TAX_CONFIGURATION_PENDING') {
+        return { success: true, pricingResult, taxResult: null, taxPending: true }
+      }
+      throw e
+    }
+  } catch (e: any) {
+    return { success: false, error: e.message }
+  }
+}
+
 export async function initiateCheckout(planId: string, addOnIds: string[] = []) {
   const session = await auth()
   

@@ -347,29 +347,28 @@ export async function toggleAddOnStatus(id: string, active: boolean) {
   revalidatePath('/admin/add-ons')
 }
 
-// --- Audit Log ---
-export async function getAuditLogs(postData?: { page?: number; pageSize?: number; action?: string; entityType?: string }) {
-  await requirePermission("AUDIT_VIEW");
-
-  const page = Math.max(1, postData?.page || 1);
-  const pageSize = Math.min(100, Math.max(1, postData?.pageSize || 50));
-
-  const where: any = {};
-  if (postData?.action) where.action = postData.action;
-  if (postData?.entityType) where.entityType = postData.entityType;
+export async function getAuditLogs(params?: { page?: number; pageSize?: number; action?: string; entityType?: string }) {
+  await requirePermission("AUDIT_VIEW")
+  const page = params?.page || 1
+  const pageSize = params?.pageSize || 50
+  
+  const where = {
+    ...(params?.action ? { action: { contains: params.action, mode: 'insensitive' as const } } : {}),
+    ...(params?.entityType ? { entityType: { contains: params.entityType, mode: 'insensitive' as const } } : {})
+  }
 
   const [logs, total] = await Promise.all([
     db.auditLog.findMany({
       where,
       include: { actor: { select: { name: true, email: true } } },
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: 'desc' },
       skip: (page - 1) * pageSize,
       take: pageSize
     }),
     db.auditLog.count({ where })
-  ]);
+  ])
 
-  return { logs, total, page, pages: Math.ceil(total / pageSize) };
+  return { logs, total, pages: Math.ceil(total / pageSize) }
 }
 
 import { adminVerifyPayment, adminRejectPayment } from "@/lib/services/payment"
@@ -420,7 +419,7 @@ export async function adminCreateMember(formData: FormData) {
         name: ` `,
         email: normalizedEmail,
         passwordHash,
-        role: ROLES.USER,
+        role: ROLES.MEMBER,
         emailVerified: new Date(),
       }
     })

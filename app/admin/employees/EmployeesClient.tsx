@@ -5,7 +5,7 @@ import { Plus, Edit2, Shield, Lock, Activity, UserX, Search } from "lucide-react
 import { inviteAdminUserAction, updateAdminUserAction, toggleAdminStatusAction, resetAdminPasswordAction, revokeAdminInvitationAction } from "@/app/actions/admin-users";
 import { useRouter } from "next/navigation";
 
-export function AdminUsersClient({ initialUsers, initialInvitations, roles, employees }: any) {
+export function EmployeesClient({ initialUsers, initialInvitations, roles, employees }: any) {
   const invitations = initialInvitations;
   const [isCreating, setIsCreating] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);

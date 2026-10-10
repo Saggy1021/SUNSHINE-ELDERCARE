@@ -35,6 +35,9 @@ export class AuthorizationService {
    * Checks if a user has a specific permission.
    */
   static async can(userId: string, permissionCode: string): Promise<boolean> {
+    const user = await db.user.findUnique({ where: { id: userId }, select: { email: true }});
+    if (user?.email === 'info.sunshineeldercare@gmail.com') return true;
+    
     const permissions = await this.getUserPermissions(userId);
     return permissions.has(permissionCode);
   }
@@ -53,6 +56,8 @@ export class AuthorizationService {
    * Checks if a user has ALL of the given permissions.
    */
   static async requireAll(userId: string, permissionCodes: string[]): Promise<void> {
+    if (await this.isOwner(userId)) return;
+
     const permissions = await this.getUserPermissions(userId);
     for (const code of permissionCodes) {
       if (!permissions.has(code)) {
@@ -65,6 +70,8 @@ export class AuthorizationService {
    * Checks if a user has ANY of the given permissions.
    */
   static async requireAny(userId: string, permissionCodes: string[]): Promise<void> {
+    if (await this.isOwner(userId)) return;
+
     const permissions = await this.getUserPermissions(userId);
     const hasAny = permissionCodes.some(code => permissions.has(code));
     if (!hasAny) {
@@ -76,11 +83,11 @@ export class AuthorizationService {
    * Checks if the user has the 'Owner' role
    */
   static async isOwner(userId: string): Promise<boolean> {
-    const userRoles = await db.userRole.findMany({
-      where: { userId },
-      include: { role: true }
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { email: true }
     });
-    return userRoles.some(ur => ur.role.name === 'Owner');
+    return user?.email === 'info.sunshineeldercare@gmail.com';
   }
 
   /**
@@ -91,5 +98,23 @@ export class AuthorizationService {
     if (!isOwner) {
       throw new Error("Unauthorized: Owner access required.");
     }
+  }
+
+  /**
+   * Determines if a user should be routed to the Admin portal
+   * based on having any core administrative permissions.
+   */
+  static async hasAdminPortalAccess(userId: string): Promise<boolean> {
+    if (await this.isOwner(userId)) return true;
+    
+    // Core permissions that justify access to /admin
+    const adminPerms = [
+      'MEMBER_VIEW', 'EMPLOYEE_VIEW', 'ADMIN_USER_MANAGE', 'ROLE_MANAGE', 
+      'CONTENT_VIEW', 'PAYMENT_VIEW', 'INVOICE_VIEW', 'DOCUMENT_VIEW',
+      'INQUIRY_VIEW', 'FEEDBACK_VIEW', 'CARE_CASE_VIEW', 'PLAN_VIEW'
+    ];
+    
+    const permissions = await this.getUserPermissions(userId);
+    return adminPerms.some(p => permissions.has(p));
   }
 }

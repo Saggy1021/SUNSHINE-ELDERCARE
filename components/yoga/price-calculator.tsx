@@ -11,13 +11,14 @@ import { useRouter } from 'next/navigation'
 interface PriceCalculatorProps {
   plan: CarePlanCatalogEntry
   isAuthenticated?: boolean
+  addOns?: any[]
 }
 
 function formatINR(amount: number): string {
   return `₹${amount.toLocaleString('en-IN')}`
 }
 
-export function PriceCalculator({ plan, isAuthenticated }: PriceCalculatorProps) {
+export function PriceCalculator({ plan, isAuthenticated, addOns = [] }: PriceCalculatorProps) {
   const router = useRouter()
   const [variantType, setVariantType] = useState<'SINGLE' | 'COUPLE'>('SINGLE')
   const [months, setMonths] = useState<number>(1)
@@ -124,30 +125,29 @@ export function PriceCalculator({ plan, isAuthenticated }: PriceCalculatorProps)
         </div>
 
         {/* Add-Ons */}
-        <div>
-          <label className="block text-sm font-semibold text-foreground/80 mb-2">Optional Add-Ons (Placeholder)</label>
-          <div className="space-y-3">
-            {[
-              { id: 'doctor_consultation', name: 'Doctor Consultation', price: 0 },
-              { id: 'wellness_support', name: 'Wellness Support', price: 0 },
-            ].map(addon => (
-              <label key={addon.id} className={`flex items-center justify-between rounded-xl border px-4 py-3 cursor-pointer transition-colors ${selectedAddOns.includes(addon.id) ? 'border-gold bg-gold/5' : 'border-border hover:border-gold/50'}`}>
-                <div className="flex items-center gap-3">
-                  <input type="checkbox" className="accent-gold h-4 w-4 rounded border-gray-300 text-gold focus:ring-gold" checked={selectedAddOns.includes(addon.id)} onChange={(e) => {
-                    if (e.target.checked) {
-                      setSelectedAddOns([...selectedAddOns, addon.id])
-                    } else {
-                      setSelectedAddOns(selectedAddOns.filter(id => id !== addon.id))
-                    }
-                    setResult(null)
-                  }} />
-                  <span className="text-sm font-medium text-foreground">{addon.name}</span>
-                </div>
-                <span className="text-sm font-semibold text-gold">₹{addon.price}</span>
-              </label>
-            ))}
+        {addOns.length > 0 && (
+          <div>
+            <label className="block text-sm font-semibold text-foreground/80 mb-2">Optional Add-Ons</label>
+            <div className="space-y-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+              {addOns.map(addon => (
+                <label key={addon.id} className={`flex items-center justify-between rounded-xl border px-4 py-3 cursor-pointer transition-colors ${selectedAddOns.includes(addon.id) ? 'border-gold bg-gold/5' : 'border-border hover:border-gold/50'}`}>
+                  <div className="flex items-center gap-3">
+                    <input type="checkbox" className="accent-gold h-4 w-4 rounded border-gray-300 text-gold focus:ring-gold" checked={selectedAddOns.includes(addon.id)} onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedAddOns([...selectedAddOns, addon.id])
+                      } else {
+                        setSelectedAddOns(selectedAddOns.filter(id => id !== addon.id))
+                      }
+                      setResult(null)
+                    }} />
+                    <span className="text-sm font-medium text-foreground">{addon.name}</span>
+                  </div>
+                  <span className="text-sm font-semibold text-gold">₹{addon.price.toLocaleString('en-IN')}</span>
+                </label>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         <button
           onClick={handleCalculate}

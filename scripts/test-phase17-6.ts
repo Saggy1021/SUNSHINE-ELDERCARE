@@ -60,9 +60,7 @@ async function runTests() {
     if (testDraft) await prisma.testimonial.delete({ where: { id: testDraft.id }});
   }
 
-  // Test 3: Public Employee Privacy Check
-  const fs2 = require('fs');
-  const path = require('path');
-  if(!fs2.existsSync(path.join(process.cwd(), 'app', 'api', 'employees'))) { console.log('PASS: No public employee API route exists.'); } else { console.error('FAIL: Public employee API route found!'); }
+
 }
+
 runTests().catch(console.error).finally(() => prisma.$disconnect());

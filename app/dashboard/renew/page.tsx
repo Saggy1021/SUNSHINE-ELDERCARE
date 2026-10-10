@@ -1,11 +1,11 @@
 import { getCarePlanCatalog } from "@/app/actions/care-plans"
-import { getPlaceHolderAddOns } from "@/app/actions/membership"
+import { getActiveAddOns } from "@/app/actions/membership"
 import RenewalWorkflow from "@/components/yoga/member/renewal-workflow"
 
 export default async function RenewMembershipPage() {
   const plansResult = await getCarePlanCatalog()
   const plans = plansResult.success && plansResult.data ? plansResult.data : []
-  const addOns = await getPlaceHolderAddOns()
+  const addOns = await getActiveAddOns()
 
   return (
     <div className="space-y-6">
