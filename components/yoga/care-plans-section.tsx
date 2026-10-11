@@ -5,10 +5,10 @@ import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 
 // Plan card images — maintained in order matching DB sortOrder
-const PLAN_IMAGES: Record<string, string> = {
-  'shield-shine': '/images/retreat-himalaya.png',
-  'semi-shield-shine': '/images/retreat-kerala.png',
-  'life-line-care': '/images/retreat-rishikesh.png',
+export const PLAN_IMAGES: Record<string, string> = {
+  'shield-shine': '/images/care-plan-shield-shine.jpg',
+  'semi-shield-shine': '/images/care-plan-semi-shield-shine.jpg',
+  'life-line-care': '/images/care-plan-life-line-care.jpg',
 }
 
 function formatINR(amount: number): string {
@@ -37,7 +37,7 @@ export async function CarePlansSection() {
         <div className="mt-16 grid gap-8 md:grid-cols-3">
           {catalog.map((plan, i) => {
             const singleVariant = plan.variants.find((v) => v.variantType === 'SINGLE')
-            const image = PLAN_IMAGES[plan.slug] || '/images/retreat-himalaya.png'
+            const image = PLAN_IMAGES[plan.slug] || '/images/care-plan-shield-shine.jpg'
             const monthlyDisplay = singleVariant
               ? `${formatINR(singleVariant.monthlyTotal)} / mo`
               : 'View plans'
@@ -49,9 +49,9 @@ export async function CarePlansSection() {
                     <img
                       src={image}
                       alt={`${plan.name} care plan`}
-                      className="aspect-[3/4] w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      className="aspect-[3/4] w-full object-cover object-top transition-transform duration-700 group-hover:scale-105"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-brown/85 via-brown/10 to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-brown/90 via-brown/20 to-transparent" />
                     <span className="absolute right-4 top-4 rounded-full bg-gold/90 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-brown">
                       {monthlyDisplay}
                     </span>

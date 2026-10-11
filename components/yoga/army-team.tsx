@@ -42,10 +42,9 @@ export function ArmyTeam() {
             <img
               src="/images/army-team.jpg"
               alt="Retired Army personnel standing together"
-              className="aspect-[4/3] w-full object-cover transition-transform duration-700 group-hover:scale-105"
-
+              className="aspect-square w-full object-cover object-top transition-transform duration-700 group-hover:scale-105"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-brown/50 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-brown/60 via-brown/20 to-transparent" />
             <div className="absolute bottom-6 left-6 right-6 text-ivory">
               <p className="font-display text-2xl font-bold">Committed to Care</p>
               <p className="font-serif text-sm opacity-90">Serving those who nurtured us</p>

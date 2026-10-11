@@ -7,6 +7,7 @@ import { CheckCircle } from 'lucide-react'
 import Link from 'next/link'
 import { auth } from '@/auth'
 import type { Metadata } from 'next'
+import { PLAN_IMAGES } from '@/components/yoga/care-plans-section'
 
 // Force dynamic rendering — this page reads from the database on every request.
 // Do not statically generate at build time.
@@ -64,6 +65,14 @@ export default async function CarePlanDetailPage({ params }: Props) {
             {/* Pricing Breakdown */}
             <Reveal>
               <div className="space-y-6">
+                <div className="relative overflow-hidden rounded-2xl border border-gold/40 shadow-lg">
+                  <img
+                    src={PLAN_IMAGES[plan.slug] || '/images/care-plan-shield-shine.jpg'}
+                    alt={`${plan.name} care plan`}
+                    className="aspect-[16/9] w-full object-cover object-top"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-brown/60 to-transparent" />
+                </div>
                 <h2 className="font-display text-2xl font-bold">Monthly Pricing</h2>
 
                 <div className="grid gap-4 sm:grid-cols-2">
