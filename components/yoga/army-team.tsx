@@ -1,6 +1,6 @@
 import { Reveal } from './reveal'
 import { Eyebrow, Mandala } from './ornaments'
-import { ShieldCheck } from 'lucide-react'
+import { ShieldCheck, Award } from 'lucide-react'
 
 export function ArmyTeam() {
   return (
@@ -26,10 +26,14 @@ export function ArmyTeam() {
             </p>
           </div>
 
-          <div className="mt-8 flex flex-wrap gap-4">
+          <div className="mt-8 flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 rounded-full border border-gold bg-gold/15 px-4 py-2 text-sm font-bold text-primary shadow-sm">
+              <Award className="size-4 text-gold" />
+              12+ Years of Experienced Staff
+            </div>
             {['Discipline', 'Responsibility', 'Preparedness', 'Accountability', 'Service', 'Respect'].map((value) => (
-              <div key={value} className="flex items-center gap-2 rounded-full border border-gold/30 bg-secondary/30 px-4 py-2 text-sm font-medium text-primary transition-all duration-300 hover:-translate-y-0.5 hover:shadow-sm hover:bg-gold/10">
-                <ShieldCheck className="size-4 text-gold" />
+              <div key={value} className="flex items-center gap-2 rounded-full border border-gold/30 bg-secondary/30 px-3.5 py-1.5 text-xs font-medium text-primary transition-all duration-300 hover:-translate-y-0.5 hover:shadow-sm hover:bg-gold/10">
+                <ShieldCheck className="size-3.5 text-gold" />
                 {value}
               </div>
             ))}
@@ -39,6 +43,10 @@ export function ArmyTeam() {
         {/* Image */}
         <Reveal delay={120} className="relative">
           <div className="group relative overflow-hidden rounded-[2rem] border border-gold/30 shadow-2xl">
+            <div className="absolute top-4 left-4 z-10 flex items-center gap-2 rounded-full bg-primary/90 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider text-ivory backdrop-blur-md border border-gold/40 shadow-lg">
+              <Award className="size-3.5 text-gold" />
+              <span>12+ Years Experienced Staff</span>
+            </div>
             <img
               src="/images/army-team.jpg"
               alt="Retired Army personnel standing together"

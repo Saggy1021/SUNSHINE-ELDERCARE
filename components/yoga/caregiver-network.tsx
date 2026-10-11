@@ -16,6 +16,7 @@ import {
   Clock,
   Sparkles,
   PhoneCall,
+  Award,
 } from 'lucide-react'
 
 interface CaregiverCardData {
@@ -195,6 +196,10 @@ export function CaregiverNetwork() {
               <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/30 bg-card px-3.5 py-1.5 shadow-sm">
                 <ShieldCheck className="size-4 text-gold" />
                 100% Police Verified
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/30 bg-card px-3.5 py-1.5 shadow-sm">
+                <Award className="size-4 text-gold" />
+                12+ Years Experienced Staff
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/30 bg-card px-3.5 py-1.5 shadow-sm">
                 <CheckCircle2 className="size-4 text-gold" />

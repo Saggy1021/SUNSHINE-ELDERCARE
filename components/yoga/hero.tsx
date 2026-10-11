@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowDown } from 'lucide-react'
+import { ArrowDown, Award } from 'lucide-react'
 import { FloatingPetals } from './floating-petals'
 
 export function Hero() {
@@ -98,6 +98,12 @@ export function Hero() {
           <p className="mt-6 text-pretty font-serif text-xl italic leading-relaxed text-foreground/85 drop-shadow-sm sm:text-2xl">
             Compassionate care for your loved ones. We provide comprehensive, personalized care options to ensure the well-being, safety, and dignity of seniors.
           </p>
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <span className="inline-flex items-center gap-2 rounded-full border border-gold/40 bg-card/85 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-primary shadow-sm backdrop-blur-md">
+              <Award className="size-4 text-gold" />
+              12+ Years of Experienced Staff
+            </span>
+          </div>
           <div className="mt-10 flex flex-col gap-4 sm:flex-row">
             <Link
               href="/membership"
