@@ -14,10 +14,17 @@ export default async function ProfilePage() {
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">My Profile</h1>
-        <p className="text-slate-600 mt-1">Manage your basic information and contact details.</p>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/40">
+        <div>
+          <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+            <span>Member</span>
+            <span>/</span>
+            <span className="text-[#091329] dark:text-amber-300 font-medium">My Profile</span>
+          </nav>
+          <h1 className="text-2xl font-bold tracking-tight text-[#091329] dark:text-white">My Profile</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Manage your personal information, address, and primary contact details.</p>
+        </div>
       </div>
 
       <MemberProfileForm profile={profile} />

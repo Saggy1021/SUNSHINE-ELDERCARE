@@ -5,7 +5,7 @@ import { auth } from '@/auth'
 import { memberRegistrationSchema } from '@/lib/validations/member'
 import { ROLES } from '@/lib/auth/roles'
 import bcrypt from 'bcryptjs'
-import { pricingService } from '@/lib/services/pricing'
+import { carePricingService } from '@/lib/services/care-plans'
 import { taxService } from '@/lib/services/tax'
 import { invoiceService } from '@/lib/services/invoice'
 import { Prisma } from '@prisma/client'
@@ -72,36 +72,19 @@ export async function adminOnboardMember(formData: FormData) {
   // if (documentFile && documentFile.size > 0) { ... }
 
   // 4. Calculate Authoritative Prices
-  let pricingResult
-  if (isCustomPrice) {
-    const customAmt = parseFloat(customPriceStr)
-    if (isNaN(customAmt) || customAmt < 0) return { success: false, error: 'Invalid custom price' }
-    
-    // We get the base plan to get the name/tax info
-    const plan = await db.plan.findUnique({ where: { id: planId } })
-    if (!plan) return { success: false, error: 'Plan not found' }
-    
-    pricingResult = {
-      basePrice: customAmt,
-      addOnsTotal: 0,
-      discount: 0,
-      subtotal: customAmt,
-      currency: 'INR',
-      lineItems: [{
-        description: `Custom Pricing: ${plan.name}`,
-        quantity: 1,
-        unitPrice: customAmt,
-        total: customAmt,
-        type: 'PLAN' as const,
-        referenceId: plan.id,
-        taxClassification: plan.taxClassification || undefined
-      }]
-    }
-  } else {
-    pricingResult = await pricingService.calculateSubtotal({ planId, addOnIds })
-  }
+  const [planSlug, variantType, monthsStr] = planId.split('|')
+  const months = parseInt(monthsStr, 10)
 
-  const taxResult = await taxService.calculateTax(pricingResult)
+  let carePlanResult
+  try {
+    carePlanResult = await carePricingService.lookupPrice({
+      planSlug,
+      variantType: variantType as 'SINGLE' | 'COUPLE',
+      months
+    })
+  } catch (error) {
+    return { success: false, error: 'The selected plan configuration is not available' }
+  }
 
   // 5. Execute Atomic Transaction
   const passwordHash = await bcrypt.hash(validatedData.password, 10)
@@ -151,12 +134,47 @@ export async function adminOnboardMember(formData: FormData) {
     })
 
     // Create Invoice (Immutable)
-    const invoice = await invoiceService.createInvoice(
-      result.userId,
-      pricingResult,
-      taxResult,
-      planId
-    )
+    let invoice
+    let taxResultTotal = 0
+    if (isCustomPrice) {
+      const customAmt = parseFloat(customPriceStr)
+      if (isNaN(customAmt) || customAmt < 0) throw new Error('Invalid custom price')
+
+      const customPricingResult = {
+        basePrice: customAmt,
+        addOnsTotal: 0,
+        discount: 0,
+        subtotal: customAmt,
+        currency: 'INR',
+        lineItems: [{
+          description: `Custom Pricing: ${carePlanResult.planName} - ${carePlanResult.variantType}`,
+          quantity: 1,
+          unitPrice: customAmt,
+          total: customAmt,
+          type: 'PLAN' as const,
+          referenceId: planSlug,
+          taxClassification: 'CARE_PLAN_GST'
+        }]
+      }
+      const customTaxResult = await taxService.calculateTax(customPricingResult)
+      taxResultTotal = customTaxResult.total
+
+      invoice = await invoiceService.createInvoice(
+        result.userId,
+        customPricingResult,
+        customTaxResult,
+        planSlug
+      )
+    } else {
+      const carePlanTaxResult = await taxService.calculateCarePlanTax(carePlanResult)
+      taxResultTotal = carePlanTaxResult.total
+
+      invoice = await invoiceService.createCarePlanInvoice(
+        result.userId,
+        carePlanResult,
+        carePlanTaxResult
+      )
+    }
 
     // Create pending payment for OFFLINE
     if (paymentMethod === 'OFFLINE') {
@@ -164,7 +182,7 @@ export async function adminOnboardMember(formData: FormData) {
         data: {
           userId: result.userId,
           invoiceId: invoice.id,
-          amount: new Prisma.Decimal(taxResult.total),
+          amount: new Prisma.Decimal(taxResultTotal),
           currency: 'INR',
           paymentMethod: 'OFFLINE',
           status: 'VERIFICATION_PENDING',

@@ -38,11 +38,12 @@ export default async function CareOperationsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <Calendar className="h-6 w-6 text-blue-600" />
-        <h1 className="text-2xl font-bold text-slate-900">Care Operations</h1>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-[#091329] flex items-center gap-2">
+          <Calendar className="h-6 w-6 text-[#091329]" /> Care Operations
+        </h1>
+        <p className="text-sm text-slate-500 mt-1">Schedule and manage care visits with operational employee assignments.</p>
       </div>
-      <p className="text-slate-500 text-sm">Schedule and manage care visits with multiple employee assignments.</p>
 
       <CareOperationsClient 
         operations={operations} 

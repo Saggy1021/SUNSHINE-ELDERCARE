@@ -6,31 +6,38 @@ export default async function FinancialDocumentsPage() {
   const docs = await getMemberDocuments()
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">My Documents</h1>
-        <p className="text-slate-600 mt-1">View and download your invoices, receipts, and private documents.</p>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/40">
+        <div>
+          <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+            <span>Member</span>
+            <span>/</span>
+            <span className="text-[#091329] dark:text-amber-300 font-medium">Documents</span>
+          </nav>
+          <h1 className="text-2xl font-bold tracking-tight text-[#091329] dark:text-white">Financial & Legal Documents</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Securely view and download your invoices, payment receipts, and member contracts.</p>
+        </div>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-8">
+      <div className="grid md:grid-cols-2 gap-6">
         {/* Private Documents */}
         <div className="md:col-span-2">
-          <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-            <FileText className="h-5 w-5 text-blue-500" />
-            Private Documents
+          <h2 className="text-sm font-semibold text-[#091329] dark:text-white mb-3 flex items-center gap-2 uppercase tracking-wider">
+            <FileText className="h-4 w-4 text-[#B08A4A]" />
+            Private Documents & Contracts
           </h2>
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid sm:grid-cols-2 gap-3.5">
             {docs.documents.length === 0 ? (
-              <p className="text-sm text-slate-500 bg-slate-50 p-4 rounded-lg border border-slate-100 col-span-2">No documents available.</p>
+              <p className="text-xs text-muted-foreground bg-card p-6 rounded-xl border border-border/60 col-span-2 text-center">No private documents available at this time.</p>
             ) : (
               docs.documents.map(doc => (
-                <div key={doc.id} className="bg-white p-4 rounded-lg border border-slate-200 flex justify-between items-center shadow-sm hover:shadow transition-shadow">
-                  <div>
-                    <p className="font-semibold text-slate-900 text-sm">{doc.displayName}</p>
-                    <p className="text-xs text-slate-500">{doc.createdAt.toLocaleDateString()} • {doc.documentType}</p>
+                <div key={doc.id} className="bg-card p-4 rounded-xl border border-border/60 flex justify-between items-center shadow-xs hover:border-[#091329]/30 dark:hover:border-amber-400/30 transition-all">
+                  <div className="min-w-0 pr-3">
+                    <p className="font-medium text-foreground text-sm truncate">{doc.displayName}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{doc.createdAt.toLocaleDateString('en-GB')} • <span className="uppercase text-[10px] font-semibold">{doc.documentType}</span></p>
                   </div>
-                  <a href={`/api/documents/download?docId=${doc.id}`} target="_blank" rel="noopener noreferrer" className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors" title="Download Document">
-                    <Download className="h-5 w-5" />
+                  <a href={`/api/documents/download?docId=${doc.id}`} target="_blank" rel="noopener noreferrer" className="p-2 text-foreground hover:text-white hover:bg-[#091329] dark:hover:bg-[#B08A4A] rounded-lg transition-colors border border-border/60 shrink-0 shadow-2xs" title="Download Document">
+                    <Download className="h-4 w-4" />
                   </a>
                 </div>
               ))
@@ -40,22 +47,22 @@ export default async function FinancialDocumentsPage() {
 
         {/* Invoices */}
         <div>
-          <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-            <FileText className="h-5 w-5 text-indigo-500" />
+          <h2 className="text-sm font-semibold text-[#091329] dark:text-white mb-3 flex items-center gap-2 uppercase tracking-wider">
+            <FileText className="h-4 w-4 text-[#B08A4A]" />
             Invoices
           </h2>
           <div className="space-y-3">
             {docs.invoices.length === 0 ? (
-              <p className="text-sm text-slate-500 bg-slate-50 p-4 rounded-lg border border-slate-100">No invoices available.</p>
+              <p className="text-xs text-muted-foreground bg-card p-6 rounded-xl border border-border/60 text-center">No invoices issued yet.</p>
             ) : (
               docs.invoices.map(invoice => (
-                <div key={invoice.id} className="bg-white p-4 rounded-lg border border-slate-200 flex justify-between items-center shadow-sm hover:shadow transition-shadow">
-                  <div>
-                    <p className="font-semibold text-slate-900 text-sm">{invoice.invoiceNumber}</p>
-                    <p className="text-xs text-slate-500">{invoice.issueDate.toLocaleDateString()} • ₹{invoice.total.toString()}</p>
+                <div key={invoice.id} className="bg-card p-4 rounded-xl border border-border/60 flex justify-between items-center shadow-xs hover:border-[#091329]/30 dark:hover:border-amber-400/30 transition-all">
+                  <div className="min-w-0 pr-3">
+                    <p className="font-semibold text-foreground text-sm font-mono">{invoice.invoiceNumber}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{invoice.issueDate.toLocaleDateString('en-GB')} • ₹{invoice.total.toString()}</p>
                   </div>
-                  <a href={`/api/invoices/${invoice.id}/download`} target="_blank" rel="noopener noreferrer" className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors" title="Download Invoice">
-                    <Download className="h-5 w-5" />
+                  <a href={`/api/invoices/${invoice.id}/download`} target="_blank" rel="noopener noreferrer" className="p-2 text-foreground hover:text-white hover:bg-[#091329] dark:hover:bg-[#B08A4A] rounded-lg transition-colors border border-border/60 shrink-0 shadow-2xs" title="Download Invoice">
+                    <Download className="h-4 w-4" />
                   </a>
                 </div>
               ))
@@ -65,21 +72,21 @@ export default async function FinancialDocumentsPage() {
 
         {/* Receipts */}
         <div>
-          <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-            <FileText className="h-5 w-5 text-emerald-500" />
+          <h2 className="text-sm font-semibold text-[#091329] dark:text-white mb-3 flex items-center gap-2 uppercase tracking-wider">
+            <FileText className="h-4 w-4 text-[#B08A4A]" />
             Receipts
           </h2>
           <div className="space-y-3">
             {docs.receipts.length === 0 ? (
-              <p className="text-sm text-slate-500 bg-slate-50 p-4 rounded-lg border border-slate-100">No receipts available.</p>
+              <p className="text-xs text-muted-foreground bg-card p-6 rounded-xl border border-border/60 text-center">No payment receipts available.</p>
             ) : (
               docs.receipts.map(receipt => (
-                <div key={receipt.id} className="bg-white p-4 rounded-lg border border-slate-200 flex justify-between items-center shadow-sm hover:shadow transition-shadow">
+                <div key={receipt.id} className="bg-card p-4 rounded-xl border border-border/60 flex justify-between items-center shadow-xs">
                   <div>
-                    <p className="font-semibold text-slate-900 text-sm">{receipt.receiptNumber}</p>
-                    <p className="text-xs text-slate-500">{receipt.paymentDate.toLocaleDateString()} • ₹{receipt.amount.toString()}</p>
+                    <p className="font-semibold text-foreground text-sm font-mono">{receipt.receiptNumber}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{receipt.paymentDate.toLocaleDateString('en-GB')} • ₹{receipt.amount.toString()}</p>
                   </div>
-                  <span className="text-xs font-medium text-slate-400">View (Coming Soon)</span>
+                  <span className="text-[10px] uppercase font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-full border border-border/40">Verified</span>
                 </div>
               ))
             )}

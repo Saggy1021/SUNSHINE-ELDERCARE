@@ -269,8 +269,8 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
       </div>
 
       {/* PLAN & PRICING */}
-      <div className="space-y-4 bg-slate-50 p-6 rounded-xl border border-slate-200">
-        <h3 className="font-serif text-xl border-b border-slate-200 pb-2 text-slate-800">Plan & Pricing Setup</h3>
+      <div className="space-y-4 bg-slate-50/70 p-6 rounded-xl border border-slate-200">
+        <h3 className="font-serif text-lg font-bold border-b border-slate-200 pb-2 text-[#091329]">Plan & Pricing Setup</h3>
         
         <div className="space-y-6 pt-2">
           <div>
@@ -279,9 +279,9 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
               {plans.map(plan => (
                 <label key={plan.id} className="cursor-pointer">
                   <input type="radio" name="planId" value={plan.id} className="peer sr-only" required />
-                  <div className="rounded-lg border border-slate-200 bg-white p-4 hover:bg-slate-50 peer-checked:border-blue-500 peer-checked:ring-1 peer-checked:ring-blue-500 transition-all">
-                    <div className="font-medium text-slate-900">{plan.name}</div>
-                    <div className="text-sm text-slate-500 mt-1">₹{plan.price.toLocaleString('en-IN')}</div>
+                  <div className="rounded-lg border border-slate-200 bg-white p-4 hover:bg-slate-50 peer-checked:border-[#091329] peer-checked:ring-2 peer-checked:ring-[#091329]/20 peer-checked:shadow-xs transition-all">
+                    <div className="font-medium text-slate-900 text-sm">{plan.name}</div>
+                    <div className="text-sm font-semibold text-[#091329] mt-1.5">₹{plan.price.toLocaleString('en-IN')}</div>
                   </div>
                 </label>
               ))}
@@ -290,25 +290,31 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
 
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">Select Add-ons</label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {addOns.map(addon => (
-                <label key={addon.id} className="cursor-pointer relative">
-                  <input 
-                    type="checkbox" 
-                    className="peer sr-only" 
-                    checked={selectedAddOns.includes(addon.id)}
-                    onChange={() => toggleAddOn(addon.id)}
-                  />
-                  <div className="rounded-lg border border-slate-200 bg-white p-4 hover:bg-slate-50 peer-checked:border-blue-500 peer-checked:ring-1 peer-checked:ring-blue-500 transition-all h-full">
-                    <div className="font-medium text-slate-900">{addon.name}</div>
-                    <div className="text-sm text-slate-500 mt-1">₹{addon.price.toLocaleString('en-IN')}</div>
-                    {selectedAddOns.includes(addon.id) && (
-                      <Check className="absolute top-4 right-4 h-4 w-4 text-blue-500" />
-                    )}
-                  </div>
-                </label>
-              ))}
-            </div>
+            {addOns.length === 0 ? (
+              <div className="text-sm text-slate-500 bg-white p-3.5 rounded-lg border border-slate-200">
+                No active add-ons are currently available.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {addOns.map(addon => (
+                  <label key={addon.id} className="cursor-pointer relative">
+                    <input
+                      type="checkbox"
+                      className="peer sr-only"
+                      checked={selectedAddOns.includes(addon.id)}
+                      onChange={() => toggleAddOn(addon.id)}
+                    />
+                    <div className="rounded-lg border border-slate-200 bg-white p-4 hover:bg-slate-50 peer-checked:border-[#091329] peer-checked:ring-2 peer-checked:ring-[#091329]/20 transition-all h-full">
+                      <div className="font-medium text-slate-900 text-sm">{addon.name}</div>
+                      <div className="text-sm font-semibold text-[#091329] mt-1">₹{addon.price.toLocaleString('en-IN')}</div>
+                      {selectedAddOns.includes(addon.id) && (
+                        <Check className="absolute top-4 right-4 h-4 w-4 text-[#B08A4A]" />
+                      )}
+                    </div>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="pt-4 border-t border-slate-200">
@@ -317,7 +323,7 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
                 type="checkbox" 
                 checked={isCustomPrice}
                 onChange={(e) => setIsCustomPrice(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                className="h-4 w-4 rounded border-slate-300 text-[#091329] focus:ring-[#091329]"
               />
               <span className="text-sm font-medium text-slate-700">Apply Custom / Negotiated Price (Requires Permission)</span>
             </label>
@@ -326,13 +332,13 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 rounded-lg border border-slate-200">
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-slate-700">Custom Price (₹) *</label>
-                  <input name="customPrice" type="number" min="0" required={isCustomPrice} className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                  <input name="customPrice" type="number" min="0" required={isCustomPrice} className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-[#091329] focus:ring-1 focus:ring-[#091329]" />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-slate-700">Reason / Authorization Ref *</label>
-                  <input name="customPriceReason" type="text" required={isCustomPrice} placeholder="e.g. Approved by Director" className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                  <input name="customPriceReason" type="text" required={isCustomPrice} placeholder="e.g. Approved by Director" className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-[#091329] focus:ring-1 focus:ring-[#091329]" />
                 </div>
-                <div className="md:col-span-2 text-xs text-amber-600 bg-amber-50 p-2 rounded">
+                <div className="md:col-span-2 text-xs text-amber-700 bg-amber-50 p-2.5 rounded-md border border-amber-200/60">
                   Note: Custom pricing overrides the plan base price but applies the same tax calculations. Add-ons are ignored when a custom price is set.
                 </div>
               </div>
@@ -343,11 +349,11 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
 
       {/* PAYMENT DETAILS */}
       <div className="space-y-4">
-        <h3 className="font-serif text-xl border-b border-border pb-2 text-slate-800">Initial Payment Setup</h3>
+        <h3 className="font-serif text-lg font-bold border-b border-slate-200 pb-2 text-[#091329]">Initial Payment Setup</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground/80">Payment Method *</label>
-            <select name="paymentMethod" required className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20">
+            <select name="paymentMethod" required className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-[#091329] focus:ring-1 focus:ring-[#091329]">
               <option value="">Select Method</option>
               <option value="ONLINE_PENDING">Send Payment Link (Online)</option>
               <option value="OFFLINE">Offline (Bank Transfer/Cheque/Cash)</option>
@@ -355,7 +361,7 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground/80">Reference / Cheque No (If Offline)</label>
-            <input name="paymentReference" type="text" className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+            <input name="paymentReference" type="text" className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-[#091329] focus:ring-1 focus:ring-[#091329]" />
           </div>
         </div>
         <p className="text-xs text-slate-500">
@@ -367,7 +373,7 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
         <button
           type="submit"
           disabled={loading}
-          className="rounded-full bg-blue-600 px-8 py-3 text-sm font-medium text-white shadow-md transition-all hover:-translate-y-0.5 disabled:opacity-70 disabled:hover:translate-y-0"
+          className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#091329] text-white text-sm font-medium rounded-lg hover:bg-[#162850] shadow-sm transition-colors disabled:opacity-50 disabled:pointer-events-none"
         >
           {loading ? 'Processing Onboarding...' : 'Complete Registration & Billing'}
         </button>

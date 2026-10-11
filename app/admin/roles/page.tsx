@@ -21,8 +21,8 @@ export default async function RolesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Roles</h1>
-        <p className="text-slate-500">Manage role definitions and permissions.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-[#091329]">Roles & Permissions</h1>
+        <p className="text-sm text-slate-500 mt-1">Manage role definitions, access controls, and permission assignments.</p>
       </div>
       <RolesClient initialRoles={roles} allPermissions={permissions} />
     </div>

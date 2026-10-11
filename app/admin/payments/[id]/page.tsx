@@ -16,12 +16,17 @@ export default async function PaymentDetailPage({ params }: { params: { id: stri
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link href="/admin/payments" className="text-slate-500 hover:text-slate-900 transition-colors">
+          <Link
+            href="/admin/payments"
+            className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition-colors"
+            title="Back to Payments"
+          >
             <ArrowLeft className="h-5 w-5" />
           </Link>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            Payment Details
-          </h1>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-[#091329]">Payment Details</h1>
+            <p className="text-xs text-slate-500 font-mono mt-0.5">ID: {payment.id}</p>
+          </div>
         </div>
         {payment.status === "VERIFICATION_PENDING" && (
           <PaymentVerificationActions paymentId={payment.id} />
@@ -30,25 +35,25 @@ export default async function PaymentDetailPage({ params }: { params: { id: stri
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Payment Info */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-            <Receipt className="h-5 w-5 text-indigo-600" />
+        <div className="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-900 flex items-center gap-2">
+            <Receipt className="h-4 w-4 text-[#091329]" />
             Payment Information
           </h2>
           <div className="grid grid-cols-2 gap-y-4 text-sm">
             <div>
-              <p className="text-slate-500">Amount</p>
-              <p className="font-bold text-slate-900 text-lg">₹{payment.amount.toString()}</p>
+              <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Amount</p>
+              <p className="font-bold text-[#091329] text-xl mt-1">₹{payment.amount.toString()}</p>
             </div>
             <div>
-              <p className="text-slate-500">Status</p>
-              <p className={`font-semibold ${
-                payment.status === 'VERIFIED' ? 'text-emerald-600' :
-                payment.status === 'REJECTED' ? 'text-red-600' :
-                'text-amber-600'
+              <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Status</p>
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-1 ${
+                payment.status === 'VERIFIED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60' :
+                payment.status === 'REJECTED' ? 'bg-rose-50 text-rose-700 border border-rose-200/60' :
+                'bg-amber-50 text-amber-700 border border-amber-200/60'
               }`}>
                 {payment.status.replace(/_/g, ' ')}
-              </p>
+              </span>
             </div>
             <div>
               <p className="text-slate-500">Method</p>

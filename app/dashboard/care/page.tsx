@@ -41,51 +41,59 @@ export default async function MemberCarePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Care Tracking</h1>
-        <p className="text-slate-500 mt-2">Monitor care activities and updates for your loved ones.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/40">
+        <div>
+          <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+            <span>Member</span>
+            <span>/</span>
+            <span className="text-[#091329] dark:text-amber-300 font-medium">Care Tracking</span>
+          </nav>
+          <h1 className="text-2xl font-bold tracking-tight text-[#091329] dark:text-white">Care Tracking</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Monitor care activities, scheduled visits, and operational logs for your loved ones.</p>
+        </div>
       </div>
 
       {elders.length === 0 ? (
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm text-center">
-          <p className="text-slate-500">No care recipients registered yet.</p>
+        <div className="bg-card p-10 rounded-xl border border-border/60 shadow-xs text-center text-muted-foreground text-sm max-w-lg mx-auto">
+          No care recipients registered under your family account yet.
         </div>
       ) : (
-        <div className="space-y-8">
+        <div className="space-y-6">
           {elders.map(elder => (
-            <div key={elder.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-              <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
-                <h3 className="text-lg font-semibold text-slate-900">{elder.firstName} {elder.lastName} ({elder.relationship})</h3>
+            <div key={elder.id} className="bg-card rounded-xl border border-border/60 overflow-hidden shadow-xs">
+              <div className="px-6 py-4 border-b border-border/40 bg-muted/15 flex items-center justify-between">
+                <h3 className="text-base font-semibold text-[#091329] dark:text-white">{elder.firstName} {elder.lastName}</h3>
+                <span className="text-xs text-muted-foreground font-medium px-2.5 py-0.5 rounded-full bg-muted border border-border/40">Relationship: {elder.relationship}</span>
               </div>
               
               <div className="p-6">
                 {elder.cases.length === 0 ? (
-                  <p className="text-slate-500 text-sm">No active care cases.</p>
+                  <p className="text-muted-foreground text-xs">No active care cases configured.</p>
                 ) : (
                   <div className="space-y-6">
                     {elder.cases.map(careCase => (
                       <div key={careCase.id} className="space-y-4">
-                        <div className="flex justify-between items-center">
-                          <h4 className="font-medium text-slate-800">
+                        <div className="flex justify-between items-center pb-2 border-b border-border/40">
+                          <h4 className="font-semibold text-foreground text-sm">
                             {careCase.subscription?.carePlan?.name || careCase.subscription?.customPlan?.name || "Care Plan"}
                           </h4>
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/20">
                             {careCase.status}
                           </span>
                         </div>
 
                         {/* Recent Visits */}
                         <div>
-                          <h5 className="text-sm font-semibold text-slate-700 mb-2">Recent & Upcoming Visits</h5>
+                          <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2.5">Recent & Upcoming Visits</h5>
                           {careCase.visits.length === 0 ? (
-                            <p className="text-slate-500 text-xs">No visits scheduled.</p>
+                            <p className="text-muted-foreground text-xs bg-muted/20 p-3 rounded-lg border border-border/40">No visits scheduled for this care case.</p>
                           ) : (
                             <ul className="space-y-2">
                               {careCase.visits.map(visit => (
-                                <li key={visit.id} className="text-sm flex justify-between p-3 bg-slate-50 rounded-lg">
-                                  <span>{new Date(visit.scheduledStart).toLocaleDateString()}</span>
-                                  <span className="text-slate-500">{new Date(visit.scheduledStart).toLocaleTimeString()} - {new Date(visit.scheduledEnd).toLocaleTimeString()}</span>
-                                  <span className="text-xs font-medium px-2 py-1 bg-slate-200 rounded">{visit.status}</span>
+                                <li key={visit.id} className="text-xs flex justify-between items-center p-3 bg-muted/20 rounded-lg border border-border/40">
+                                  <span className="font-medium text-foreground">{new Date(visit.scheduledStart).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+                                  <span className="text-muted-foreground">{new Date(visit.scheduledStart).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} - {new Date(visit.scheduledEnd).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+                                  <span className="text-[10px] font-semibold px-2 py-0.5 bg-muted rounded border border-border/40 text-foreground">{visit.status}</span>
                                 </li>
                               ))}
                             </ul>
@@ -94,17 +102,17 @@ export default async function MemberCarePage() {
 
                         {/* Member Visible Notes */}
                         <div>
-                          <h5 className="text-sm font-semibold text-slate-700 mb-2">Care Updates</h5>
+                          <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2.5">Care Updates & Observations</h5>
                           {careCase.notes.length === 0 ? (
-                            <p className="text-slate-500 text-xs">No updates available.</p>
+                            <p className="text-muted-foreground text-xs bg-muted/20 p-3 rounded-lg border border-border/40">No updates posted yet.</p>
                           ) : (
-                            <ul className="space-y-3">
+                            <ul className="space-y-2.5">
                               {careCase.notes.map(note => (
-                                <li key={note.id} className="text-sm p-4 bg-blue-50 border border-blue-100 rounded-lg">
-                                  <p className="text-slate-700">{note.note}</p>
-                                  <div className="mt-2 text-xs text-slate-500 flex justify-between">
+                                <li key={note.id} className="text-xs p-3.5 bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                                  <p className="text-foreground leading-relaxed">{note.note}</p>
+                                  <div className="mt-2 text-[11px] text-muted-foreground flex justify-between pt-1.5 border-t border-amber-500/10">
                                     <span>By {note.author.name}</span>
-                                    <span>{new Date(note.createdAt).toLocaleDateString()}</span>
+                                    <span>{new Date(note.createdAt).toLocaleDateString('en-GB')}</span>
                                   </div>
                                 </li>
                               ))}

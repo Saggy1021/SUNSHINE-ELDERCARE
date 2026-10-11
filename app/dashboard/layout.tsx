@@ -1,10 +1,11 @@
 import { ReactNode } from "react"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
-import Link from "next/link"
-import { LayoutDashboard, UserSquare2, ShieldAlert, MessageSquarePlus, RefreshCw, LogOut } from "lucide-react"
+import { LayoutDashboard, ShieldCheck, User, History, FileText, Settings, PhoneCall, Activity, MessageSquarePlus } from "lucide-react"
 
 import { AuthorizationService } from "@/lib/services/authorization"
+import { WorkspaceShell } from "@/components/workspace/workspace-shell"
+import { WorkspaceNavLink } from "@/components/workspace/workspace-nav-link"
 
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
   const session = await auth()
@@ -39,48 +40,35 @@ export default async function DashboardLayout({ children }: { children: ReactNod
 
   // MEMBER and USER stay on /dashboard
 
-
   const navItems = [
-    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-    { name: "My Membership", href: "/dashboard/membership", icon: UserSquare2 },
-    { name: "My Profile", href: "/dashboard/profile", icon: UserSquare2 },
-    { name: "Membership History", href: "/dashboard/history", icon: RefreshCw },
-    { name: "Financial Documents", href: "/dashboard/documents", icon: RefreshCw },
-    { name: "Manage Membership", href: "/dashboard/manage-membership", icon: RefreshCw },
-    { name: "Emergency Contact", href: "/dashboard/emergency-contact", icon: ShieldAlert },
-    { name: "Care Tracking", href: "/dashboard/care", icon: ShieldAlert },
-    { name: "Feedback", href: "/dashboard/feedback", icon: MessageSquarePlus },
+    { name: "Dashboard", href: "/dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
+    { name: "My Membership", href: "/dashboard/membership", icon: <ShieldCheck className="h-4 w-4" /> },
+    { name: "My Profile", href: "/dashboard/profile", icon: <User className="h-4 w-4" /> },
+    { name: "Membership History", href: "/dashboard/history", icon: <History className="h-4 w-4" /> },
+    { name: "Financial Documents", href: "/dashboard/documents", icon: <FileText className="h-4 w-4" /> },
+    { name: "Manage Membership", href: "/dashboard/manage-membership", icon: <Settings className="h-4 w-4" /> },
+    { name: "Emergency Contact", href: "/dashboard/emergency-contact", icon: <PhoneCall className="h-4 w-4" /> },
+    { name: "Care Tracking", href: "/dashboard/care", icon: <Activity className="h-4 w-4" /> },
+    { name: "Feedback", href: "/dashboard/feedback", icon: <MessageSquarePlus className="h-4 w-4" /> },
   ]
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row pt-16">
-      {/* Sidebar */}
-      <aside className="w-full md:w-64 bg-slate-900 text-white flex-shrink-0">
-        <div className="p-6">
-          <h2 className="text-xl font-bold tracking-tight text-white mb-2">Member Portal</h2>
-          <p className="text-slate-400 text-sm truncate">{session.user.name || session.user.email}</p>
-        </div>
-        
-        <nav className="flex-1 px-4 space-y-2 mb-6">
+    <WorkspaceShell
+      portalName="Member Portal"
+      userDisplay={session.user.name || session.user.email || 'Member'}
+      sidebarNav={
+        <>
           {navItems.map((item) => (
-            <Link 
-              key={item.href} 
-              href={item.href}
-              className="flex items-center gap-3 px-3 py-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
-            >
-              <item.icon className="h-5 w-5" />
+            <WorkspaceNavLink key={item.href} href={item.href} icon={item.icon}>
               {item.name}
-            </Link>
+            </WorkspaceNavLink>
           ))}
-        </nav>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 p-6 md:p-8 overflow-auto">
-        <div className="max-w-4xl mx-auto">
-          {children}
-        </div>
-      </main>
-    </div>
+        </>
+      }
+    >
+      <div className="space-y-8 pb-12">
+        {children}
+      </div>
+    </WorkspaceShell>
   )
 }

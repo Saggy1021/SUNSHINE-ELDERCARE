@@ -33,9 +33,9 @@ export default function MemberProfileForm({ profile }: { profile: any }) {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-      <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-        <UserCircle className="h-5 w-5 text-indigo-500" /> 
+    <div className="bg-card rounded-xl border border-border/60 shadow-xs p-6 max-w-3xl">
+      <h2 className="text-base font-semibold text-[#091329] dark:text-white mb-4 flex items-center gap-2">
+        <UserCircle className="h-5 w-5 text-[#B08A4A]" />
         Basic Information
       </h2>
       
@@ -133,7 +133,7 @@ export default function MemberProfileForm({ profile }: { profile: any }) {
           <button 
             type="submit" 
             disabled={loading}
-            className="bg-slate-900 text-white px-6 py-2 rounded-md font-semibold text-sm hover:bg-slate-800 disabled:opacity-50 transition-colors"
+            className="bg-[#091329] text-white px-6 py-2 rounded-lg font-medium text-xs hover:bg-[#162850] disabled:opacity-50 transition-colors shadow-xs"
           >
             {loading ? "Saving..." : "Save Changes"}
           </button>

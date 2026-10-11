@@ -15,15 +15,19 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link href="/admin/members" className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-500">
+      <div className="flex items-center gap-3">
+        <Link
+          href="/admin/members"
+          className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition-colors"
+          title="Back to Members"
+        >
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <UserSquare2 className="h-6 w-6 text-blue-600" /> Member Details
+          <h1 className="text-2xl font-bold tracking-tight text-[#091329] flex items-center gap-2">
+            <UserSquare2 className="h-6 w-6 text-[#091329]" /> Member Details
           </h1>
-          <p className="text-slate-600 mt-1">System ID: {member.id}</p>
+          <p className="text-xs text-slate-500 font-mono mt-0.5">System ID: {member.id}</p>
         </div>
       </div>
 

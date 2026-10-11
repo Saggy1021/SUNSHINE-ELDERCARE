@@ -34,7 +34,7 @@ export function CareOperationsClient({ operations, cases, employees, canManage }
         <div className="flex justify-end">
           <button
             onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 bg-[#091329] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#162850] shadow-sm transition-colors"
           >
             <Plus className="h-4 w-4" /> Schedule Operation
           </button>
@@ -42,11 +42,11 @@ export function CareOperationsClient({ operations, cases, employees, canManage }
       )}
 
       {showCreate && canManage && (
-        <div className="bg-blue-50 border border-blue-200 p-6 rounded-xl relative">
+        <div className="bg-white border border-slate-200/90 shadow-sm p-6 rounded-xl relative">
           <button onClick={() => setShowCreate(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-700">
             <X className="h-5 w-5" />
           </button>
-          <h3 className="font-semibold text-blue-900 mb-4 text-lg">Schedule Care Operation</h3>
+          <h3 className="font-semibold text-slate-900 mb-4 text-base">Schedule Care Operation</h3>
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>

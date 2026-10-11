@@ -9,9 +9,16 @@ export default async function RenewMembershipPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Renew Membership</h1>
-        <p className="text-slate-600 mt-1">Select your preferred package, duration, and start date.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/40">
+        <div>
+          <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+            <span>Member</span>
+            <span>/</span>
+            <span className="text-[#091329] dark:text-amber-300 font-medium">Renew Membership</span>
+          </nav>
+          <h1 className="text-2xl font-bold tracking-tight text-[#091329] dark:text-white">Renew Membership</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Select your preferred package, duration, and start date.</p>
+        </div>
       </div>
 
       <RenewalWorkflow plans={plans} addOns={addOns} />

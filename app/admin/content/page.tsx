@@ -24,21 +24,27 @@ export default async function ContentDashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Content Management (CMS)</h1>
-        <p className="mt-2 text-slate-500">Manage public-facing website content.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-[#091329]">Content Management (CMS)</h1>
+        <p className="mt-1 text-sm text-slate-500">Manage public-facing website content, FAQs, reviews, and settings.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {sections.map(section => (
           <Link key={section.href} href={section.href} className="block group">
-            <div className="h-full p-6 bg-white rounded-xl shadow-sm border border-slate-200 transition-all hover:shadow-md hover:border-amber-400 group-hover:-translate-y-1">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="p-3 bg-amber-50 text-amber-600 rounded-lg group-hover:bg-amber-100 transition-colors">
-                  <section.icon className="w-6 h-6" />
+            <div className="h-full p-5 bg-white rounded-xl shadow-sm border border-slate-200/90 transition-all hover:shadow-md hover:border-[#B08A4A]/50 group-hover:-translate-y-0.5 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2.5 bg-[#B08A4A]/10 text-[#B08A4A] rounded-lg group-hover:bg-[#091329] group-hover:text-white transition-colors">
+                    <section.icon className="w-5 h-5" />
+                  </div>
+                  <h3 className="text-base font-semibold text-[#091329] group-hover:text-[#B08A4A] transition-colors">{section.title}</h3>
                 </div>
-                <h3 className="text-lg font-semibold text-slate-900 group-hover:text-amber-600 transition-colors">{section.title}</h3>
+                <p className="text-slate-500 text-sm">{section.description}</p>
               </div>
-              <p className="text-slate-600 text-sm">{section.description}</p>
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center text-xs font-medium text-[#B08A4A]">
+                <span>Manage section</span>
+                <span className="ml-1 transition-transform group-hover:translate-x-1">→</span>
+              </div>
             </div>
           </Link>
         ))}

@@ -29,36 +29,36 @@ export default async function AdminAuditLogPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
         <Link
           href="/admin"
-          className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-500"
+          className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-500 hover:text-slate-900"
           aria-label="Back to Admin Dashboard"
         >
           <ChevronLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Shield className="h-6 w-6 text-slate-700" /> Audit Log
+          <h1 className="text-2xl font-bold tracking-tight text-[#091329] flex items-center gap-2">
+            <Shield className="h-6 w-6 text-[#091329]" /> Audit Log
           </h1>
-          <p className="text-sm text-slate-500 mt-0.5">Immutable record of administrative operations.</p>
+          <p className="text-sm text-slate-500 mt-1">Immutable record of administrative operations and access events.</p>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-100 bg-slate-50">
+      <div className="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-slate-100 bg-slate-50/50">
           <AuditLogSearch initialAction={action} initialEntityType={entityType} />
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+            <thead className="bg-slate-50/75 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
               <tr>
-                <th className="px-5 py-3">Timestamp</th>
-                <th className="px-5 py-3">Actor</th>
-                <th className="px-5 py-3">Action</th>
-                <th className="px-5 py-3">Entity</th>
-                <th className="px-5 py-3">Details</th>
+                <th className="px-5 py-3.5">Timestamp</th>
+                <th className="px-5 py-3.5">Actor</th>
+                <th className="px-5 py-3.5">Action</th>
+                <th className="px-5 py-3.5">Entity</th>
+                <th className="px-5 py-3.5">Details</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -71,27 +71,27 @@ export default async function AdminAuditLogPage({
                 </tr>
               ) : (
                 logs.map((log: any) => (
-                  <tr key={log.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-5 py-3.5 text-slate-500 whitespace-nowrap">
+                  <tr key={log.id} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="px-5 py-3.5 text-slate-500 text-xs whitespace-nowrap">
                       {new Date(log.createdAt).toLocaleString("en-IN")}
                     </td>
                     <td className="px-5 py-3.5">
-                      <div className="font-medium text-slate-900">{log.actor?.name || "System"}</div>
+                      <div className="font-medium text-slate-900 text-sm">{log.actor?.name || "System"}</div>
                       <div className="text-xs text-slate-500">{log.actor?.email}</div>
                     </td>
                     <td className="px-5 py-3.5">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#091329]/5 text-[#091329] border border-[#091329]/15">
                         {log.action}
                       </span>
                     </td>
                     <td className="px-5 py-3.5">
-                      <div className="text-sm text-slate-700">{log.entityType}</div>
+                      <div className="text-sm font-medium text-slate-700">{log.entityType}</div>
                       <div className="text-xs font-mono text-slate-400 truncate max-w-[150px]">
                         {log.entityId}
                       </div>
                     </td>
                     <td className="px-5 py-3.5">
-                      <div className="text-xs font-mono text-slate-600 break-all max-w-xs">
+                      <div className="text-xs font-mono text-slate-600 break-all max-w-xs bg-slate-50 p-1.5 rounded border border-slate-100">
                         {log.metadata ? JSON.stringify(log.metadata) : "—"}
                       </div>
                     </td>
@@ -104,23 +104,23 @@ export default async function AdminAuditLogPage({
 
         {/* Pagination */}
         {pages > 1 && (
-          <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50">
-            <span className="text-sm text-slate-500">
-              Showing page {page} of {pages} (Total: {total} records)
+          <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <span className="text-xs sm:text-sm text-slate-500">
+              Showing page {page} of {pages} ({total} records)
             </span>
             <div className="flex gap-2">
               <Link
                 href={`/admin/audit-log?page=${Math.max(1, page - 1)}${action ? `&action=${action}` : ""}${entityType ? `&entityType=${entityType}` : ""}`}
-                className={`px-3 py-1.5 border border-slate-300 rounded-md text-sm font-medium ${
-                  page <= 1 ? "opacity-50 pointer-events-none" : "hover:bg-slate-100"
+                className={`px-3 py-1.5 border border-slate-200 bg-white rounded-md text-xs font-medium text-slate-700 ${
+                  page <= 1 ? "opacity-50 pointer-events-none" : "hover:bg-slate-50 shadow-2xs"
                 }`}
               >
                 Previous
               </Link>
               <Link
                 href={`/admin/audit-log?page=${Math.min(pages, page + 1)}${action ? `&action=${action}` : ""}${entityType ? `&entityType=${entityType}` : ""}`}
-                className={`px-3 py-1.5 border border-slate-300 rounded-md text-sm font-medium ${
-                  page >= pages ? "opacity-50 pointer-events-none" : "hover:bg-slate-100"
+                className={`px-3 py-1.5 border border-slate-200 bg-white rounded-md text-xs font-medium text-slate-700 ${
+                  page >= pages ? "opacity-50 pointer-events-none" : "hover:bg-slate-50 shadow-2xs"
                 }`}
               >
                 Next
