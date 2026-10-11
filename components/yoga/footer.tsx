@@ -60,7 +60,10 @@ export function Footer({ settings }: { settings?: Record<string, string> }) {
               </li>
               {phone && (
                 <li className="flex items-center gap-3">
-                  <Phone className="size-4 text-gold" /> {phone}
+                  <Phone className="size-4 text-gold shrink-0" />
+                  <a href={`tel:${phone.replace(/[^0-9+]/g, '')}`} className="transition-colors hover:text-gold">
+                    {phone}
+                  </a>
                 </li>
               )}
             </ul>

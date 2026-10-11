@@ -9,6 +9,7 @@ import { submitContactForm } from '@/app/actions/contact'
 const contactInfo = {
   address: "1/67 NAKTALA, N.S.C BOSE ROAD, KOLKATA - 700047, WEST BENGAL, INDIA",
   email: "INFO.SUNSHINEELDERCARE@GMAIL.COM",
+  phone: "033-40585515",
 }
 
 function InstagramIcon(props: SVGProps<SVGSVGElement>) {
@@ -200,6 +201,12 @@ export function ContactCommunity() {
                     <p className="font-serif text-sm font-semibold text-primary">Email</p>
                     <a href={`mailto:${contactInfo.email.toLowerCase()}`} className="text-sm text-gold hover:underline mt-1 block">
                       {contactInfo.email}
+                    </a>
+                  </div>
+                  <div>
+                    <p className="font-serif text-sm font-semibold text-primary">Phone / Care Desk</p>
+                    <a href={`tel:${contactInfo.phone.replace(/[^0-9+]/g, '')}`} className="text-sm text-gold hover:underline mt-1 block font-mono">
+                      {contactInfo.phone}
                     </a>
                   </div>
                 </div>
