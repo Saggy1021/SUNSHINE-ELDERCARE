@@ -36,14 +36,23 @@ export function LoginForm() {
         password,
       })
 
-      if (result?.error) {
-        setError("Invalid email or password.")
+      if (result?.error || !result?.ok) {
+        if (result?.error?.includes('Too many login attempts')) {
+          setError("Too many login attempts. Please try again later.")
+        } else {
+          setError("Invalid email or password.")
+        }
       } else {
         router.push(callbackUrl)
         router.refresh()
       }
-    } catch (err) {
-      setError("An unexpected error occurred.")
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : ''
+      if (message.includes('Too many login attempts')) {
+        setError("Too many login attempts. Please try again later.")
+      } else {
+        setError("Invalid email or password.")
+      }
     } finally {
       setLoading(false)
     }
