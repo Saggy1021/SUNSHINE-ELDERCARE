@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { paymentService } from '@/lib/services/payment';
-import { db } from '@/lib/db';
-import { DocumentSequenceService } from '@/lib/services/document-sequence';
-import { notificationService } from '@/lib/services/notification';
+import { settleSuccessfulPayment } from '@/lib/services/payment/settlement';
 
 export async function POST(req: Request) {
   try {
@@ -27,119 +25,36 @@ export async function POST(req: Request) {
     const internalInvoiceId = payload.metadata?.invoiceId;
 
     if (eventType === 'payment.captured' || eventType === 'payment.success') {
-      
-      // Look up the internal payment record if one was created during initiation, or just the invoice
-      const payment = await db.payment.findFirst({
-        where: { invoiceId: internalInvoiceId, status: "PENDING" },
-        include: { 
-          invoice: true, 
-          renewalRequest: { include: { addOns: true, carePlan: true } },
-          user: { include: { memberProfile: true } }
-        }
-      });
-
-      if (!payment) {
-        // If payment doesn't exist, this might be a spontaneous webhook. 
-        // Real implementation will need to handle this (e.g., creating the payment record).
-        return NextResponse.json({ error: 'Payment context not found' }, { status: 404 });
+      if (!internalInvoiceId && !providerPaymentId) {
+        return NextResponse.json({ error: 'Missing payment context identifiers' }, { status: 400 });
       }
 
-      // Idempotency check: if already verified, acknowledge and ignore
-      if (payment.status === 'VERIFIED') {
-        return NextResponse.json({ received: true, note: 'Already verified' });
-      }
-
-      // 4. Transactional Settlement
-      await db.$transaction(async (tx) => {
-        // A. Concurrency Check & Update
-        const updateResult = await tx.payment.updateMany({
-          where: { id: payment.id, status: "PENDING" },
-          data: {
-            status: "VERIFIED",
-            verifiedAt: new Date(),
-            reference: providerPaymentId
-          }
-        });
-
-        if (updateResult.count === 0) {
-          // Already processed by another concurrent webhook
-          return;
-        }
-
-        // B. Finalize Invoice
-        const invoice = payment.invoice;
-        if (!invoice) {
-          throw new Error("Invoice not found for payment");
-        }
-        
-        const now = new Date();
-        let officialInvoiceNumber = invoice.invoiceNumber;
-        if (!officialInvoiceNumber) {
-          officialInvoiceNumber = await DocumentSequenceService.generateInvoiceNumber(now, tx);
-        }
-
-        await tx.invoice.update({
-          where: { id: invoice.id },
-          data: {
-            status: "ISSUED",
-            paymentStatus: "PAID",
-            paidDate: now,
-            invoiceNumber: officialInvoiceNumber
-          }
-        });
-
-        // C. Create Receipt
-        const receiptNumber = await DocumentSequenceService.generateReceiptNumber(now, tx);
-        await tx.receipt.create({
-          data: {
-            receiptNumber,
-            invoiceId: invoice.id,
-            paymentId: payment.id,
-            userId: payment.userId,
-            customerName: payment.user.name || "Member",
-            customerEmail: payment.user.email,
-            amount: payment.amount,
-            currency: payment.currency,
-            paymentMethod: "ONLINE",
-            paymentReference: providerPaymentId,
-            paymentDate: now,
-            relatedPlanName: payment.renewalRequest?.carePlan?.name || "Membership Plan"
-          }
-        });
-
-        // D. Handle Subscription Lifecycle (if attached to a renewal request)
-        if (payment.renewalRequest) {
-          const isFuture = payment.renewalRequest.requestedStartDate > now;
-          const newSubscription = await tx.subscription.create({
-            data: {
-              userId: payment.renewalRequest.userId,
-              carePlanId: payment.renewalRequest.carePlanId,
-              variantType: payment.renewalRequest.variantType,
-              durationMonths: payment.renewalRequest.durationMonths,
-              startDate: payment.renewalRequest.requestedStartDate,
-              endDate: payment.renewalRequest.calculatedEndDate,
-              status: isFuture ? "SCHEDULED" : "ACTIVE",
-            }
-          });
-
-          await tx.renewalRequest.update({
-            where: { id: payment.renewalRequest.id },
-            data: { status: "COMPLETED" } 
-          });
-
-          await tx.auditLog.create({
-            data: {
-              actorUserId: "SYSTEM",
-              action: "WEBHOOK_PAYMENT_VERIFIED",
-              entityType: "Payment",
-              entityId: payment.id,
-              metadata: { invoiceId: invoice.id, subscriptionId: newSubscription.id }
-            }
-          });
-        }
+      // Delegate to shared, concurrency-hardened settlement engine
+      // Enforces canonical lock ordering: Invoice (FOR UPDATE) -> Payment -> remaining records
+      const settlementResult = await settleSuccessfulPayment({
+        invoiceId: internalInvoiceId,
+        providerPaymentId: providerPaymentId || `generic_${Date.now()}`,
+        provider: 'GENERIC_WEBHOOK',
+        verifiedById: null,
+        metadata: {
+          eventType,
+          providerPaymentId,
+          payload,
+          actor: 'SYSTEM_WEBHOOK',
+        },
       });
 
-      return NextResponse.json({ received: true });
+      if (!settlementResult.success) {
+        if (settlementResult.error === 'PAYMENT_CONTEXT_NOT_FOUND') {
+          return NextResponse.json({ error: 'Payment context not found' }, { status: 404 });
+        }
+        return NextResponse.json({ error: settlementResult.error }, { status: 400 });
+      }
+
+      return NextResponse.json({
+        received: true,
+        status: settlementResult.alreadyVerified ? 'already_verified' : 'settled',
+      });
     }
 
     if (eventType === 'payment.failed') {

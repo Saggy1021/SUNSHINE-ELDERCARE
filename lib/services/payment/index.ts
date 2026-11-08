@@ -13,6 +13,9 @@ export interface PaymentCheckoutRequest {
 export interface PaymentCheckoutResponse {
   checkoutUrl: string;
   providerOrderId: string;
+  keyId?: string;
+  amount?: number;
+  currency?: string;
 }
 
 export interface PaymentProviderAdapter {
@@ -37,24 +40,31 @@ class MockPaymentAdapter implements PaymentProviderAdapter {
   }
 }
 
+import { RazorpayAdapter } from './razorpay-adapter';
+export { RazorpayAdapter } from './razorpay-adapter';
+export * from './settlement';
+
 export class PaymentService {
   private adapter: PaymentProviderAdapter;
 
-  constructor() {
+  constructor(adapterOverride?: PaymentProviderAdapter) {
+    if (adapterOverride) {
+      this.adapter = adapterOverride;
+      return;
+    }
+
     const provider = process.env.PAYMENT_PROVIDER || 'mock';
     
     // Abstract Factory pattern based on environment configuration
     switch (provider.toLowerCase()) {
       case 'stripe':
-        // this.adapter = new StripeAdapter();
         // Fallback to mock if stripe adapter is not yet implemented
         console.warn('Stripe adapter not fully implemented yet, falling back to mock');
         this.adapter = new MockPaymentAdapter();
         break;
       case 'razorpay':
-        // this.adapter = new RazorpayAdapter();
-        console.warn('Razorpay adapter not fully implemented yet, falling back to mock');
-        this.adapter = new MockPaymentAdapter();
+        // Real RazorpayAdapter: Fails closed if credentials are not configured
+        this.adapter = new RazorpayAdapter();
         break;
       case 'mock':
       default:
@@ -108,6 +118,7 @@ export class PaymentService {
         paymentMethod: "ONLINE",
         status: "PENDING",
         provider: process.env.PAYMENT_PROVIDER || "SYSTEM",
+        providerRef: session.providerOrderId,
         reference: session.providerOrderId
       }
     });
@@ -194,10 +205,58 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
 
   const { invoice, renewalRequest } = payment
 
-  // 2. Perform Transactional settlement
+  // 2. Perform Transactional settlement with Canonical Lock Ordering:
+  // Invoice (FOR UPDATE) -> Payment -> remaining settlement records
   await db.$transaction(async (tx) => {
-    
-    // A. Mark Payment Verified (Atomic concurrency check)
+    // A. Shared Invoice Locking via SELECT ... FOR UPDATE
+    let lockedInvoice: {
+      id: string;
+      paymentStatus: string;
+      status: string;
+      invoiceNumber: string | null;
+      customerName: string | null;
+      customerEmail: string | null;
+      customerAddress: string | null;
+      customerPhone: string | null;
+      issueDate: Date;
+    } | null = null;
+
+    if (typeof (tx as any).$queryRaw === 'function') {
+      const lockedInvoices = await (tx as any).$queryRaw`
+        SELECT
+          id,
+          "paymentStatus",
+          status,
+          "invoiceNumber",
+          "customerName",
+          "customerEmail",
+          "customerAddress",
+          "customerPhone",
+          "issueDate"
+        FROM "Invoice"
+        WHERE id = ${invoice.id}
+        FOR UPDATE
+      `;
+      if (Array.isArray(lockedInvoices) && lockedInvoices.length > 0) {
+        lockedInvoice = lockedInvoices[0];
+      }
+    }
+
+    if (!lockedInvoice) {
+      lockedInvoice = await tx.invoice.findUnique({
+        where: { id: invoice.id },
+      });
+    }
+
+    if (!lockedInvoice) {
+      throw new Error(`Invoice ${invoice.id} not found during manual payment verification`);
+    }
+
+    if (lockedInvoice.paymentStatus === 'PAID') {
+      throw new Error("Invoice is already paid");
+    }
+
+    // B. Mark Payment Verified (Atomic concurrency check on Payment row)
     const updateResult = await tx.payment.updateMany({
       where: { id: paymentId, status: "VERIFICATION_PENDING" },
       data: {
@@ -205,46 +264,46 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
         verifiedAt: new Date(),
         verifiedById: adminUserId
       }
-    })
+    });
 
     if (updateResult.count === 0) {
-      throw new Error("Payment could not be verified. It may have already been processed.")
+      throw new Error("Payment could not be verified. It may have already been processed.");
     }
 
-    // B. Finalize Invoice (Snapshot and Numbering)
-    const now = new Date()
+    // C. Finalize Invoice (Snapshot and Numbering)
+    const now = new Date();
     
-    let officialInvoiceNumber = invoice.invoiceNumber
+    let officialInvoiceNumber = lockedInvoice.invoiceNumber;
     if (!officialInvoiceNumber) {
-      officialInvoiceNumber = await DocumentSequenceService.generateInvoiceNumber(now, tx)
+      officialInvoiceNumber = await DocumentSequenceService.generateInvoiceNumber(now, tx);
     }
 
-    const customerName = payment.user.name || "Member"
-    const customerEmail = payment.user.email
-    const customerAddress = payment.user.memberProfile?.serviceAddress || ""
-    const customerPhone = payment.user.memberProfile?.mobileNumber || ""
+    const customerName = lockedInvoice.customerName || payment.user?.name || "Member";
+    const customerEmail = lockedInvoice.customerEmail || payment.user?.email || "";
+    const customerAddress = lockedInvoice.customerAddress || payment.user?.memberProfile?.serviceAddress || "";
+    const customerPhone = lockedInvoice.customerPhone || payment.user?.memberProfile?.mobileNumber || "";
 
     await tx.invoice.update({
-      where: { id: invoice.id },
+      where: { id: lockedInvoice.id },
       data: {
         status: "ISSUED", // Automatically issue the invoice upon payment verification if not already issued
         paymentStatus: "PAID",
         paidDate: now,
-        issueDate: invoice.status === "DRAFT" ? now : invoice.issueDate,
+        issueDate: lockedInvoice.status === "DRAFT" ? now : lockedInvoice.issueDate,
         invoiceNumber: officialInvoiceNumber,
-        customerName: invoice.customerName || customerName,
-        customerEmail: invoice.customerEmail || customerEmail,
-        customerAddress: invoice.customerAddress || customerAddress,
-        customerPhone: invoice.customerPhone || customerPhone,
+        customerName,
+        customerEmail,
+        customerAddress,
+        customerPhone,
       }
-    })
+    });
 
-    // B2. Create Receipt
-    const receiptNumber = await DocumentSequenceService.generateReceiptNumber(now, tx)
+    // D. Create Receipt
+    const receiptNumber = await DocumentSequenceService.generateReceiptNumber(now, tx);
     await tx.receipt.create({
       data: {
         receiptNumber,
-        invoiceId: invoice.id,
+        invoiceId: lockedInvoice.id,
         paymentId: payment.id,
         userId: payment.userId,
         customerName,
@@ -257,10 +316,10 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
         paymentDate: now,
         relatedPlanName: renewalRequest.carePlan?.name || "Membership Plan"
       }
-    })
+    });
 
-    // C. Handle Subscription Lifecycle Transition
-    const isFuture = renewalRequest.requestedStartDate > now
+    // E. Handle Subscription Lifecycle Transition
+    const isFuture = renewalRequest.requestedStartDate > now;
     
     // We create a new Subscription record to cleanly separate historical from new memberships
     const newSubscription = await tx.subscription.create({
@@ -273,18 +332,18 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
         endDate: renewalRequest.calculatedEndDate,
         status: isFuture ? "SCHEDULED" : "ACTIVE",
       }
-    })
+    });
 
     if (renewalRequest.addOns.length > 0) {
       await tx.subscriptionAddOn.createMany({
-        data: renewalRequest.addOns.map(addon => ({
+        data: renewalRequest.addOns.map((addon: any) => ({
           subscriptionId: newSubscription.id,
           addOnId: addon.addOnId
         }))
-      })
+      });
     }
 
-    // C2. Expire old subscription to prevent overlapping active memberships
+    // E2. Expire old subscription to prevent overlapping active memberships
     if (renewalRequest.currentSubscriptionId && !isFuture) {
       await tx.subscription.update({
         where: { id: renewalRequest.currentSubscriptionId },
@@ -292,25 +351,25 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
           status: "EXPIRED",
           endDate: now
         }
-      })
+      });
     }
 
-    // D. Finalize Renewal Request
+    // F. Finalize Renewal Request
     await tx.renewalRequest.update({
       where: { id: renewalRequest.id },
       data: { status: "COMPLETED" } 
-    })
+    });
 
-    // E. Create Audit Log
+    // G. Create Audit Log
     await tx.auditLog.create({
       data: {
         actorUserId: adminUserId,
         action: "PAYMENT_VERIFIED",
         entityType: "Payment",
         entityId: paymentId,
-        metadata: { invoiceId: invoice.id, subscriptionId: newSubscription.id }
+        metadata: { invoiceId: lockedInvoice.id, subscriptionId: newSubscription.id }
       }
-    })
+    });
   })
 
   // Fire notifications AFTER successful transaction — never inside $transaction

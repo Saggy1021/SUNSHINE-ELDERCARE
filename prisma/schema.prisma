@@ -452,14 +452,14 @@ model Inquiry {
 }
 
 model AuditLog {
-  id          String @id @default(cuid())
-  actorUserId String
+  id          String   @id @default(cuid())
+  actorUserId String?
   action      String
   entityType  String
   entityId    String
   metadata    Json?
 
-  actor User @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
 }
@@ -491,6 +491,24 @@ model Payment {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model RazorpayWebhookEvent {
+  id          String    @id @default(cuid())
+  eventId     String    @unique
+  eventType   String
+  orderId     String?
+  paymentId   String?
+  status      String    @default("RECEIVED") // RECEIVED, PROCESSED, IGNORED, FAILED
+  payload     Json
+  error       String?   @db.Text
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([orderId])
+  @@index([paymentId])
+  @@index([status])
 }
 
 model EmailNotification {

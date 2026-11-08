@@ -5,6 +5,7 @@ import { Reveal } from '@/components/yoga/reveal'
 import { Eyebrow } from '@/components/yoga/ornaments'
 import Link from 'next/link'
 import { initiatePaymentAction } from '@/app/actions/checkout'
+import { RazorpayCheckoutButton } from '@/components/yoga/member/razorpay-checkout-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -132,19 +133,17 @@ export default async function InvoiceReviewPage({ params, searchParams }: Props)
                     </p>
                   </div>
                   
-                  {/* Online Payment (Mock or configured provider) */}
+                  {/* Online Payment via Razorpay */}
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                    <h4 className="font-semibold text-slate-900 mb-2">Online Payment</h4>
-                    <form action={initiatePaymentAction}>
-                      <input type="hidden" name="invoiceId" value={invoice.id} />
-                      {renewalId && <input type="hidden" name="renewalId" value={renewalId} />}
-                      <button 
-                        type="submit"
-                        className="w-full rounded-xl bg-gold px-6 py-3 text-center text-sm font-bold text-brown transition-opacity hover:opacity-90 shadow-sm"
-                      >
-                        Pay Online Now
-                      </button>
-                    </form>
+                    <h4 className="font-semibold text-slate-900 mb-1">Online Payment</h4>
+                    <p className="text-xs text-slate-600 mb-4">
+                      Pay instantly with UPI, Credit/Debit Cards, or Net Banking. Membership activates automatically upon payment.
+                    </p>
+                    <RazorpayCheckoutButton
+                      invoiceId={invoice.id}
+                      renewalId={renewalId || undefined}
+                      amountFormatted={formatINR(invoice.total)}
+                    />
                   </div>
 
                   {/* Offline Payment */}

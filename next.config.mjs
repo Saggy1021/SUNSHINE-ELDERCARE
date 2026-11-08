@@ -15,7 +15,7 @@ const nextConfig = {
     // Next.js dev server requires 'unsafe-eval' for hot reloading.
     const cspHeader = `
       default-src 'self';
-      script-src 'self' 'unsafe-inline' https://va.vercel-scripts.com ${isDev ? "'unsafe-eval'" : ""};
+      script-src 'self' 'unsafe-inline' https://va.vercel-scripts.com https://checkout.razorpay.com ${isDev ? "'unsafe-eval'" : ""};
       style-src 'self' 'unsafe-inline';
       img-src 'self' blob: data:;
       font-src 'self';
@@ -43,7 +43,7 @@ const nextConfig = {
       },
       {
         key: 'Permissions-Policy',
-        value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=()'
+        value: 'camera=(), microphone=(), geolocation=(), payment=(self "https://checkout.razorpay.com"), usb=()'
       },
       {
         key: 'X-Frame-Options',
