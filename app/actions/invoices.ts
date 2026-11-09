@@ -4,42 +4,7 @@ import { auth } from '@/auth'
 import { carePricingService, carePlanLookupSchema } from '@/lib/services/care-plans'
 import { taxService } from '@/lib/services/tax'
 import { invoiceService } from '@/lib/services/invoice'
-import { z } from 'zod'
 import { RateLimitService } from '@/lib/services/rate-limit'
-
-export async function isInternalDemoAuthorized(
-  user: { id?: string; email?: string | null; role?: string } | null | undefined,
-  env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env
-): Promise<boolean> {
-  // Handle missing database user safely without throwing TypeError
-  if (!user) {
-    return false
-  }
-
-  // Preserve ADMIN authorization
-  if (user.role === 'ADMIN') {
-    return true
-  }
-
-  const allowlistedEmail = env.INTERNAL_DEMO_ACCOUNT_EMAIL?.trim().toLowerCase()
-  const allowlistedUserId = env.INTERNAL_DEMO_ACCOUNT_USER_ID?.trim()
-
-  // Exact allowlisted email (requires non-empty configured allowlist value)
-  const matchesEmail =
-    Boolean(allowlistedEmail) &&
-    typeof user.email === 'string' &&
-    Boolean(user.email.trim()) &&
-    user.email.trim().toLowerCase() === allowlistedEmail
-
-  // Exact allowlisted user ID (requires non-empty configured allowlist value)
-  const matchesUserId =
-    Boolean(allowlistedUserId) &&
-    typeof user.id === 'string' &&
-    Boolean(user.id.trim()) &&
-    user.id.trim() === allowlistedUserId
-
-  return Boolean(matchesEmail || matchesUserId)
-}
 
 export async function createCarePlanInvoiceAction(formData: FormData) {
   const session = await auth()
@@ -64,18 +29,9 @@ export async function createCarePlanInvoiceAction(formData: FormData) {
     throw new Error(`INVALID_REQUEST: ${parsed.error.message}`)
   }
 
-  // 1b. Restrict internal demo service to administrators or the dedicated internal demo account
+  // Defence-in-depth: Explicitly reject retired internal demo service
   if (parsed.data.planSlug === 'internal-razorpay-demo') {
-    const { db } = await import('@/lib/db')
-    const user = await db.user.findUnique({
-      where: { id: session.user.id },
-      select: { id: true, role: true, email: true },
-    })
-
-    const isAuthorized = await isInternalDemoAuthorized(user)
-    if (!isAuthorized) {
-      throw new Error('UNAUTHORIZED_TEST_SERVICE: The internal Razorpay demo service is restricted to administrators and the dedicated demo account.')
-    }
+    throw new Error('RETIRED_TEST_SERVICE: The internal Razorpay demo service is permanently retired and cannot be invoiced.')
   }
 
   // 2. Load authoritative pricing

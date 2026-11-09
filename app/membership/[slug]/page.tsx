@@ -6,8 +6,6 @@ import { Eyebrow } from '@/components/yoga/ornaments'
 import { CheckCircle } from 'lucide-react'
 import Link from 'next/link'
 import { auth } from '@/auth'
-import { db } from '@/lib/db'
-import { isInternalDemoAuthorized } from '@/app/actions/invoices'
 import type { Metadata } from 'next'
 import { PLAN_IMAGES } from '@/components/yoga/care-plans-section'
 
@@ -21,12 +19,6 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params
-  if (slug === 'internal-razorpay-demo') {
-    return {
-      title: 'Demo Service | Sunshine Eldercare',
-      robots: { index: false, follow: false },
-    }
-  }
   const catalog = await carePricingService.getCatalog()
   const plan = catalog.find((p) => p.slug === slug)
   if (!plan) return {}
@@ -41,28 +33,8 @@ export default async function CarePlanDetailPage({ params }: Props) {
   const session = await auth()
   const isAuthenticated = !!session?.user?.id
 
-  let plan: CarePlanCatalogEntry | undefined
-
-  if (slug === 'internal-razorpay-demo') {
-    if (!session?.user?.id) {
-      notFound()
-    }
-    const user = await db.user.findUnique({
-      where: { id: session.user.id },
-      select: { id: true, role: true, email: true },
-    })
-
-    const isAuthorized = await isInternalDemoAuthorized(user)
-    if (!isAuthorized) {
-      notFound()
-    }
-
-    const catalog = await carePricingService.getCatalog({ includeInternalDemo: true })
-    plan = catalog.find((p) => p.slug === slug)
-  } else {
-    const catalog = await carePricingService.getCatalog()
-    plan = catalog.find((p) => p.slug === slug)
-  }
+  const catalog = await carePricingService.getCatalog()
+  const plan = catalog.find((p) => p.slug === slug)
 
   if (!plan) notFound()
 

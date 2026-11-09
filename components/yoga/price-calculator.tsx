@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { getCarePlanPrice } from '@/app/actions/care-plans'
-import { createCarePlanInvoiceAction } from '@/app/actions/invoices'
 import type { CarePlanCatalogEntry, CarePlanLookupResult } from '@/lib/services/care-plans'
 import Link from 'next/link'
 import { ArrowLeft, CheckCircle } from 'lucide-react'
@@ -26,31 +25,7 @@ export function PriceCalculator({ plan, isAuthenticated, addOns = [] }: PriceCal
   const [selectedAddOns, setSelectedAddOns] = useState<string[]>([])
   const [result, setResult] = useState<CarePlanLookupResult | null>(null)
   const [loading, setLoading] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  
-  // Idempotency key to strictly prevent duplicate invoice creation on rapid double-clicks
-  const [idempotencyKey, setIdempotencyKey] = useState<string>('')
-
-  useEffect(() => {
-    // Generate a new key whenever the commercial configuration changes
-    setIdempotencyKey(crypto.randomUUID())
-  }, [variantType, months, plan.slug])
-
-  // Automatically calculate price for the demo plan on mount
-  useEffect(() => {
-    if (plan.slug === 'internal-razorpay-demo') {
-      const formData = new FormData()
-      formData.set('planSlug', plan.slug)
-      formData.set('variantType', 'SINGLE')
-      formData.set('months', '1')
-      getCarePlanPrice(formData).then((response) => {
-        if (response.success && response.data) {
-          setResult(response.data)
-        }
-      })
-    }
-  }, [plan.slug])
 
   const selectedVariant = plan.variants.find((v) => v.variantType === variantType)
   const availableDurations = selectedVariant?.durations.map((d) => d.months) ?? [1]
@@ -78,35 +53,6 @@ export function PriceCalculator({ plan, isAuthenticated, addOns = [] }: PriceCal
 
   const handleSubscribe = async () => {
     if (!isAuthenticated) return
-
-    // Secure private selection flow for the internal demo service
-    if (plan.slug === 'internal-razorpay-demo') {
-      setIsSubmitting(true)
-      setError(null)
-      try {
-        const formData = new FormData()
-        formData.set('planSlug', plan.slug)
-        formData.set('variantType', variantType)
-        formData.set('months', String(months))
-        if (idempotencyKey) {
-          formData.set('idempotencyKey', idempotencyKey)
-        }
-
-        const res = await createCarePlanInvoiceAction(formData)
-        if (res.success && res.invoiceId) {
-          router.push(`/checkout/${res.invoiceId}`)
-          return
-        }
-      } catch (err: any) {
-        setError(err.message || 'Failed to create demo invoice.')
-      } finally {
-        setIsSubmitting(false)
-      }
-      return
-    }
-
-    // Phase 7 explicitly prohibits creating an invoice from the public page.
-    // The authenticated user is routed to the future checkout/dashboard flow.
     router.push('/dashboard')
   }
 
@@ -146,117 +92,126 @@ export function PriceCalculator({ plan, isAuthenticated, addOns = [] }: PriceCal
         {/* Duration Selection */}
         <div>
           <label className="block text-sm font-semibold text-foreground/80 mb-2">Duration</label>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {availableDurations.map((m) => (
-              <button
-                key={m}
-                onClick={() => {
-                  setMonths(m)
-                  setResult(null)
-                }}
-                className={`rounded-xl border px-3 py-2 text-sm font-medium transition-all ${
-                  months === m
-                    ? 'border-gold bg-gold/10 text-gold'
-                    : 'border-border text-foreground/60 hover:border-gold/50'
-                }`}
-              >
-                {m === 1 ? '1 Month' : `${m} Months`}
-              </button>
-            ))}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[1, 3, 6, 12].map((m) => {
+              const available = availableDurations.includes(m)
+              return (
+                <button
+                  key={m}
+                  disabled={!available}
+                  onClick={() => {
+                    setMonths(m)
+                    setResult(null)
+                  }}
+                  className={`rounded-xl border px-3 py-2.5 text-xs font-medium transition-all ${
+                    months === m
+                      ? 'border-gold bg-gold/10 text-gold font-semibold'
+                      : 'border-border text-foreground/60 hover:border-gold/50'
+                  } disabled:opacity-40 disabled:cursor-not-allowed`}
+                >
+                  {m === 1 ? '1 Month' : `${m} Months`}
+                </button>
+              )
+            })}
           </div>
         </div>
 
-        {/* Add-Ons */}
+        {/* Add-ons Selection */}
         {addOns.length > 0 && (
           <div>
-            <label className="block text-sm font-semibold text-foreground/80 mb-2">Optional Add-Ons</label>
-            <div className="space-y-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-              {addOns.map(addon => (
-                <label key={addon.id} className={`flex items-center justify-between rounded-xl border px-4 py-3 cursor-pointer transition-colors ${selectedAddOns.includes(addon.id) ? 'border-gold bg-gold/5' : 'border-border hover:border-gold/50'}`}>
-                  <div className="flex items-center gap-3">
-                    <input type="checkbox" className="accent-gold h-4 w-4 rounded border-gray-300 text-gold focus:ring-gold" checked={selectedAddOns.includes(addon.id)} onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedAddOns([...selectedAddOns, addon.id])
-                      } else {
-                        setSelectedAddOns(selectedAddOns.filter(id => id !== addon.id))
-                      }
-                      setResult(null)
-                    }} />
-                    <span className="text-sm font-medium text-foreground">{addon.name}</span>
-                  </div>
-                  <span className="text-sm font-semibold text-gold">₹{addon.price.toLocaleString('en-IN')}</span>
-                </label>
-              ))}
+            <label className="block text-sm font-semibold text-foreground/80 mb-2">Optional Add-ons</label>
+            <div className="space-y-2">
+              {addOns.map((addon) => {
+                const isSelected = selectedAddOns.includes(addon.id)
+                return (
+                  <label
+                    key={addon.id}
+                    className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
+                      isSelected ? 'border-gold bg-gold/5' : 'border-border hover:border-border/80'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedAddOns([...selectedAddOns, addon.id])
+                          } else {
+                            setSelectedAddOns(selectedAddOns.filter(id => id !== addon.id))
+                          }
+                          setResult(null)
+                        }}
+                        className="rounded border-border text-gold focus:ring-gold"
+                      />
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{addon.name}</p>
+                        <p className="text-xs text-foreground/50">{addon.description}</p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-semibold text-gold">
+                      +₹{Number(addon.price).toLocaleString('en-IN')}/mo
+                    </span>
+                  </label>
+                )
+              })}
             </div>
           </div>
         )}
 
+        {/* Calculate Button */}
         <button
           onClick={handleCalculate}
           disabled={loading}
-          className="w-full rounded-xl bg-gold px-6 py-3 text-sm font-semibold text-brown transition-opacity hover:opacity-90 disabled:opacity-60"
+          className="w-full rounded-xl border border-gold/40 bg-gold/10 px-4 py-3 text-sm font-semibold text-gold transition-colors hover:bg-gold/20 disabled:opacity-50"
         >
-          {loading ? 'Calculating…' : 'Show Exact Price'}
+          {loading ? 'Calculating...' : 'Calculate Exact Total'}
         </button>
+
+        {error && (
+          <p className="text-xs text-rose-500 text-center font-medium">{error}</p>
+        )}
       </div>
 
-      {/* Error */}
-      {error && (
-        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      {/* Result */}
+      {/* Result Display */}
       {result && (
-        <div className="mt-6 rounded-xl border border-gold/30 bg-gold/5 p-6">
-          <div className="flex items-start justify-between">
+        <div className="mt-6 rounded-xl border border-gold/30 bg-gold/5 p-6 space-y-4">
+          <div className="flex items-baseline justify-between border-b border-gold/20 pb-4">
             <div>
-              <p className="text-xs uppercase tracking-widest text-gold font-semibold">
-                {result.planName} — {result.variantType === 'SINGLE' ? 'Single' : 'Couple'}
-              </p>
-              <p className="mt-1 text-sm text-foreground/60">
-                {result.months === 1 ? '1 Month' : `${result.months} Months`}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="font-display text-3xl font-bold text-foreground">
+              <p className="font-display text-2xl font-bold text-foreground">
                 {formatINR(result.documentedTotal)}
               </p>
-              {result.hasDiscount && result.discountNote && (
-                <p className="mt-1 text-xs text-gold font-medium">{result.discountNote}</p>
-              )}
+              <p className="text-xs text-foreground/60">
+                {result.variantType === 'SINGLE' ? 'Single' : 'Couple'} · {result.months === 1 ? '1 Month' : `${result.months} Months`}
+              </p>
+            </div>
+            {result.hasDiscount && (
+              <span className="rounded-full bg-gold/20 px-3 py-1 text-xs font-semibold text-gold">
+                {result.discountNote}
+              </span>
+            )}
+          </div>
+
+          <div className="space-y-1 text-xs text-foreground/60">
+            <div className="flex justify-between">
+              <span>Base Amount</span>
+              <span>{formatINR(result.monthlyBasePrice * result.months)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Inclusive of all applicable taxes/charges</span>
+              <span>{formatINR(result.monthlyGst * result.months)}</span>
+            </div>
+            <div className="flex justify-between font-semibold text-foreground pt-1 border-t border-gold/20">
+              <span>Total Payable</span>
+              <span>{formatINR(result.documentedTotal)}</span>
             </div>
           </div>
-          
-          {selectedAddOns.length > 0 && (
-            <div className="mt-4 border-t border-gold/20 pt-4 flex justify-between items-center text-sm">
-              <span className="text-foreground/70">Add-Ons Total</span>
-              <span className="font-semibold text-gold">₹0</span>
-            </div>
-          )}
 
-          {result.months === 1 && (
-            <div className="mt-4 border-t border-gold/20 pt-4 grid grid-cols-3 gap-4 text-center text-sm">
-              <div>
-                <p className="text-foreground/50 text-xs">Base Price</p>
-                <p className="font-semibold text-foreground">{formatINR(result.monthlyBasePrice)}</p>
-              </div>
-              <div>
-                <p className="text-foreground/50 text-xs">Inclusive of all applicable taxes/charges</p>
-                <p className="font-semibold text-foreground">{formatINR(result.monthlyGst)}</p>
-              </div>
-              <div>
-                <p className="text-foreground/50 text-xs">Total</p>
-                <p className="font-semibold text-foreground">{formatINR(result.monthlyTotal)}</p>
-              </div>
-            </div>
-          )}
-
-          <ul className="mt-4 space-y-2 border-t border-gold/20 pt-4">
+          {/* Included Services for this variant */}
+          <ul className="space-y-1.5 pt-2 border-t border-gold/20">
             {result.services.map((svc) => (
-              <li key={svc.serviceName} className="flex items-start gap-2 text-sm text-foreground/80">
-                <CheckCircle className="mt-0.5 size-4 shrink-0 text-gold" />
+              <li key={svc.serviceName} className="flex items-center gap-2 text-xs text-foreground/80">
+                <CheckCircle className="size-3.5 shrink-0 text-gold" />
                 <span>
                   {svc.serviceName}
                   {svc.serviceNote && (
@@ -270,10 +225,9 @@ export function PriceCalculator({ plan, isAuthenticated, addOns = [] }: PriceCal
           {isAuthenticated ? (
             <button
               onClick={handleSubscribe}
-              disabled={isSubmitting}
-              className="mt-6 block w-full rounded-xl bg-gold px-6 py-3 text-center text-sm font-semibold text-brown transition-opacity hover:opacity-90 disabled:opacity-60"
+              className="mt-6 block w-full rounded-xl bg-gold px-6 py-3 text-center text-sm font-semibold text-brown transition-opacity hover:opacity-90"
             >
-              {isSubmitting ? 'Creating Invoice...' : 'Subscribe Now'}
+              Subscribe Now
             </button>
           ) : (
             <Link

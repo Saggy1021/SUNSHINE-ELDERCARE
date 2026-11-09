@@ -65,16 +65,14 @@ export class CarePricingService {
    * Returns the full active catalog of care plans with all variants and durations.
    * Safe for public consumption — no auth required.
    * All prices come from the database (seeded from source document).
-   * By default, internal demo/test services (slug: 'internal-razorpay-demo') are excluded.
+   * Defence-in-depth: Explicitly excludes the retired demo service (slug: 'internal-razorpay-demo').
    */
-  async getCatalog(options?: { includeInternalDemo?: boolean }): Promise<CarePlanCatalogEntry[]> {
-    const where: any = { active: true }
-    if (!options?.includeInternalDemo) {
-      where.slug = { not: 'internal-razorpay-demo' }
-    }
-
+  async getCatalog(): Promise<CarePlanCatalogEntry[]> {
     const plans = await db.carePlan.findMany({
-      where,
+      where: {
+        active: true,
+        slug: { not: 'internal-razorpay-demo' },
+      },
       orderBy: { sortOrder: 'asc' },
       include: {
         variants: {
@@ -128,6 +126,11 @@ export class CarePricingService {
     }
 
     const { planSlug, variantType, months } = parsed.data
+
+    // Defence-in-depth: Explicitly reject retired demo service
+    if (planSlug === 'internal-razorpay-demo') {
+      throw new Error(`PLAN_NOT_FOUND: ${planSlug}`)
+    }
 
     const plan = await db.carePlan.findFirst({
       where: { slug: planSlug, active: true },
