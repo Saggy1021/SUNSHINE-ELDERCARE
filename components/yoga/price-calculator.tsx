@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { getCarePlanPrice } from '@/app/actions/care-plans'
+import { createCarePlanInvoiceAction } from '@/app/actions/invoices'
 import type { CarePlanCatalogEntry, CarePlanLookupResult } from '@/lib/services/care-plans'
 import Link from 'next/link'
 import { ArrowLeft, CheckCircle } from 'lucide-react'
@@ -36,6 +37,21 @@ export function PriceCalculator({ plan, isAuthenticated, addOns = [] }: PriceCal
     setIdempotencyKey(crypto.randomUUID())
   }, [variantType, months, plan.slug])
 
+  // Automatically calculate price for the demo plan on mount
+  useEffect(() => {
+    if (plan.slug === 'internal-razorpay-demo') {
+      const formData = new FormData()
+      formData.set('planSlug', plan.slug)
+      formData.set('variantType', 'SINGLE')
+      formData.set('months', '1')
+      getCarePlanPrice(formData).then((response) => {
+        if (response.success && response.data) {
+          setResult(response.data)
+        }
+      })
+    }
+  }, [plan.slug])
+
   const selectedVariant = plan.variants.find((v) => v.variantType === variantType)
   const availableDurations = selectedVariant?.durations.map((d) => d.months) ?? [1]
 
@@ -62,6 +78,32 @@ export function PriceCalculator({ plan, isAuthenticated, addOns = [] }: PriceCal
 
   const handleSubscribe = async () => {
     if (!isAuthenticated) return
+
+    // Secure private selection flow for the internal demo service
+    if (plan.slug === 'internal-razorpay-demo') {
+      setIsSubmitting(true)
+      setError(null)
+      try {
+        const formData = new FormData()
+        formData.set('planSlug', plan.slug)
+        formData.set('variantType', variantType)
+        formData.set('months', String(months))
+        if (idempotencyKey) {
+          formData.set('idempotencyKey', idempotencyKey)
+        }
+
+        const res = await createCarePlanInvoiceAction(formData)
+        if (res.success && res.invoiceId) {
+          router.push(`/checkout/${res.invoiceId}`)
+          return
+        }
+      } catch (err: any) {
+        setError(err.message || 'Failed to create demo invoice.')
+      } finally {
+        setIsSubmitting(false)
+      }
+      return
+    }
 
     // Phase 7 explicitly prohibits creating an invoice from the public page.
     // The authenticated user is routed to the future checkout/dashboard flow.

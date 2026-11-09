@@ -1,11 +1,13 @@
 import { notFound } from 'next/navigation'
-import { carePricingService } from '@/lib/services/care-plans'
+import { carePricingService, type CarePlanCatalogEntry } from '@/lib/services/care-plans'
 import { PriceCalculator } from '@/components/yoga/price-calculator'
 import { Reveal } from '@/components/yoga/reveal'
 import { Eyebrow } from '@/components/yoga/ornaments'
 import { CheckCircle } from 'lucide-react'
 import Link from 'next/link'
 import { auth } from '@/auth'
+import { db } from '@/lib/db'
+import { isInternalDemoAuthorized } from '@/app/actions/invoices'
 import type { Metadata } from 'next'
 import { PLAN_IMAGES } from '@/components/yoga/care-plans-section'
 
@@ -19,6 +21,12 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params
+  if (slug === 'internal-razorpay-demo') {
+    return {
+      title: 'Demo Service | Sunshine Eldercare',
+      robots: { index: false, follow: false },
+    }
+  }
   const catalog = await carePricingService.getCatalog()
   const plan = catalog.find((p) => p.slug === slug)
   if (!plan) return {}
@@ -32,8 +40,29 @@ export default async function CarePlanDetailPage({ params }: Props) {
   const { slug } = await params
   const session = await auth()
   const isAuthenticated = !!session?.user?.id
-  const catalog = await carePricingService.getCatalog()
-  const plan = catalog.find((p) => p.slug === slug)
+
+  let plan: CarePlanCatalogEntry | undefined
+
+  if (slug === 'internal-razorpay-demo') {
+    if (!session?.user?.id) {
+      notFound()
+    }
+    const user = await db.user.findUnique({
+      where: { id: session.user.id },
+      select: { id: true, role: true, email: true },
+    })
+
+    const isAuthorized = await isInternalDemoAuthorized(user)
+    if (!isAuthorized) {
+      notFound()
+    }
+
+    const catalog = await carePricingService.getCatalog({ includeInternalDemo: true })
+    plan = catalog.find((p) => p.slug === slug)
+  } else {
+    const catalog = await carePricingService.getCatalog()
+    plan = catalog.find((p) => p.slug === slug)
+  }
 
   if (!plan) notFound()
 
@@ -45,6 +74,13 @@ export default async function CarePlanDetailPage({ params }: Props) {
   function formatINR(amount: number) {
     return `₹${amount.toLocaleString('en-IN')}`
   }
+
+  const durationMonthsList = Array.from(
+    new Set([
+      ...(singleVariant?.durations.map((d) => d.months) ?? []),
+      ...(coupleVariant?.durations.map((d) => d.months) ?? []),
+    ])
+  ).sort((a, b) => a - b)
 
   return (
     <main className="relative overflow-x-clip min-h-screen pt-24">
@@ -111,14 +147,14 @@ export default async function CarePlanDetailPage({ params }: Props) {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
-                        {[3, 6, 12].map((m) => {
+                        {durationMonthsList.map((m) => {
                           const sd = singleVariant?.durations.find((d) => d.months === m)
                           const cd = coupleVariant?.durations.find((d) => d.months === m)
                           if (!sd && !cd) return null
                           return (
                             <tr key={m} className="bg-card hover:bg-muted/20 transition-colors">
                               <td className="px-4 py-3 font-medium">
-                                {m} Months
+                                {m === 1 ? '1 Month' : `${m} Months`}
                                 {(sd?.hasDiscount || cd?.hasDiscount) && (
                                   <span className="ml-2 text-xs text-gold">{sd?.discountNote ?? cd?.discountNote}</span>
                                 )}
