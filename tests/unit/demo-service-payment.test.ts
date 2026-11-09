@@ -12,6 +12,7 @@ import {
 } from '../../lib/services/payment/razorpay-adapter';
 import { settleSuccessfulPayment } from '../../lib/services/payment/settlement';
 import { DocumentSequenceService } from '../../lib/services/document-sequence';
+import { isInternalDemoAuthorized } from '../../app/actions/invoices';
 
 /**
  * Sunshine Eldercare — Temporary ₹20 Demo Service & Razorpay Live Workflow Test Suite
@@ -520,63 +521,131 @@ async function runDemoServiceTests() {
   console.log('  ✓ Verified setting active: false immediately blocks price lookup and invoice creation.');
 
   // -------------------------------------------------------------------------
-  // SCENARIO 8: Access Control & Demo Tester Authorization Guard
+  // SCENARIO 8: Access Control & Strict Allowlist Authorization Guard
   // -------------------------------------------------------------------------
   console.log('--- SCENARIO 8: Access Control & Strict Allowlist Authorization ---');
-  const allowlistedEmail = (
-    process.env.INTERNAL_DEMO_ACCOUNT_EMAIL || 'bootstrap_member_test@example.com'
-  ).trim().toLowerCase();
-  const allowlistedUserId = process.env.INTERNAL_DEMO_ACCOUNT_USER_ID?.trim();
 
-  const checkAuthorization = (user: any, planSlug: string) => {
-    if (planSlug === 'internal-razorpay-demo') {
-      const isAuthorized =
-        user?.role === 'ADMIN' ||
-        (!!user?.email && user.email.toLowerCase() === allowlistedEmail) ||
-        (!!allowlistedUserId && user?.id === allowlistedUserId);
-      if (!isAuthorized) {
-        throw new Error('UNAUTHORIZED_TEST_SERVICE: The internal Razorpay demo service is restricted to administrators and the dedicated demo account.');
-      }
+  // Test 8.1: Exact allowlisted email succeeds
+  const mockConfigWithEmail = {
+    INTERNAL_DEMO_ACCOUNT_EMAIL: 'demo_allowlist@sunshineeldercare.in',
+  };
+  const memberWithAllowlistedEmail = {
+    id: 'usr_member_email_match',
+    email: 'demo_allowlist@sunshineeldercare.in',
+    role: 'USER',
+  };
+  const emailAuthSuccess = await isInternalDemoAuthorized(memberWithAllowlistedEmail, mockConfigWithEmail);
+  assert.strictEqual(emailAuthSuccess, true, 'Exact allowlisted email must be authorized');
+
+  // Case insensitivity and trimming on email
+  const memberWithTrimmedEmail = {
+    id: 'usr_member_email_trim',
+    email: '  DEMO_ALLOWLIST@sunshineeldercare.in  ',
+    role: 'USER',
+  };
+  const emailTrimSuccess = await isInternalDemoAuthorized(memberWithTrimmedEmail, mockConfigWithEmail);
+  assert.strictEqual(emailTrimSuccess, true, 'Allowlisted email must be case-insensitive and trimmed');
+  console.log('  ✓ Verified exact allowlisted email succeeds (case-insensitive, trimmed).');
+
+  // Test 8.2: Exact allowlisted user ID succeeds
+  const mockConfigWithUserId = {
+    INTERNAL_DEMO_ACCOUNT_USER_ID: 'usr_exact_verified_777',
+  };
+  const memberWithAllowlistedId = {
+    id: 'usr_exact_verified_777',
+    email: 'unlisted.user@example.com',
+    role: 'USER',
+  };
+  const idAuthSuccess = await isInternalDemoAuthorized(memberWithAllowlistedId, mockConfigWithUserId);
+  assert.strictEqual(idAuthSuccess, true, 'Exact allowlisted user ID must be authorized');
+  console.log('  ✓ Verified exact allowlisted user ID succeeds.');
+
+  // Test 8.3: Non-allowlisted member is rejected
+  const nonAllowlistedMember = {
+    id: 'usr_other_456',
+    email: 'random.visitor@example.com',
+    role: 'USER',
+  };
+  const nonAllowlistedRejected = await isInternalDemoAuthorized(nonAllowlistedMember, mockConfigWithEmail);
+  assert.strictEqual(nonAllowlistedRejected, false, 'Non-allowlisted member must be rejected');
+
+  // Substring checks (email containing "demo" or "test") must be rejected
+  const broadDemoUser = { id: 'usr_demo_fake', email: 'fake_demo_allowlist@sunshineeldercare.in', role: 'USER' };
+  const broadTestUser = { id: 'usr_test_fake', email: 'tester_qa_team@company.com', role: 'USER' };
+  assert.strictEqual(await isInternalDemoAuthorized(broadDemoUser, mockConfigWithEmail), false, 'Substring "demo" email must be rejected');
+  assert.strictEqual(await isInternalDemoAuthorized(broadTestUser, mockConfigWithEmail), false, 'Substring "test" email must be rejected');
+  console.log('  ✓ Verified non-allowlisted members (including "demo"/"test" substring variants) are rejected.');
+
+  // Test 8.4: Missing allowlist configuration rejects non-admin users (Fail-Closed)
+  const emptyEnvConfig = {};
+  const whitespaceEnvConfig = {
+    INTERNAL_DEMO_ACCOUNT_EMAIL: '   ',
+    INTERNAL_DEMO_ACCOUNT_USER_ID: '   ',
+  };
+  const memberAttemptingWithoutConfig = {
+    id: 'usr_any_member_123',
+    email: 'bootstrap_member_test@example.com',
+    role: 'USER',
+  };
+  assert.strictEqual(
+    await isInternalDemoAuthorized(memberAttemptingWithoutConfig, emptyEnvConfig),
+    false,
+    'Missing configuration must fail-closed for non-admin users'
+  );
+  assert.strictEqual(
+    await isInternalDemoAuthorized(memberAttemptingWithoutConfig, whitespaceEnvConfig),
+    false,
+    'Whitespace-only configuration must fail-closed for non-admin users'
+  );
+  console.log('  ✓ Verified missing or whitespace allowlist configuration rejects non-admin users (fail-closed).');
+
+  // Test 8.5: ADMIN remains authorized
+  const adminUser = {
+    id: 'usr_admin_999',
+    email: 'superadmin@sunshineeldercare.in',
+    role: 'ADMIN',
+  };
+  assert.strictEqual(
+    await isInternalDemoAuthorized(adminUser, emptyEnvConfig),
+    true,
+    'ADMIN must remain authorized even without allowlist configuration'
+  );
+  assert.strictEqual(
+    await isInternalDemoAuthorized(adminUser, mockConfigWithEmail),
+    true,
+    'ADMIN must remain authorized with allowlist configuration'
+  );
+  console.log('  ✓ Verified ADMIN remains authorized with or without allowlist configuration.');
+
+  // Test 8.6: Missing database user is rejected safely without throwing TypeError
+  assert.strictEqual(await isInternalDemoAuthorized(null, mockConfigWithEmail), false, 'null user must return false');
+  assert.strictEqual(await isInternalDemoAuthorized(undefined, mockConfigWithEmail), false, 'undefined user must return false');
+  assert.strictEqual(await isInternalDemoAuthorized({} as any, mockConfigWithEmail), false, 'empty user object must return false');
+  assert.strictEqual(await isInternalDemoAuthorized({ email: null, role: 'USER' } as any, mockConfigWithEmail), false, 'user with null email must return false');
+  console.log('  ✓ Verified missing database user (null/undefined/empty) is safely rejected without TypeError.');
+
+  // Test 8.7: Action-level rejection enforcement
+  const checkActionLevel = async (user: any) => {
+    const isAuthorized = await isInternalDemoAuthorized(user, mockConfigWithEmail);
+    if (!isAuthorized) {
+      throw new Error('UNAUTHORIZED_TEST_SERVICE: The internal Razorpay demo service is restricted to administrators and the dedicated demo account.');
     }
     return true;
   };
 
-  // 1. Regular user trying to generate invoice for internal demo service
-  const unauthorizedUser = {
-    id: 'usr_unauth_999',
-    email: 'random.visitor@example.com',
-    role: 'USER',
-  };
-  inMemoryUsers.set(unauthorizedUser.id, unauthorizedUser);
-
-  let unauthThrew = false;
-  try {
-    checkAuthorization(unauthorizedUser, 'internal-razorpay-demo');
-  } catch (err: any) {
-    unauthThrew = true;
-    assert.ok(err.message.includes('UNAUTHORIZED_TEST_SERVICE'));
-  }
-  assert.strictEqual(unauthThrew, true, 'Unauthorized regular user must be rejected from demo service');
-
-  // 2. Users with "demo" or "test" in email must NOT be broadly authorized
-  const broadDemoUser = { id: 'usr_demo_fake', email: 'random-demo-user@gmail.com', role: 'USER' };
-  const broadTestUser = { id: 'usr_test_fake', email: 'tester_qa_team@company.com', role: 'USER' };
-
-  assert.throws(
-    () => checkAuthorization(broadDemoUser, 'internal-razorpay-demo'),
+  await assert.rejects(
+    async () => checkActionLevel(null),
     /UNAUTHORIZED_TEST_SERVICE/,
-    'Broad email with substring "demo" must be rejected'
+    'Action level must reject null user safely'
   );
-  assert.throws(
-    () => checkAuthorization(broadTestUser, 'internal-razorpay-demo'),
+  await assert.rejects(
+    async () => checkActionLevel(nonAllowlistedMember),
     /UNAUTHORIZED_TEST_SERVICE/,
-    'Broad email with substring "test" must be rejected'
+    'Action level must reject non-allowlisted member'
   );
-
-  // 3. Exactly allowlisted internal demo tester and admin succeed
-  assert.strictEqual(checkAuthorization(demoUser, 'internal-razorpay-demo'), true);
-  assert.strictEqual(checkAuthorization({ id: 'admin_1', email: 'admin@sunshineeldercare.in', role: 'ADMIN' }, 'internal-razorpay-demo'), true);
-  console.log('  ✓ Verified broad "demo"/"test" emails are rejected; only exact allowlisted account & admins permitted.');
+  assert.strictEqual(await checkActionLevel(memberWithAllowlistedEmail), true, 'Action level must accept allowlisted member');
+  assert.strictEqual(await checkActionLevel(adminUser), true, 'Action level must accept admin');
+  console.log('  ✓ Verified action-level error enforcement throws UNAUTHORIZED_TEST_SERVICE.');
 
   // Restore fetch
   global.fetch = originalFetch;
