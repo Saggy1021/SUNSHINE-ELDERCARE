@@ -43,10 +43,6 @@ export function ArmyTeam() {
         {/* Image */}
         <Reveal delay={120} className="relative">
           <div className="group relative overflow-hidden rounded-[2rem] border border-gold/30 shadow-2xl">
-            <div className="absolute top-4 left-4 z-10 flex items-center gap-2 rounded-full bg-primary/90 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider text-ivory backdrop-blur-md border border-gold/40 shadow-lg">
-              <Award className="size-3.5 text-gold" />
-              <span>12+ Years Experienced Staff</span>
-            </div>
             <img
               src="/images/army-team.jpg"
               alt="Retired Army personnel standing together"
