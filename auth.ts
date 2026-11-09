@@ -33,12 +33,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             return null
           }
 
+          const { RateLimitService } = await import('@/lib/services/rate-limit')
+
+          // 1. IP-level rate limiting: prevents automated distributed brute-force without deleting user tokens
           try {
-            const { RateLimitService } = await import('@/lib/services/rate-limit')
+            await RateLimitService.checkLimit('AUTHENTICATION')
+          } catch (ipError: any) {
+            if (ipError.name === 'RateLimitError') {
+              throw new Error('Too many login attempts from your IP. Please try again later.')
+            }
+            throw ipError
+          }
+
+          // 2. Email-level rate limiting: strictly limits verification attempts against this email
+          try {
             await RateLimitService.checkLimit('OTP_VERIFICATION', normalizedEmail)
           } catch (e: any) {
             if (e.name === 'RateLimitError') {
-              // Delete active tokens on rate limit violation to prevent brute forcing
+              // Delete active tokens on rate limit violation to prevent brute forcing of this token
               await db.verificationToken.deleteMany({
                 where: { identifier: `login_${normalizedEmail}` }
               })
@@ -60,17 +72,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             where: { email: normalizedEmail }
           })
 
-          if (!user || user.status === 'INACTIVE') {
+          // Strict explicit allowlist: Only ACTIVE users may authenticate.
+          // Non-active accounts (PENDING_VERIFICATION, SUSPENDED, BLOCKED, INACTIVE) are strictly rejected.
+          // Automatic activation of PENDING_VERIFICATION is forbidden; users must complete /verify.
+          if (!user || user.status !== 'ACTIVE') {
             return null
-          }
-
-          // If user was pending email verification, verifying login OTP activates account
-          if (user.status === 'PENDING_VERIFICATION') {
-            await db.user.update({
-              where: { id: user.id },
-              data: { status: 'ACTIVE', emailVerified: new Date() }
-            })
-            user.status = 'ACTIVE'
           }
 
           return {
@@ -108,7 +114,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           user?.passwordHash || DUMMY_HASH
         )
 
-        if (!user || !user.passwordHash || user.status === 'INACTIVE' || user.status === 'PENDING_VERIFICATION') {
+        // Strict explicit allowlist: Only ACTIVE accounts with valid password hashes can log in
+        if (!user || !user.passwordHash || user.status !== 'ACTIVE') {
           return null
         }
 
@@ -147,8 +154,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           select: { role: true, sessionVersion: true, status: true }
         })
 
-        // Invalidate session if user deleted, INACTIVE, PENDING_VERIFICATION, or sessionVersion incremented (e.g., password reset)
-        if (!dbUser || dbUser.status === 'INACTIVE' || dbUser.status === 'PENDING_VERIFICATION' || dbUser.sessionVersion !== token.sessionVersion) {
+        // Invalidate session if user deleted, non-ACTIVE (e.g., SUSPENDED, BLOCKED, INACTIVE), or sessionVersion incremented
+        if (!dbUser || dbUser.status !== 'ACTIVE' || dbUser.sessionVersion !== token.sessionVersion) {
           // Returning an empty token effectively revokes the session
           return {} as any
         }

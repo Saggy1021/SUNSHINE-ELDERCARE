@@ -209,6 +209,18 @@ export async function requestPasswordReset(formData: FormData) {
 export async function verifyEmail(email: string, rawToken: string) {
   try {
     const normalizedEmail = email.toLowerCase().trim()
+
+    // 1. IP-level rate limiting
+    try {
+      await RateLimitService.checkLimit('OTP_VERIFICATION')
+    } catch (ipError: any) {
+      if (ipError?.name === 'RateLimitError') {
+        return { success: false, error: 'Too many verification attempts from your IP. Please try again later.' }
+      }
+      throw ipError;
+    }
+
+    // 2. Email-level rate limiting
     try {
       await RateLimitService.checkLimit('OTP_VERIFICATION', normalizedEmail)
     } catch (rateLimitError: any) {
@@ -312,6 +324,7 @@ export async function resetPassword(formData: FormData) {
 export async function resendVerificationEmail(email: string) {
   try {
     const normalizedEmail = email.toLowerCase().trim()
+    await RateLimitService.checkLimit('OTP_RESEND')
     await RateLimitService.checkLimit('OTP_RESEND', normalizedEmail)
     await RateLimitService.checkLimit('OTP_RESEND_COOLDOWN', normalizedEmail)
 
@@ -357,15 +370,22 @@ export async function requestLoginOtp(email: string) {
       return { success: false, error: 'Please enter a valid email address.' }
     }
 
+    // 1. IP-level rate limiting (prevents automated distributed abuse)
+    await RateLimitService.checkLimit('OTP_RESEND')
+    // 2. Email-level rate limiting (max 5 requests per 15 min per email)
     await RateLimitService.checkLimit('OTP_RESEND', normalizedEmail)
+    // 3. Email-level cooldown (60s interval)
     await RateLimitService.checkLimit('OTP_RESEND_COOLDOWN', normalizedEmail)
 
     const user = await db.user.findUnique({
       where: { email: normalizedEmail }
     })
 
-    // Anti-enumeration: If user does not exist or is inactive, simulate consistent success
-    if (!user || user.status === 'INACTIVE') {
+    // Strict explicit allowlist: Only ACTIVE users are permitted to receive a login OTP.
+    // Non-active accounts (PENDING_VERIFICATION, SUSPENDED, BLOCKED, INACTIVE) receive an
+    // anti-enumeration generic message, and no login OTP is dispatched.
+    // Users with PENDING_VERIFICATION must complete account activation via /verify.
+    if (!user || user.status !== 'ACTIVE') {
       return {
         success: true,
         message: 'If an active account exists with this email, a 6-digit login code has been sent.'
