@@ -356,6 +356,42 @@ export async function toggleAddOnStatus(id: string, active: boolean) {
   revalidatePath('/admin/add-ons')
 }
 
+// --- Care Plan Catalog Governance ---
+export async function getAdminCarePlans() {
+  await requirePermission("PLAN_VIEW")
+  return db.carePlan.findMany({
+    orderBy: { sortOrder: 'asc' },
+    include: {
+      variants: {
+        include: {
+          durations: true,
+          services: true
+        }
+      }
+    }
+  })
+}
+
+export async function toggleCarePlanStatus(id: string, active: boolean) {
+  const adminId = await requirePermission("PLAN_MANAGE")
+  const updated = await db.carePlan.update({ where: { id }, data: { active } })
+  await logAudit(adminId, "CARE_PLAN_STATUS_CHANGED", "CarePlan", id, { active })
+  revalidatePath('/admin/add-ons')
+  return { success: true, active: updated.active }
+}
+
+export async function deleteDemoCarePlan(id: string) {
+  const adminId = await requirePermission("PLAN_MANAGE")
+  const plan = await db.carePlan.findUnique({ where: { id } })
+  if (!plan || plan.slug !== 'internal-razorpay-demo') {
+    throw new Error('Only the internal demo service may be deleted via this administrative action.')
+  }
+  await db.carePlan.delete({ where: { id } })
+  await logAudit(adminId, "DEMO_CARE_PLAN_DELETED", "CarePlan", id, { slug: plan.slug })
+  revalidatePath('/admin/add-ons')
+  return { success: true }
+}
+
 export async function getAuditLogs(params?: { page?: number; pageSize?: number; action?: string; entityType?: string }) {
   await requirePermission("AUDIT_VIEW")
   const page = params?.page || 1

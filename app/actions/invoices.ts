@@ -30,6 +30,29 @@ export async function createCarePlanInvoiceAction(formData: FormData) {
     throw new Error(`INVALID_REQUEST: ${parsed.error.message}`)
   }
 
+  // 1b. Restrict internal demo service to administrators or the dedicated internal demo account
+  if (parsed.data.planSlug === 'internal-razorpay-demo') {
+    const { db } = await import('@/lib/db')
+    const user = await db.user.findUnique({
+      where: { id: session.user.id },
+      select: { id: true, role: true, email: true },
+    })
+
+    const allowlistedEmail = (
+      process.env.INTERNAL_DEMO_ACCOUNT_EMAIL || 'bootstrap_member_test@example.com'
+    ).trim().toLowerCase()
+    const allowlistedUserId = process.env.INTERNAL_DEMO_ACCOUNT_USER_ID?.trim()
+
+    const isAuthorized =
+      user?.role === 'ADMIN' ||
+      (!!user?.email && user.email.toLowerCase() === allowlistedEmail) ||
+      (!!allowlistedUserId && user?.id === allowlistedUserId)
+
+    if (!isAuthorized) {
+      throw new Error('UNAUTHORIZED_TEST_SERVICE: The internal Razorpay demo service is restricted to administrators and the dedicated demo account.')
+    }
+  }
+
   // 2. Load authoritative pricing
   const pricingResult = await carePricingService.lookupPrice(parsed.data)
 
