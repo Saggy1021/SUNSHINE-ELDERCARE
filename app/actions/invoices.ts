@@ -29,6 +29,11 @@ export async function createCarePlanInvoiceAction(formData: FormData) {
     throw new Error(`INVALID_REQUEST: ${parsed.error.message}`)
   }
 
+  // Defence-in-depth: Explicitly reject retired internal demo service
+  if (parsed.data.planSlug === 'internal-razorpay-demo') {
+    throw new Error('RETIRED_TEST_SERVICE: The internal Razorpay demo service is permanently retired and cannot be invoiced.')
+  }
+
   // 2. Load authoritative pricing
   const pricingResult = await carePricingService.lookupPrice(parsed.data)
 

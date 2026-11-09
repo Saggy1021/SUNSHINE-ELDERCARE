@@ -364,9 +364,9 @@ async function runCleanupVerificationTests() {
 
   try {
     // -------------------------------------------------------------------------
-    // SCENARIO 1: Catalogue Exclusivity — Exactly 3 Standard Plans
+    // SCENARIO 1: Catalogue Exclusivity — Exactly 3 Standard Plans & Defence-in-Depth
     // -------------------------------------------------------------------------
-    console.log('--- SCENARIO 1: Catalogue Exclusivity ---');
+    console.log('--- SCENARIO 1: Catalogue Exclusivity & Defence-in-Depth ---');
     const catalog = await carePricingService.getCatalog();
     
     assert.strictEqual(catalog.length, 3, 'Public catalogue must contain exactly the 3 standard care plans');
@@ -382,12 +382,26 @@ async function runCleanupVerificationTests() {
       'Internal demo service must NOT appear anywhere in the catalogue'
     );
     console.log('  ✓ Verified /membership catalogue exposes exactly the 3 standard plans.');
-    console.log('  ✓ Verified internal-razorpay-demo is strictly absent from the catalogue.');
+    console.log('  ✓ Verified internal-razorpay-demo is strictly absent from the catalogue (active: false).');
+
+    // DEFENCE-IN-DEPTH TEST: Even if database record is active: true, catalogue must strictly exclude internal-razorpay-demo
+    deactivatedDemoCarePlan.active = true;
+    const catalogWithActiveDemo = await carePricingService.getCatalog();
+    assert.strictEqual(catalogWithActiveDemo.length, 3, 'Public catalogue must still contain exactly 3 plans even if demo is active in DB');
+    assert.strictEqual(
+      catalogWithActiveDemo.some((p) => p.slug === 'internal-razorpay-demo'),
+      false,
+      'Defence-in-depth: internal-razorpay-demo must NEVER appear in catalogue even if active: true in DB'
+    );
+    deactivatedDemoCarePlan.active = false; // Restore inactive state
+    console.log('  ✓ Verified defence-in-depth: internal-razorpay-demo is strictly excluded even when active: true in DB fixture.');
 
     // -------------------------------------------------------------------------
-    // SCENARIO 2: Demo Service Inactivity & Pricing Lockdown
+    // SCENARIO 2: Demo Service Inactivity & Direct Invoice Rejection
     // -------------------------------------------------------------------------
-    console.log('--- SCENARIO 2: Demo Service Inactivity & Pricing Lockdown ---');
+    console.log('--- SCENARIO 2: Demo Service Inactivity & Direct Invoice Rejection ---');
+    
+    // Test A: Direct pricing service lookup rejection (active: false)
     await assert.rejects(
       async () => {
         await carePricingService.lookupPrice({
@@ -401,10 +415,69 @@ async function runCleanupVerificationTests() {
     );
     console.log('  ✓ Verified price lookup for internal-razorpay-demo throws PLAN_NOT_FOUND.');
 
+    // Test B: Direct pricing service lookup rejection even when active: true
+    deactivatedDemoCarePlan.active = true;
+    await assert.rejects(
+      async () => {
+        await carePricingService.lookupPrice({
+          planSlug: 'internal-razorpay-demo',
+          variantType: 'SINGLE',
+          months: 1,
+        });
+      },
+      /PLAN_NOT_FOUND: internal-razorpay-demo/,
+      'Defence-in-depth: Price lookup must throw PLAN_NOT_FOUND even if demo plan is active: true'
+    );
+    deactivatedDemoCarePlan.active = false;
+    console.log('  ✓ Verified defence-in-depth: Price lookup rejects internal-razorpay-demo even if active: true in DB fixture.');
+
+    // Test C: Direct Server Action invoice creation rejection
+    const authPath = require.resolve('../../auth');
+    require.cache[authPath] = {
+      id: authPath,
+      filename: authPath,
+      loaded: true,
+      exports: {
+        auth: async () => ({
+          user: { id: standardUser.id, email: standardUser.email, role: standardUser.role }
+        })
+      }
+    } as any;
+    const originalRateLimitEnv = process.env.RATE_LIMIT_ENABLED;
+    process.env.RATE_LIMIT_ENABLED = 'false';
+
+    const { createCarePlanInvoiceAction } = await import('../../app/actions/invoices');
+
+    const demoFormData = new FormData();
+    demoFormData.append('planSlug', 'internal-razorpay-demo');
+    demoFormData.append('variantType', 'SINGLE');
+    demoFormData.append('months', '1');
+
+    await assert.rejects(
+      async () => {
+        await createCarePlanInvoiceAction(demoFormData);
+      },
+      /RETIRED_TEST_SERVICE: The internal Razorpay demo service is permanently retired and cannot be invoiced\./,
+      'Direct invoice creation action must reject internal-razorpay-demo with RETIRED_TEST_SERVICE'
+    );
+
+    // Test D: Direct Server Action invoice creation rejection even if active: true
+    deactivatedDemoCarePlan.active = true;
+    await assert.rejects(
+      async () => {
+        await createCarePlanInvoiceAction(demoFormData);
+      },
+      /RETIRED_TEST_SERVICE: The internal Razorpay demo service is permanently retired and cannot be invoiced\./,
+      'Direct invoice creation action must reject internal-razorpay-demo even if active: true in DB'
+    );
+    deactivatedDemoCarePlan.active = false;
+    console.log('  ✓ Verified createCarePlanInvoiceAction rejects internal-razorpay-demo with RETIRED_TEST_SERVICE (both active and inactive).');
+
     // -------------------------------------------------------------------------
     // SCENARIO 3: Standard CarePlan Pricing & Tax Evaluation Intact
     // -------------------------------------------------------------------------
     console.log('--- SCENARIO 3: Standard CarePlan Pricing & Tax Evaluation ---');
+    // Shield Shine
     const shieldPricing = await carePricingService.lookupPrice({
       planSlug: 'shield-shine',
       variantType: 'SINGLE',
@@ -417,18 +490,47 @@ async function runCleanupVerificationTests() {
 
     const shieldTax = await taxService.calculateCarePlanTax(shieldPricing);
     assert.strictEqual(shieldTax.total, 5664, 'Shield Shine monthly total must be ₹5,664.00');
-    console.log('  ✓ Verified standard plan pricing and GST calculations remain 100% operational.');
+
+    // Semi Shield Shine
+    const semiPricing = await carePricingService.lookupPrice({
+      planSlug: 'semi-shield-shine',
+      variantType: 'SINGLE',
+      months: 1,
+    });
+    assert.strictEqual(semiPricing.monthlyTotal, 3776);
+
+    // Life Line Care
+    const lifePricing = await carePricingService.lookupPrice({
+      planSlug: 'life-line-care',
+      variantType: 'SINGLE',
+      months: 1,
+    });
+    assert.strictEqual(lifePricing.monthlyTotal, 2124);
+
+    console.log('  ✓ Verified all 3 standard plan pricing and GST calculations remain 100% operational.');
 
     // -------------------------------------------------------------------------
-    // SCENARIO 4: Standard Invoice Creation Intact
+    // SCENARIO 4: Standard Invoice Creation Intact (Service & Server Action)
     // -------------------------------------------------------------------------
     console.log('--- SCENARIO 4: Standard Invoice Creation ---');
+    // 4A: Direct invoiceService creation
     const invoice = await invoiceService.createCarePlanInvoice(standardUser.id, shieldPricing, shieldTax);
     assert.ok(invoice.id, 'Invoice ID must be generated');
     assert.strictEqual(invoice.userId, standardUser.id);
     assert.strictEqual(invoice.total.toNumber(), 5664);
     assert.strictEqual(invoice.currency, 'INR');
-    console.log('  ✓ Verified standard CarePlan invoice creation functions flawlessly.');
+    console.log('  ✓ Verified standard CarePlan invoice creation via invoiceService functions flawlessly.');
+
+    // 4B: Server Action creation for standard plan
+    const standardFormData = new FormData();
+    standardFormData.append('planSlug', 'shield-shine');
+    standardFormData.append('variantType', 'SINGLE');
+    standardFormData.append('months', '1');
+
+    const actionResult = await createCarePlanInvoiceAction(standardFormData);
+    assert.strictEqual(actionResult.success, true, 'createCarePlanInvoiceAction must succeed for standard plan');
+    assert.ok(actionResult.invoiceId, 'Action must return created invoice ID');
+    console.log('  ✓ Verified standard CarePlan invoice creation via createCarePlanInvoiceAction succeeds.');
 
     // -------------------------------------------------------------------------
     // SCENARIO 5: Razorpay Live Order Creation for Normal Amounts
