@@ -33,6 +33,7 @@ export interface EmailProviderAdapter {
  */
 export type NotificationEventType =
   | 'ACCOUNT_VERIFICATION'
+  | 'LOGIN_OTP'
   | 'PASSWORD_RESET'
   | 'RENEWAL_SUBMITTED'
   | 'RENEWAL_APPROVED'

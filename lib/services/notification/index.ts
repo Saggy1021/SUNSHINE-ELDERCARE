@@ -19,6 +19,14 @@ import { NotificationEventType } from '@/lib/services/email/types'
 import { templateService } from '@/lib/services/email/template-service'
 import { db } from '@/lib/db'
 import { logger } from '@/lib/logger'
+import { hashToken } from '@/lib/auth/tokens'
+
+export interface NotificationSendResult {
+  success: boolean
+  providerConfigured: boolean
+  error?: string
+  isDuplicate?: boolean
+}
 
 // ---------------------------------------------------------------------------
 // Idempotency Guard
@@ -100,20 +108,21 @@ async function safeSend(
   entityId: string,
   recipientEmail: string,
   template: { subject: string; html: string; text: string }
-): Promise<void> {
+): Promise<NotificationSendResult> {
   try {
     if (!recipientEmail) {
       logger.warn('Notification skipped: no recipient email', { eventType, entityId })
-      return
+      return { success: false, providerConfigured: false, error: 'Recipient email is missing' }
     }
 
     const { isNew, notificationId } = await acquireNotificationLock(
       eventType, entityType, entityId, recipientEmail
     )
 
-    if (!isNew) return // Duplicate — skip
+    if (!isNew) {
+      return { success: false, providerConfigured: true, isDuplicate: true, error: 'Duplicate notification request' }
+    }
 
-    const config = getEmailConfig()
     const result = await emailService.send({
       to: recipientEmail,
       subject: template.subject,
@@ -124,11 +133,22 @@ async function safeSend(
     if (notificationId) {
       await markNotificationResult(notificationId, result.success, result.error)
     }
+
+    return {
+      success: result.success,
+      providerConfigured: result.providerConfigured,
+      error: result.error,
+    }
   } catch (error: any) {
     logger.error('Notification delivery exception (non-fatal)', {
       eventType, entityType, entityId, recipientEmail,
       error: error.message,
     })
+    return {
+      success: false,
+      providerConfigured: false,
+      error: error.message,
+    }
   }
 }
 
@@ -422,17 +442,31 @@ export const notificationService = {
   },
 
   /**
-   * Email Verification
+   * Email Verification OTP
    */
-  async onAccountVerification(email: string, name: string, token: string) {
-    const config = getEmailConfig()
+  async onAccountVerification(email: string, name: string, token: string): Promise<NotificationSendResult> {
     const template = await templateService.getTemplateContent('ACCOUNT_VERIFICATION', {
       memberName: name,
       otp: token
     })
 
-    // Entity ID is a hash or pseudo-ID since User might not be fully active, but we can just use the email
-    await safeSend('ACCOUNT_VERIFICATION', 'User', email, email, template)
+    const tokenHash = hashToken(token)
+    // Incorporate token hash in entityId so resends with new tokens are not blocked by duplicate locking
+    return await safeSend('ACCOUNT_VERIFICATION', 'User', `${email.toLowerCase()}:${tokenHash.substring(0, 10)}`, email, template)
+  },
+
+  /**
+   * Login OTP
+   */
+  async onLoginOtp(email: string, name: string, token: string): Promise<NotificationSendResult> {
+    const template = await templateService.getTemplateContent('LOGIN_OTP', {
+      memberName: name,
+      otp: token
+    })
+
+    const tokenHash = hashToken(token)
+    // Incorporate token hash in entityId so subsequent login OTPs are not blocked by duplicate locking
+    return await safeSend('LOGIN_OTP', 'User', `${email.toLowerCase()}:${tokenHash.substring(0, 10)}`, email, template)
   },
 
   /**

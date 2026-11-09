@@ -208,20 +208,21 @@ export async function requestPasswordReset(formData: FormData) {
 
 export async function verifyEmail(email: string, rawToken: string) {
   try {
+    const normalizedEmail = email.toLowerCase().trim()
     try {
-      await RateLimitService.checkLimit('OTP_VERIFICATION', email)
+      await RateLimitService.checkLimit('OTP_VERIFICATION', normalizedEmail)
     } catch (rateLimitError: any) {
       if (rateLimitError?.name === 'RateLimitError') {
         await db.verificationToken.deleteMany({
-          where: { identifier: `verify_${email}` }
+          where: { identifier: `verify_${normalizedEmail}` }
         })
         return { success: false, error: 'Too many failed attempts. OTP invalidated. Please request a new one.' }
       }
       throw rateLimitError;
     }
 
-    const hashedToken = hashToken(rawToken)
-    const identifier = `verify_${email}`
+    const hashedToken = hashToken(rawToken.trim())
+    const identifier = `verify_${normalizedEmail}`
 
     const existingToken = await db.verificationToken.findFirst({
       where: { identifier, token: hashedToken }
@@ -232,19 +233,22 @@ export async function verifyEmail(email: string, rawToken: string) {
     }
 
     if (new Date(existingToken.expires) < new Date()) {
+      await db.verificationToken.deleteMany({
+        where: { identifier }
+      })
       return { success: false, error: "Token has expired" }
     }
 
     await db.user.update({
-      where: { email },
+      where: { email: normalizedEmail },
       data: { 
         emailVerified: new Date(),
         status: 'ACTIVE'
       }
     })
 
-    await db.verificationToken.delete({
-      where: { identifier_token: { identifier, token: hashedToken } }
+    await db.verificationToken.deleteMany({
+      where: { identifier }
     })
 
     return { success: true }
@@ -307,7 +311,7 @@ export async function resetPassword(formData: FormData) {
 
 export async function resendVerificationEmail(email: string) {
   try {
-    const normalizedEmail = email.toLowerCase()
+    const normalizedEmail = email.toLowerCase().trim()
     await RateLimitService.checkLimit('OTP_RESEND', normalizedEmail)
     await RateLimitService.checkLimit('OTP_RESEND_COOLDOWN', normalizedEmail)
 
@@ -321,7 +325,16 @@ export async function resendVerificationEmail(email: string) {
     }
 
     const rawToken = await generateEmailVerificationToken(normalizedEmail)
-    await notificationService.onAccountVerification(normalizedEmail, user.name || 'Member', rawToken)
+    const sendResult = await notificationService.onAccountVerification(normalizedEmail, user.name || 'Member', rawToken)
+
+    if (!sendResult.success) {
+      if (!sendResult.providerConfigured && process.env.NODE_ENV === 'production') {
+        return { success: false, error: 'Email delivery is not configured on this server. Please contact support.' }
+      }
+      if (sendResult.providerConfigured) {
+        return { success: false, error: 'Failed to deliver OTP. Please try again shortly.' }
+      }
+    }
 
     return { success: true }
   } catch (error: any) {
@@ -329,5 +342,68 @@ export async function resendVerificationEmail(email: string) {
       return { success: false, error: 'Please wait a moment before requesting another OTP.' }
     }
     return { success: false, error: 'Failed to resend OTP.' }
+  }
+}
+
+export async function requestLoginOtp(email: string) {
+  try {
+    if (!email || typeof email !== 'string') {
+      return { success: false, error: 'Email address is required.' }
+    }
+
+    const normalizedEmail = email.toLowerCase().trim()
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(normalizedEmail)) {
+      return { success: false, error: 'Please enter a valid email address.' }
+    }
+
+    await RateLimitService.checkLimit('OTP_RESEND', normalizedEmail)
+    await RateLimitService.checkLimit('OTP_RESEND_COOLDOWN', normalizedEmail)
+
+    const user = await db.user.findUnique({
+      where: { email: normalizedEmail }
+    })
+
+    // Anti-enumeration: If user does not exist or is inactive, simulate consistent success
+    if (!user || user.status === 'INACTIVE') {
+      return {
+        success: true,
+        message: 'If an active account exists with this email, a 6-digit login code has been sent.'
+      }
+    }
+
+    const { generateLoginOtpToken } = await import('@/lib/auth/tokens')
+    const rawToken = await generateLoginOtpToken(normalizedEmail)
+
+    const sendResult = await notificationService.onLoginOtp(
+      normalizedEmail,
+      user.name || 'Member',
+      rawToken
+    )
+
+    if (!sendResult.success) {
+      if (!sendResult.providerConfigured && process.env.NODE_ENV === 'production') {
+        return {
+          success: false,
+          error: 'Email delivery provider is not configured. Please sign in with your password or contact support.'
+        }
+      }
+      if (sendResult.providerConfigured) {
+        return {
+          success: false,
+          error: 'Unable to deliver login code. Please try again or sign in with your password.'
+        }
+      }
+    }
+
+    return {
+      success: true,
+      message: 'A 6-digit login code has been sent to your email.'
+    }
+  } catch (error: any) {
+    if (error?.name === 'RateLimitError') {
+      return { success: false, error: 'Please wait a moment before requesting another login code.' }
+    }
+    return { success: false, error: 'Failed to request login code. Please try again.' }
   }
 }

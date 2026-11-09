@@ -7,21 +7,15 @@ export function hashToken(token: string) {
 
 export async function generateEmailVerificationToken(email: string) {
   // Generate a cryptographically secure 6-digit OTP
-  const rawToken = crypto.randomInt(0, 1000000).toString().padStart(6, '0');
+  const rawToken = crypto.randomInt(100000, 1000000).toString();
   const hashedToken = hashToken(rawToken);
-  // Expire in 15 minutes
-  const expires = new Date(new Date().getTime() + 1000 * 60 * 15); 
-  const identifier = `verify_${email}`;
+  // Expire in 5 minutes
+  const expires = new Date(Date.now() + 1000 * 60 * 5); 
+  const identifier = `verify_${email.toLowerCase().trim()}`;
 
-  const existingToken = await db.verificationToken.findFirst({
+  await db.verificationToken.deleteMany({
     where: { identifier },
   });
-
-  if (existingToken) {
-    await db.verificationToken.delete({
-      where: { identifier_token: { identifier, token: existingToken.token } },
-    });
-  }
 
   await db.verificationToken.create({
     data: {
@@ -32,6 +26,67 @@ export async function generateEmailVerificationToken(email: string) {
   });
 
   return rawToken;
+}
+
+export async function generateLoginOtpToken(email: string) {
+  // Generate a cryptographically secure 6-digit OTP
+  const rawToken = crypto.randomInt(100000, 1000000).toString();
+  const hashedToken = hashToken(rawToken);
+  // Expire in 5 minutes
+  const expires = new Date(Date.now() + 1000 * 60 * 5);
+  const identifier = `login_${email.toLowerCase().trim()}`;
+
+  // Invalidate any previously unconsumed OTPs for this email
+  await db.verificationToken.deleteMany({
+    where: { identifier },
+  });
+
+  await db.verificationToken.create({
+    data: {
+      identifier,
+      token: hashedToken,
+      expires,
+    },
+  });
+
+  return rawToken;
+}
+
+export async function verifyLoginOtpToken(email: string, rawOtp: string): Promise<{ valid: boolean; reason?: 'INVALID' | 'EXPIRED' }> {
+  const normalizedEmail = email.toLowerCase().trim();
+  const trimmedOtp = rawOtp.trim();
+
+  // Validate format
+  if (!/^\d{6}$/.test(trimmedOtp)) {
+    return { valid: false, reason: 'INVALID' };
+  }
+
+  const hashedToken = hashToken(trimmedOtp);
+  const identifier = `login_${normalizedEmail}`;
+
+  const existingToken = await db.verificationToken.findFirst({
+    where: { identifier, token: hashedToken },
+  });
+
+  if (!existingToken) {
+    return { valid: false, reason: 'INVALID' };
+  }
+
+  // Check expiration
+  if (new Date(existingToken.expires) < new Date()) {
+    // Delete expired token
+    await db.verificationToken.deleteMany({
+      where: { identifier },
+    });
+    return { valid: false, reason: 'EXPIRED' };
+  }
+
+  // Token is valid! Consume/invalidate immediately to prevent replay
+  await db.verificationToken.deleteMany({
+    where: { identifier },
+  });
+
+  return { valid: true };
 }
 
 export async function generatePasswordResetToken(email: string) {
