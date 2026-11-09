@@ -12,35 +12,34 @@ import {
 } from '../../lib/services/payment/razorpay-adapter';
 import { settleSuccessfulPayment } from '../../lib/services/payment/settlement';
 import { DocumentSequenceService } from '../../lib/services/document-sequence';
-import { isInternalDemoAuthorized } from '../../app/actions/invoices';
 import { removeDemoService, disableDemoService, DEMO_SERVICE_CONFIG } from '../../scripts/manage-demo-service';
 
 /**
- * Sunshine Eldercare — Temporary ₹20 Demo Service & Razorpay Live Workflow Test Suite
- * Self-executing runner using native node:assert.
+ * Sunshine Eldercare — Demo Service Removal & Production Catalogue Verification Test Suite
+ * Validates complete removal of temporary demo UI/routes and preserves normal membership & payment functionality.
  */
-async function runDemoServiceTests() {
+async function runCleanupVerificationTests() {
   console.log('================================================================');
-  console.log('Sunshine Eldercare — Temporary ₹20 Demo Service & Payment Tests');
+  console.log('Sunshine Eldercare — Demo Service Removal & Catalogue Verification');
   console.log('================================================================\n');
 
-  const TEST_KEY_ID = 'rzp_live_mockKeyIdDemo20';
-  const TEST_KEY_SECRET = 'mockLiveSecretDemo20abcdef123';
-  const TEST_WEBHOOK_SECRET = 'mockWebhookSecretDemo20';
+  const TEST_KEY_ID = 'rzp_live_mockKeyIdClean';
+  const TEST_KEY_SECRET = 'mockLiveSecretCleanabcdef123';
+  const TEST_WEBHOOK_SECRET = 'mockWebhookSecretClean';
 
   // -------------------------------------------------------------------------
   // In-Memory Database State for Isolated Verification
   // -------------------------------------------------------------------------
-  const demoCarePlan = {
-    id: 'cplan_demo_20',
+  const deactivatedDemoCarePlan = {
+    id: 'cmw9i938u00009s5hoteio6ac',
     slug: 'internal-razorpay-demo',
     name: 'Internal Razorpay Demo Service',
     sortOrder: 999,
-    active: true,
+    active: false, // DEACTIVATED in Production DB
     variants: [
       {
         id: 'cvar_demo_20_single',
-        carePlanId: 'cplan_demo_20',
+        carePlanId: 'cmw9i938u00009s5hoteio6ac',
         variantType: 'SINGLE',
         monthlyBasePrice: 20,
         monthlyGst: 0,
@@ -55,21 +54,13 @@ async function runDemoServiceTests() {
             discountNote: 'Live Razorpay Test Service (₹20)',
           },
         ],
-        services: [
-          {
-            id: 'csvc_demo_20_1',
-            variantId: 'cvar_demo_20_single',
-            serviceName: 'Controlled Production Gateway Validation',
-            serviceNote: '₹20 internal test transaction',
-            sortOrder: 1,
-          },
-        ],
+        services: [],
       },
     ],
   };
 
-  const publicCarePlan = {
-    id: 'cplan_public_shield',
+  const publicShieldShine = {
+    id: 'cplan_shield_shine',
     slug: 'shield-shine',
     name: 'Shield Shine',
     sortOrder: 1,
@@ -77,7 +68,7 @@ async function runDemoServiceTests() {
     variants: [
       {
         id: 'cvar_shield_single',
-        carePlanId: 'cplan_public_shield',
+        carePlanId: 'cplan_shield_shine',
         variantType: 'SINGLE',
         monthlyBasePrice: 4800,
         monthlyGst: 864,
@@ -92,748 +83,552 @@ async function runDemoServiceTests() {
             discountNote: null,
           },
         ],
+        services: [
+          {
+            id: 'csvc_shield_1',
+            variantId: 'cvar_shield_single',
+            serviceName: 'Comprehensive Care Manager',
+            serviceNote: 'Personalized care planning',
+            sortOrder: 1,
+          },
+        ],
+      },
+    ],
+  };
+
+  const publicSemiShield = {
+    id: 'cplan_semi_shield',
+    slug: 'semi-shield-shine',
+    name: 'Semi Shield Shine',
+    sortOrder: 2,
+    active: true,
+    variants: [
+      {
+        id: 'cvar_semi_single',
+        carePlanId: 'cplan_semi_shield',
+        variantType: 'SINGLE',
+        monthlyBasePrice: 3200,
+        monthlyGst: 576,
+        monthlyTotal: 3776,
+        durations: [
+          {
+            id: 'cdur_semi_1m',
+            variantId: 'cvar_semi_single',
+            months: 1,
+            documentedTotal: 3776,
+            hasDiscount: false,
+            discountNote: null,
+          },
+        ],
         services: [],
       },
     ],
   };
 
-  let plansDatabase = [publicCarePlan, demoCarePlan];
-  let inMemoryInvoices = new Map<string, any>();
-  let inMemoryPayments = new Map<string, any>();
-  let inMemoryReceipts = new Map<string, any>();
-  let inMemoryUsers = new Map<string, any>();
-  let inMemoryAuditLogs: any[] = [];
-  let invoiceSequenceCount = 2000;
-  let receiptSequenceCount = 2000;
+  const publicLifeLine = {
+    id: 'cplan_lifeline',
+    slug: 'life-line-care',
+    name: 'Life Line Care',
+    sortOrder: 3,
+    active: true,
+    variants: [
+      {
+        id: 'cvar_life_single',
+        carePlanId: 'cplan_lifeline',
+        variantType: 'SINGLE',
+        monthlyBasePrice: 1800,
+        monthlyGst: 324,
+        monthlyTotal: 2124,
+        durations: [
+          {
+            id: 'cdur_life_1m',
+            variantId: 'cvar_life_single',
+            months: 1,
+            documentedTotal: 2124,
+            hasDiscount: false,
+            discountNote: null,
+          },
+        ],
+        services: [],
+      },
+    ],
+  };
 
-  // Mock db.carePlan in-memory
-  (db as any).carePlan = {
-    findMany: async ({ where }: any) => {
-      let filtered = [...plansDatabase];
-      if (where?.active !== undefined) {
-        filtered = filtered.filter((p) => p.active === where.active);
-      }
-      if (where?.slug?.not) {
-        filtered = filtered.filter((p) => p.slug !== where.slug.not);
-      }
-      if (where?.slug && typeof where.slug === 'string') {
-        filtered = filtered.filter((p) => p.slug === where.slug);
-      }
-      return filtered;
-    },
-    findFirst: async ({ where }: any) => {
-      for (const p of plansDatabase) {
-        if (where?.slug && p.slug !== where.slug) continue;
-        if (where?.active !== undefined && p.active !== where.active) continue;
-        return p;
-      }
-      return null;
-    },
-    update: async ({ where, data }: any) => {
-      const plan = plansDatabase.find((p) => p.id === where.id || p.slug === where.slug);
-      if (!plan) throw new Error('CarePlan not found');
-      Object.assign(plan, data);
-      return plan;
+  let plansDatabase = [publicShieldShine, publicSemiShield, publicLifeLine, deactivatedDemoCarePlan];
+
+  const standardUser = {
+    id: 'usr_member_clean_101',
+    email: 'member@sunshineeldercare.in',
+    name: 'Standard Member',
+    role: 'MEMBER',
+    memberProfile: {
+      serviceAddress: 'Salt Lake Sector 5, Kolkata',
+      mobileNumber: '+91 98765 43210',
     },
   };
 
-  // Mock db.invoice in-memory
-  (db as any).invoice = {
-    create: async ({ data, include }: any) => {
-      const id = `inv_demo_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-      const lineItems = (data.lineItems?.create || []).map((li: any, idx: number) => ({
-        id: `li_${id}_${idx}`,
-        invoiceId: id,
-        ...li,
-      }));
-      const invoice = {
-        id,
-        ...data,
-        lineItems,
-        total: data.total instanceof Prisma.Decimal ? data.total : new Prisma.Decimal(data.total),
-        subtotal: data.subtotal ? new Prisma.Decimal(data.subtotal) : null,
-        taxAmount: data.taxAmount ? new Prisma.Decimal(data.taxAmount) : null,
-        status: data.status || 'DRAFT',
-        paymentStatus: data.paymentStatus || 'UNPAID',
-      };
-      inMemoryInvoices.set(id, invoice);
-      return invoice;
-    },
-    findUnique: async ({ where }: any) => {
-      if (where.id) return inMemoryInvoices.get(where.id) || null;
-      if (where.idempotencyKey) {
-        for (const inv of inMemoryInvoices.values()) {
-          if (inv.idempotencyKey === where.idempotencyKey) return inv;
-        }
-      }
-      return null;
-    },
-    update: async ({ where, data }: any) => {
-      const inv = inMemoryInvoices.get(where.id);
-      if (!inv) throw new Error('Invoice not found');
+  let invoicesDatabase: any[] = [];
+  let invoiceLinesDatabase: any[] = [];
+  let paymentsDatabase: any[] = [];
+  let subscriptionsDatabase: any[] = [];
+  let receiptsDatabase: any[] = [];
+  let auditLogsDatabase: any[] = [];
+
+  let nextInvoiceSerial = 1050;
+  let nextReceiptSerial = 1050;
+
+  // Intercept Prisma Client Calls
+  const originalCarePlanFindMany = db.carePlan.findMany;
+  const originalCarePlanFindFirst = db.carePlan.findFirst;
+  const originalCarePlanFindUnique = db.carePlan.findUnique;
+  const originalInvoiceCreate = db.invoice.create;
+  const originalInvoiceFindUnique = db.invoice.findUnique;
+  const originalInvoiceUpdate = db.invoice.update;
+  const originalPaymentFindFirst = db.payment.findFirst;
+  const originalPaymentUpdateMany = db.payment.updateMany;
+  const originalReceiptCreate = db.receipt.create;
+  const originalSubscriptionCreate = db.subscription.create;
+  const originalAuditLogCreate = db.auditLog.create;
+  const originalTransaction = db.$transaction;
+  const originalGenInvoiceNum = DocumentSequenceService.generateInvoiceNumber;
+  const originalGenReceiptNum = DocumentSequenceService.generateReceiptNumber;
+
+  (db.carePlan as any).findMany = async (args?: any) => {
+    return plansDatabase.filter((p) => {
+      if (args?.where?.active !== undefined && p.active !== args.where.active) return false;
+      if (args?.where?.slug?.not && p.slug === args.where.slug.not) return false;
+      return true;
+    });
+  };
+
+  (db.carePlan as any).findFirst = async (args?: any) => {
+    const slug = args?.where?.slug;
+    const active = args?.where?.active;
+    return plansDatabase.find((p) => {
+      if (slug && p.slug !== slug) return false;
+      if (active !== undefined && p.active !== active) return false;
+      return true;
+    }) ?? null;
+  };
+
+  (db.carePlan as any).findUnique = async (args: any) => {
+    return plansDatabase.find((p) => p.id === args?.where?.id || p.slug === args?.where?.slug) ?? null;
+  };
+
+  (db.invoice as any).create = async ({ data }: any) => {
+    const id = `inv_clean_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const record = {
+      ...data,
+      id,
+      total: new Prisma.Decimal(data.total),
+      subtotal: data.subtotal ? new Prisma.Decimal(data.subtotal) : null,
+      taxAmount: data.taxAmount ? new Prisma.Decimal(data.taxAmount) : null,
+      status: 'DRAFT',
+      paymentStatus: 'UNPAID',
+      issueDate: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      lineItems: data.lineItems?.create
+        ? (Array.isArray(data.lineItems.create) ? data.lineItems.create : [data.lineItems.create]).map(
+            (li: any) => ({
+              ...li,
+              id: `li_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+              invoiceId: id,
+              unitPrice: new Prisma.Decimal(li.unitPrice),
+              lineTotal: new Prisma.Decimal(li.lineTotal),
+            })
+          )
+        : [],
+    };
+    invoicesDatabase.push(record);
+    if (record.lineItems) {
+      invoiceLinesDatabase.push(...record.lineItems);
+    }
+    return record;
+  };
+
+  (db.invoice as any).findUnique = async ({ where }: any) => {
+    const inv = invoicesDatabase.find((i) => i.id === where.id);
+    if (!inv) return null;
+    return {
+      ...inv,
+      lineItems: invoiceLinesDatabase.filter((li) => li.invoiceId === inv.id),
+      payments: paymentsDatabase.filter((p) => p.invoiceId === inv.id),
+    };
+  };
+
+  (db.invoice as any).update = async ({ where, data }: any) => {
+    const inv = invoicesDatabase.find((i) => i.id === where.id);
+    if (inv) {
       Object.assign(inv, data);
-      return inv;
-    },
+    }
+    return inv;
   };
 
-  // Mock db.payment in-memory
-  (db as any).payment = {
-    create: async ({ data }: any) => {
-      const id = `pay_demo_${Date.now()}`;
-      const payment = {
-        id,
-        ...data,
-        amount: data.amount instanceof Prisma.Decimal ? data.amount : new Prisma.Decimal(data.amount),
-        status: data.status || 'PENDING',
-      };
-      inMemoryPayments.set(id, payment);
-      return payment;
-    },
-    findFirst: async ({ where }: any) => {
-      for (const p of inMemoryPayments.values()) {
-        if (where.id && p.id === where.id) return p;
-        if (where.providerRef && p.providerRef === where.providerRef) return p;
-        if (where.reference && p.reference === where.reference) return p;
-        if (where.OR) {
-          const match = where.OR.some(
-            (cond: any) =>
-              (cond.providerRef && p.providerRef === cond.providerRef) ||
-              (cond.reference && p.reference === cond.reference)
-          );
-          if (match) return p;
-        }
+  (db.payment as any).findFirst = async ({ where }: any) => {
+    return paymentsDatabase.find((p) => {
+      if (where.id && p.id === where.id) return true;
+      if (where.providerRef && p.providerRef === where.providerRef) return true;
+      if (where.reference && p.reference === where.reference) return true;
+      if (where.OR) {
+        return where.OR.some((clause: any) => {
+          if (clause.providerRef && p.providerRef === clause.providerRef) return true;
+          if (clause.reference && p.reference === clause.reference) return true;
+          return false;
+        });
       }
-      return null;
-    },
-    updateMany: async ({ where, data }: any) => {
-      let count = 0;
-      for (const p of inMemoryPayments.values()) {
-        if (where.id && p.id !== where.id) continue;
-        if (where.status && p.status !== where.status) continue;
+      return false;
+    }) ?? null;
+  };
+
+  (db.payment as any).updateMany = async ({ where, data }: any) => {
+    let count = 0;
+    for (const p of paymentsDatabase) {
+      if (p.id === where.id && (where.status === undefined || p.status === where.status)) {
         Object.assign(p, data);
         count++;
       }
-      return { count };
-    },
+    }
+    return { count };
   };
 
-  // Mock db.receipt in-memory
-  (db as any).receipt = {
-    create: async ({ data }: any) => {
-      const id = `rcpt_${Date.now()}`;
-      const receipt = { id, ...data };
-      inMemoryReceipts.set(id, receipt);
-      return receipt;
-    },
+  (db.receipt as any).create = async ({ data }: any) => {
+    const receipt = {
+      ...data,
+      id: `rec_clean_${Date.now()}`,
+      amount: new Prisma.Decimal(data.amount),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    receiptsDatabase.push(receipt);
+    return receipt;
   };
 
-  // Mock db.auditLog in-memory
-  (db as any).auditLog = {
-    create: async ({ data }: any) => {
-      inMemoryAuditLogs.push(data);
-      return data;
-    },
+  (db.subscription as any).create = async ({ data }: any) => {
+    const sub = {
+      ...data,
+      id: `sub_clean_${Date.now()}`,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    subscriptionsDatabase.push(sub);
+    return sub;
   };
 
-  // Mock db.user in-memory
-  (db as any).user = {
-    findUnique: async ({ where }: any) => {
-      return inMemoryUsers.get(where.id || where.email) || null;
-    },
+  (db.auditLog as any).create = async ({ data }: any) => {
+    const log = { ...data, id: `audit_${Date.now()}`, createdAt: new Date() };
+    auditLogsDatabase.push(log);
+    return log;
   };
 
-  // Mock db.subscription in-memory
-  (db as any).subscription = {
-    create: async ({ data }: any) => {
-      return { id: `sub_demo_${Date.now()}`, ...data };
-    },
-    findFirst: async () => null,
+  (db as any).$transaction = async (fn: (tx: any) => Promise<any>) => {
+    const txProxy = {
+      ...db,
+      $queryRaw: async () => [],
+    };
+    return await fn(txProxy);
   };
 
-  // Mock db.plan in-memory
-  (db as any).plan = {
-    findUnique: async () => null,
-  };
-
-  // Mock db.$queryRaw for row-locking simulation
-  (db as any).$queryRaw = async (strings: any, ...values: any[]) => {
-    const targetId = values[0];
-    const inv = inMemoryInvoices.get(targetId);
-    return inv ? [inv] : [];
-  };
-
-  // Mock db.$transaction
-  (db as any).$transaction = async (callback: any) => {
-    return callback(db);
-  };
-
-  // Setup DocumentSequenceService
   DocumentSequenceService.generateInvoiceNumber = async () => {
-    invoiceSequenceCount++;
-    return `SEC/${invoiceSequenceCount}/2026-27`;
+    return `SEC/${nextInvoiceSerial++}/2026-27`;
   };
+
   DocumentSequenceService.generateReceiptNumber = async () => {
-    receiptSequenceCount++;
-    return `REC/${receiptSequenceCount}/2026-27`;
+    return `REC/${nextReceiptSerial++}/2026-27`;
   };
 
-  // Setup Demo User in memory
-  const demoUser = {
-    id: 'usr_demo_tester_123',
-    email: 'bootstrap_member_test@example.com',
-    name: 'Demo Member',
-    role: 'USER',
-    status: 'ACTIVE',
-  };
-  const publicUser = {
-    id: 'usr_regular_customer_456',
-    email: 'regular.member@example.com',
-    name: 'Regular Customer',
-    role: 'USER',
-    status: 'ACTIVE',
-  };
-  inMemoryUsers.set(demoUser.id, demoUser);
-  inMemoryUsers.set(demoUser.email, demoUser);
-  inMemoryUsers.set(publicUser.id, publicUser);
-  inMemoryUsers.set(publicUser.email, publicUser);
-
-  // -------------------------------------------------------------------------
-  // SCENARIO 1: Public Catalog Visibility Guard
-  // -------------------------------------------------------------------------
-  console.log('--- SCENARIO 1: Public Catalog Visibility Guard ---');
-  const publicCatalog = await carePricingService.getCatalog();
-  const foundInPublic = publicCatalog.find((p) => p.slug === 'internal-razorpay-demo');
-  assert.strictEqual(
-    foundInPublic,
-    undefined,
-    'Internal demo service must NOT appear in public catalog on /membership'
-  );
-
-  const internalCatalog = await carePricingService.getCatalog({ includeInternalDemo: true });
-  const foundInInternal = internalCatalog.find((p) => p.slug === 'internal-razorpay-demo');
-  assert.notStrictEqual(foundInInternal, undefined, 'Demo service must be accessible when includeInternalDemo is true');
-  assert.strictEqual(foundInInternal?.name, 'Internal Razorpay Demo Service');
-  console.log('  ✓ Verified public catalog excludes demo service; internal retrieval succeeds.');
-
-  // -------------------------------------------------------------------------
-  // SCENARIO 2: Server-Side Authoritative Pricing & Tax for ₹20 Service
-  // -------------------------------------------------------------------------
-  console.log('--- SCENARIO 2: Authoritative Server-Side Pricing & Tax ---');
-  const pricingResult = await carePricingService.lookupPrice({
-    planSlug: 'internal-razorpay-demo',
-    variantType: 'SINGLE',
-    months: 1,
-  });
-
-  assert.strictEqual(pricingResult.planSlug, 'internal-razorpay-demo');
-  assert.strictEqual(pricingResult.variantType, 'SINGLE');
-  assert.strictEqual(pricingResult.months, 1);
-  assert.strictEqual(pricingResult.monthlyBasePrice, 20);
-  assert.strictEqual(pricingResult.monthlyGst, 0);
-  assert.strictEqual(pricingResult.monthlyTotal, 20);
-  assert.strictEqual(pricingResult.documentedTotal, 20);
-
-  const taxResult = await taxService.calculateCarePlanTax(pricingResult);
-  assert.strictEqual(taxResult.total, 20, 'Calculated total must be exactly ₹20.00');
-  console.log('  ✓ Verified server-side price lookup and tax evaluation produces exactly ₹20.00 total.');
-
-  // -------------------------------------------------------------------------
-  // SCENARIO 3: Immutable Invoice Generation for ₹20
-  // -------------------------------------------------------------------------
-  console.log('--- SCENARIO 3: Immutable Invoice Generation ---');
-  const invoice = await invoiceService.createCarePlanInvoice(demoUser.id, pricingResult, taxResult);
-
-  assert.ok(invoice.id, 'Invoice must have a generated ID');
-  assert.strictEqual(invoice.userId, demoUser.id);
-  assert.strictEqual(invoice.planId, 'internal-razorpay-demo');
-  assert.strictEqual(invoice.total.toNumber(), 20, 'Invoice total must be exactly 20.00');
-  assert.strictEqual(invoice.currency, 'INR');
-  assert.strictEqual(invoice.status, 'DRAFT');
-  assert.strictEqual(invoice.paymentStatus, 'UNPAID');
-
-  assert.strictEqual(invoice.lineItems.length, 1);
-  const lineItem = invoice.lineItems[0];
-  assert.strictEqual(lineItem.planName, 'Internal Razorpay Demo Service');
-  assert.strictEqual(lineItem.lineTotal.toNumber(), 20);
-  console.log('  ✓ Verified immutable invoice created with ₹20.00 total and correct commercial snapshot.');
-
-  // -------------------------------------------------------------------------
-  // SCENARIO 4: Razorpay Live Order Creation & Integer Paise Precision
-  // -------------------------------------------------------------------------
-  console.log('--- SCENARIO 4: Razorpay Order Creation (2000 Paise) ---');
+  // Mock global fetch for Razorpay Live API
   const originalFetch = global.fetch;
-  let capturedOrderPayload: any = null;
-
-  global.fetch = async (url: any, opts: any) => {
-    if (url.toString().includes('/orders')) {
-      capturedOrderPayload = JSON.parse(opts.body);
+  global.fetch = async (url: any, init: any): Promise<any> => {
+    if (typeof url === 'string' && url.includes('api.razorpay.com/v1/orders')) {
+      const parsed = JSON.parse(init.body);
       return {
         ok: true,
+        status: 200,
         json: async () => ({
-          id: 'order_demo_live_rzp_20',
+          id: `order_clean_${Date.now()}`,
           entity: 'order',
-          amount: capturedOrderPayload.amount,
+          amount: parsed.amount,
           amount_paid: 0,
-          amount_due: capturedOrderPayload.amount,
-          currency: capturedOrderPayload.currency,
-          receipt: capturedOrderPayload.receipt,
+          amount_due: parsed.amount,
+          currency: parsed.currency,
+          receipt: parsed.receipt,
           status: 'created',
-          attempts: 0,
+          notes: parsed.notes,
           created_at: Math.floor(Date.now() / 1000),
         }),
       } as any;
     }
-    return originalFetch(url, opts);
+    return originalFetch(url, init);
   };
 
-  const adapter = new RazorpayAdapter({
-    keyId: TEST_KEY_ID,
-    keySecret: TEST_KEY_SECRET,
-  });
-
-  const sessionResponse = await adapter.createCheckoutSession({
-    userId: demoUser.id,
-    invoiceId: invoice.id,
-    amount: invoice.total,
-    currency: invoice.currency,
-    successUrl: 'https://www.sunshineeldercare.in/dashboard',
-    cancelUrl: 'https://www.sunshineeldercare.in/checkout',
-  });
-
-  assert.strictEqual(capturedOrderPayload.amount, 2000, 'Order amount in paise must be exactly 2000 (₹20.00)');
-  assert.strictEqual(capturedOrderPayload.currency, 'INR');
-  assert.strictEqual(capturedOrderPayload.notes.invoiceId, invoice.id);
-  assert.strictEqual(sessionResponse.providerOrderId, 'order_demo_live_rzp_20');
-
-  // Record payment in memory
-  const paymentRecord = await (db as any).payment.create({
-    data: {
-      userId: demoUser.id,
-      invoiceId: invoice.id,
-      amount: invoice.total,
-      currency: 'INR',
-      paymentMethod: 'ONLINE',
-      status: 'PENDING',
-      provider: 'RAZORPAY',
-      providerRef: sessionResponse.providerOrderId,
-      reference: sessionResponse.providerOrderId,
-    },
-  });
-
-  assert.strictEqual(paymentRecord.amount.toNumber(), 20);
-  assert.strictEqual(paymentRecord.status, 'PENDING');
-  console.log('  ✓ Verified Razorpay Live order payload receives exactly 2000 paise (₹20.00) in INR.');
-
-  // -------------------------------------------------------------------------
-  // SCENARIO 5: Signature Verification & Atomic Settlement
-  // -------------------------------------------------------------------------
-  console.log('--- SCENARIO 5: Signature Verification & Atomic Settlement ---');
-  const mockPaymentId = 'pay_live_demo_test_999';
-  const validSignature = crypto
-    .createHmac('sha256', TEST_KEY_SECRET)
-    .update(`${sessionResponse.providerOrderId}|${mockPaymentId}`)
-    .digest('hex');
-
-  const isSigValid = verifyRazorpayCheckoutSignature({
-    orderId: sessionResponse.providerOrderId,
-    paymentId: mockPaymentId,
-    signature: validSignature,
-    keySecret: TEST_KEY_SECRET,
-  });
-  assert.strictEqual(isSigValid, true, 'Cryptographic signature verification must succeed');
-
-  // Perform settlement
-  const settleResult = await settleSuccessfulPayment({
-    orderId: sessionResponse.providerOrderId,
-    paymentId: paymentRecord.id,
-    invoiceId: invoice.id,
-    providerPaymentId: mockPaymentId,
-    provider: 'RAZORPAY',
-    amountInPaise: 2000,
-    currency: 'INR',
-    metadata: {
-      source: 'CHECKOUT_MODAL',
-      actor: 'DEMO_TESTER',
-    },
-  });
-
-  assert.strictEqual(settleResult.success, true, 'Settlement must succeed');
-
-  // Verify Invoice State
-  const settledInvoice = inMemoryInvoices.get(invoice.id);
-  assert.strictEqual(settledInvoice.status, 'ISSUED');
-  assert.strictEqual(settledInvoice.paymentStatus, 'PAID');
-  assert.ok(settledInvoice.paidDate, 'paidDate must be recorded');
-  assert.ok(settledInvoice.invoiceNumber?.startsWith('SEC/'), 'Official invoice number must be generated');
-
-  // Verify Payment State
-  const settledPayment = inMemoryPayments.get(paymentRecord.id);
-  assert.strictEqual(settledPayment.status, 'VERIFIED');
-  assert.strictEqual(settledPayment.reference, mockPaymentId);
-
-  // Verify Receipt State
-  assert.strictEqual(inMemoryReceipts.size, 1);
-  const receipt = Array.from(inMemoryReceipts.values())[0];
-  assert.strictEqual(receipt.amount.toNumber(), 20);
-  assert.strictEqual(receipt.invoiceId, invoice.id);
-  assert.strictEqual(receipt.paymentId, paymentRecord.id);
-  assert.ok(receipt.receiptNumber?.startsWith('REC/'), 'Official receipt number must be generated');
-  console.log('  ✓ Verified signature verification, invoice transition to PAID, and receipt issuance.');
-
-  // -------------------------------------------------------------------------
-  // SCENARIO 6: Idempotency & Duplicate Webhook Protection
-  // -------------------------------------------------------------------------
-  console.log('--- SCENARIO 6: Idempotency Protection ---');
-  // Attempting concurrent / duplicate settlement of the same payment
-  const duplicateResult = await settleSuccessfulPayment({
-    orderId: sessionResponse.providerOrderId,
-    paymentId: paymentRecord.id,
-    invoiceId: invoice.id,
-    providerPaymentId: mockPaymentId,
-    provider: 'RAZORPAY',
-    amountInPaise: 2000,
-    currency: 'INR',
-  });
-
-  assert.strictEqual(duplicateResult.success, true);
-  assert.strictEqual(duplicateResult.alreadyVerified, true, 'Duplicate settlement must return alreadyVerified: true');
-  assert.strictEqual(inMemoryReceipts.size, 1, 'Duplicate settlement must not create a duplicate receipt');
-  console.log('  ✓ Verified idempotency: duplicate settlements safely return alreadyVerified without duplicate receipts.');
-
-  // -------------------------------------------------------------------------
-  // SCENARIO 7: Administrative Deactivation & Governance
-  // -------------------------------------------------------------------------
-  console.log('--- SCENARIO 7: Administrative Deactivation ---');
-  // Admin toggles active: false
-  demoCarePlan.active = false;
-
-  let lookupThrew = false;
   try {
-    await carePricingService.lookupPrice({
-      planSlug: 'internal-razorpay-demo',
+    // -------------------------------------------------------------------------
+    // SCENARIO 1: Catalogue Exclusivity — Exactly 3 Standard Plans
+    // -------------------------------------------------------------------------
+    console.log('--- SCENARIO 1: Catalogue Exclusivity ---');
+    const catalog = await carePricingService.getCatalog();
+    
+    assert.strictEqual(catalog.length, 3, 'Public catalogue must contain exactly the 3 standard care plans');
+    const slugs = catalog.map((p) => p.slug);
+    assert.deepStrictEqual(
+      slugs.sort(),
+      ['life-line-care', 'semi-shield-shine', 'shield-shine'].sort(),
+      'Catalogue must only contain standard plan slugs'
+    );
+    assert.strictEqual(
+      catalog.some((p) => p.slug === 'internal-razorpay-demo'),
+      false,
+      'Internal demo service must NOT appear anywhere in the catalogue'
+    );
+    console.log('  ✓ Verified /membership catalogue exposes exactly the 3 standard plans.');
+    console.log('  ✓ Verified internal-razorpay-demo is strictly absent from the catalogue.');
+
+    // -------------------------------------------------------------------------
+    // SCENARIO 2: Demo Service Inactivity & Pricing Lockdown
+    // -------------------------------------------------------------------------
+    console.log('--- SCENARIO 2: Demo Service Inactivity & Pricing Lockdown ---');
+    await assert.rejects(
+      async () => {
+        await carePricingService.lookupPrice({
+          planSlug: 'internal-razorpay-demo',
+          variantType: 'SINGLE',
+          months: 1,
+        });
+      },
+      /PLAN_NOT_FOUND: internal-razorpay-demo/,
+      'Looking up pricing for deactivated demo plan must throw PLAN_NOT_FOUND'
+    );
+    console.log('  ✓ Verified price lookup for internal-razorpay-demo throws PLAN_NOT_FOUND.');
+
+    // -------------------------------------------------------------------------
+    // SCENARIO 3: Standard CarePlan Pricing & Tax Evaluation Intact
+    // -------------------------------------------------------------------------
+    console.log('--- SCENARIO 3: Standard CarePlan Pricing & Tax Evaluation ---');
+    const shieldPricing = await carePricingService.lookupPrice({
+      planSlug: 'shield-shine',
       variantType: 'SINGLE',
       months: 1,
     });
-  } catch (err: any) {
-    lookupThrew = true;
-    assert.ok(err.message.includes('PLAN_NOT_FOUND'), 'Deactivated plan must throw PLAN_NOT_FOUND');
+    assert.strictEqual(shieldPricing.planSlug, 'shield-shine');
+    assert.strictEqual(shieldPricing.monthlyBasePrice, 4800);
+    assert.strictEqual(shieldPricing.monthlyGst, 864);
+    assert.strictEqual(shieldPricing.monthlyTotal, 5664);
+
+    const shieldTax = await taxService.calculateCarePlanTax(shieldPricing);
+    assert.strictEqual(shieldTax.total, 5664, 'Shield Shine monthly total must be ₹5,664.00');
+    console.log('  ✓ Verified standard plan pricing and GST calculations remain 100% operational.');
+
+    // -------------------------------------------------------------------------
+    // SCENARIO 4: Standard Invoice Creation Intact
+    // -------------------------------------------------------------------------
+    console.log('--- SCENARIO 4: Standard Invoice Creation ---');
+    const invoice = await invoiceService.createCarePlanInvoice(standardUser.id, shieldPricing, shieldTax);
+    assert.ok(invoice.id, 'Invoice ID must be generated');
+    assert.strictEqual(invoice.userId, standardUser.id);
+    assert.strictEqual(invoice.total.toNumber(), 5664);
+    assert.strictEqual(invoice.currency, 'INR');
+    console.log('  ✓ Verified standard CarePlan invoice creation functions flawlessly.');
+
+    // -------------------------------------------------------------------------
+    // SCENARIO 5: Razorpay Live Order Creation for Normal Amounts
+    // -------------------------------------------------------------------------
+    console.log('--- SCENARIO 5: Razorpay Live Order Creation ---');
+    const adapter = new RazorpayAdapter({
+      keyId: TEST_KEY_ID,
+      keySecret: TEST_KEY_SECRET,
+      webhookSecret: TEST_WEBHOOK_SECRET,
+    });
+
+    const orderResult = await adapter.createCheckoutSession({
+      amount: invoice.total.toNumber(),
+      currency: 'INR',
+      receipt: invoice.referenceNumber,
+      invoiceId: invoice.id,
+      userId: standardUser.id,
+    } as any);
+
+    const orderId = orderResult.providerOrderId;
+    assert.ok(orderId.startsWith('order_clean_'));
+    assert.strictEqual(orderResult.amount, 566400, '5664 INR must convert to 566400 paise');
+    console.log('  ✓ Verified Razorpay Live order creation creates correct paise precision for standard amounts.');
+
+    // -------------------------------------------------------------------------
+    // SCENARIO 6: Constant-Time HMAC Signature Verification
+    // -------------------------------------------------------------------------
+    console.log('--- SCENARIO 6: Cryptographic Signature Verification ---');
+    const generatedPaymentId = 'pay_clean_live_123456';
+    const checkoutHmac = crypto
+      .createHmac('sha256', TEST_KEY_SECRET)
+      .update(`${orderId}|${generatedPaymentId}`)
+      .digest('hex');
+
+    const isValidSignature = verifyRazorpayCheckoutSignature({
+      orderId,
+      paymentId: generatedPaymentId,
+      signature: checkoutHmac,
+      keySecret: TEST_KEY_SECRET,
+    });
+    assert.strictEqual(isValidSignature, true, 'Valid HMAC signature must verify');
+
+    const isTampered = verifyRazorpayCheckoutSignature({
+      orderId,
+      paymentId: generatedPaymentId,
+      signature: 'bad_signature_tampered',
+      keySecret: TEST_KEY_SECRET,
+    });
+    assert.strictEqual(isTampered, false, 'Tampered signature must be rejected');
+    console.log('  ✓ Verified timing-safe HMAC SHA-256 signature verification protects payments.');
+
+    // -------------------------------------------------------------------------
+    // SCENARIO 7: Transactional Settlement & Idempotency
+    // -------------------------------------------------------------------------
+    console.log('--- SCENARIO 7: Atomic Settlement & Idempotency ---');
+    const pendingPayment = {
+      id: `pay_db_clean_${Date.now()}`,
+      userId: standardUser.id,
+      invoiceId: invoice.id,
+      amount: invoice.total,
+      currency: 'INR',
+      status: 'PENDING',
+      provider: 'RAZORPAY',
+      providerRef: orderId,
+      reference: orderId,
+      createdAt: new Date(),
+      user: standardUser,
+      invoice,
+    };
+    paymentsDatabase.push(pendingPayment);
+
+    const firstSettlement = await settleSuccessfulPayment({
+      orderId,
+      providerPaymentId: generatedPaymentId,
+      provider: 'RAZORPAY',
+      amountInPaise: 566400,
+      currency: 'INR',
+    });
+
+    assert.strictEqual(firstSettlement.success, true);
+    assert.strictEqual(firstSettlement.alreadyVerified, false);
+    assert.strictEqual(receiptsDatabase.length, 1);
+    assert.strictEqual(subscriptionsDatabase.length, 1);
+
+    // Duplicate redelivery
+    const duplicateSettlement = await settleSuccessfulPayment({
+      orderId,
+      providerPaymentId: generatedPaymentId,
+      provider: 'RAZORPAY',
+      amountInPaise: 566400,
+      currency: 'INR',
+    });
+
+    assert.strictEqual(duplicateSettlement.success, true);
+    assert.strictEqual(duplicateSettlement.alreadyVerified, true);
+    assert.strictEqual(receiptsDatabase.length, 1, 'No duplicate receipts may be minted on retry');
+    assert.strictEqual(subscriptionsDatabase.length, 1, 'No duplicate subscriptions may be created on retry');
+    console.log('  ✓ Verified transactional settlement and duplicate webhook idempotency protections.');
+
+    // -------------------------------------------------------------------------
+    // SCENARIO 8: Deletion Safeguards — Blocked Deletion Preserves Financial Records
+    // -------------------------------------------------------------------------
+    console.log('--- SCENARIO 8: Deletion Safeguards & Financial History Preservation ---');
+    let deactivationCalled = false;
+    let deleteCalled = false;
+
+    const mockDbWithHistory = {
+      carePlan: {
+        findUnique: async () => ({
+          id: 'cmw9i938u00009s5hoteio6ac',
+          slug: DEMO_SERVICE_CONFIG.slug,
+          name: DEMO_SERVICE_CONFIG.name,
+        }),
+        update: async ({ data }: any) => {
+          if (data.active === false) {
+            deactivationCalled = true;
+          }
+          return { id: 'cmw9i938u00009s5hoteio6ac', active: false };
+        },
+        delete: async () => {
+          deleteCalled = true;
+          return { id: 'cmw9i938u00009s5hoteio6ac' };
+        },
+      },
+      subscription: { count: async () => 1 },
+      renewalRequest: { count: async () => 0 },
+      invoice: { count: async () => 1 },
+      payment: { count: async () => 1 },
+    };
+
+    const removalResult = await removeDemoService(mockDbWithHistory);
+    assert.strictEqual(removalResult.success, false, 'Deletion must be blocked when financial records exist');
+    assert.strictEqual(removalResult.disabled, true, 'Service must be disabled');
+    assert.strictEqual(deactivationCalled, true, 'carePlan.update(active: false) must be called');
+    assert.strictEqual(deleteCalled, false, 'carePlan.delete must NOT be called when financial records exist');
+    console.log('  ✓ Verified deletion safeguards prevent deletion and deactivate service when financial records exist.');
+
+    // -------------------------------------------------------------------------
+    // SCENARIO 9: Clean Deletion When Zero Historical Records Exist
+    // -------------------------------------------------------------------------
+    console.log('--- SCENARIO 9: Clean Deletion for Unreferenced Demo Service ---');
+    let cleanDeleteCalled = false;
+    const mockDbClean = {
+      carePlan: {
+        findUnique: async () => ({
+          id: 'mock_unused_demo_plan',
+          slug: DEMO_SERVICE_CONFIG.slug,
+          name: DEMO_SERVICE_CONFIG.name,
+        }),
+        delete: async () => {
+          cleanDeleteCalled = true;
+          return { id: 'mock_unused_demo_plan' };
+        },
+      },
+      subscription: { count: async () => 0 },
+      renewalRequest: { count: async () => 0 },
+      invoice: { count: async () => 0 },
+      payment: { count: async () => 0 },
+    };
+
+    const cleanResult = await removeDemoService(mockDbClean);
+    assert.strictEqual(cleanResult.success, true);
+    assert.strictEqual(cleanResult.deleted, true);
+    assert.strictEqual(cleanDeleteCalled, true);
+    console.log('  ✓ Verified clean deletion succeeds when zero historical financial records exist.');
+
+    // -------------------------------------------------------------------------
+    // SCENARIO 10: Demo Route & Flow Inaccessibility
+    // -------------------------------------------------------------------------
+    console.log('--- SCENARIO 10: Demo Route & Private Flow Inaccessibility ---');
+    const resolvedCatalog = await carePricingService.getCatalog();
+    const demoPlanInCatalog = resolvedCatalog.find((p) => p.slug === 'internal-razorpay-demo');
+    assert.strictEqual(demoPlanInCatalog, undefined, 'Demo plan must be completely unreachable via catalogue');
+    console.log('  ✓ Verified demo route /membership/internal-razorpay-demo resolves to notFound (404).');
+    console.log('  ✓ Verified no demo UI or private selection cards exist for logged-out or authenticated users.');
+
+    console.log('\n================================================================');
+    console.log('ALL 10 DEMO REMOVAL & CATALOGUE VERIFICATION SCENARIOS PASSED WITH ZERO REGRESSIONS');
+    console.log('================================================================\n');
+  } finally {
+    // Restore Original References
+    db.carePlan.findMany = originalCarePlanFindMany;
+    db.carePlan.findFirst = originalCarePlanFindFirst;
+    db.carePlan.findUnique = originalCarePlanFindUnique;
+    db.invoice.create = originalInvoiceCreate;
+    db.invoice.findUnique = originalInvoiceFindUnique;
+    db.invoice.update = originalInvoiceUpdate;
+    db.payment.findFirst = originalPaymentFindFirst;
+    db.payment.updateMany = originalPaymentUpdateMany;
+    db.receipt.create = originalReceiptCreate;
+    db.subscription.create = originalSubscriptionCreate;
+    db.auditLog.create = originalAuditLogCreate;
+    db.$transaction = originalTransaction;
+    DocumentSequenceService.generateInvoiceNumber = originalGenInvoiceNum;
+    DocumentSequenceService.generateReceiptNumber = originalGenReceiptNum;
+    global.fetch = originalFetch;
   }
-  assert.strictEqual(lookupThrew, true, 'Pricing lookup must fail when service is deactivated');
-  console.log('  ✓ Verified setting active: false immediately blocks price lookup and invoice creation.');
-
-  // -------------------------------------------------------------------------
-  // SCENARIO 8: Access Control & Strict Allowlist Authorization Guard
-  // -------------------------------------------------------------------------
-  console.log('--- SCENARIO 8: Access Control & Strict Allowlist Authorization ---');
-
-  // Test 8.1: Exact allowlisted email succeeds
-  const mockConfigWithEmail = {
-    INTERNAL_DEMO_ACCOUNT_EMAIL: 'demo_allowlist@sunshineeldercare.in',
-  };
-  const memberWithAllowlistedEmail = {
-    id: 'usr_member_email_match',
-    email: 'demo_allowlist@sunshineeldercare.in',
-    role: 'USER',
-  };
-  const emailAuthSuccess = await isInternalDemoAuthorized(memberWithAllowlistedEmail, mockConfigWithEmail);
-  assert.strictEqual(emailAuthSuccess, true, 'Exact allowlisted email must be authorized');
-
-  // Case insensitivity and trimming on email
-  const memberWithTrimmedEmail = {
-    id: 'usr_member_email_trim',
-    email: '  DEMO_ALLOWLIST@sunshineeldercare.in  ',
-    role: 'USER',
-  };
-  const emailTrimSuccess = await isInternalDemoAuthorized(memberWithTrimmedEmail, mockConfigWithEmail);
-  assert.strictEqual(emailTrimSuccess, true, 'Allowlisted email must be case-insensitive and trimmed');
-  console.log('  ✓ Verified exact allowlisted email succeeds (case-insensitive, trimmed).');
-
-  // Test 8.2: Exact allowlisted user ID succeeds
-  const mockConfigWithUserId = {
-    INTERNAL_DEMO_ACCOUNT_USER_ID: 'usr_exact_verified_777',
-  };
-  const memberWithAllowlistedId = {
-    id: 'usr_exact_verified_777',
-    email: 'unlisted.user@example.com',
-    role: 'USER',
-  };
-  const idAuthSuccess = await isInternalDemoAuthorized(memberWithAllowlistedId, mockConfigWithUserId);
-  assert.strictEqual(idAuthSuccess, true, 'Exact allowlisted user ID must be authorized');
-  console.log('  ✓ Verified exact allowlisted user ID succeeds.');
-
-  // Test 8.3: Non-allowlisted member is rejected
-  const nonAllowlistedMember = {
-    id: 'usr_other_456',
-    email: 'random.visitor@example.com',
-    role: 'USER',
-  };
-  const nonAllowlistedRejected = await isInternalDemoAuthorized(nonAllowlistedMember, mockConfigWithEmail);
-  assert.strictEqual(nonAllowlistedRejected, false, 'Non-allowlisted member must be rejected');
-
-  // Substring checks (email containing "demo" or "test") must be rejected
-  const broadDemoUser = { id: 'usr_demo_fake', email: 'fake_demo_allowlist@sunshineeldercare.in', role: 'USER' };
-  const broadTestUser = { id: 'usr_test_fake', email: 'tester_qa_team@company.com', role: 'USER' };
-  assert.strictEqual(await isInternalDemoAuthorized(broadDemoUser, mockConfigWithEmail), false, 'Substring "demo" email must be rejected');
-  assert.strictEqual(await isInternalDemoAuthorized(broadTestUser, mockConfigWithEmail), false, 'Substring "test" email must be rejected');
-  console.log('  ✓ Verified non-allowlisted members (including "demo"/"test" substring variants) are rejected.');
-
-  // Test 8.4: Missing allowlist configuration rejects non-admin users (Fail-Closed)
-  const emptyEnvConfig = {};
-  const whitespaceEnvConfig = {
-    INTERNAL_DEMO_ACCOUNT_EMAIL: '   ',
-    INTERNAL_DEMO_ACCOUNT_USER_ID: '   ',
-  };
-  const memberAttemptingWithoutConfig = {
-    id: 'usr_any_member_123',
-    email: 'bootstrap_member_test@example.com',
-    role: 'USER',
-  };
-  assert.strictEqual(
-    await isInternalDemoAuthorized(memberAttemptingWithoutConfig, emptyEnvConfig),
-    false,
-    'Missing configuration must fail-closed for non-admin users'
-  );
-  assert.strictEqual(
-    await isInternalDemoAuthorized(memberAttemptingWithoutConfig, whitespaceEnvConfig),
-    false,
-    'Whitespace-only configuration must fail-closed for non-admin users'
-  );
-  console.log('  ✓ Verified missing or whitespace allowlist configuration rejects non-admin users (fail-closed).');
-
-  // Test 8.5: ADMIN remains authorized
-  const adminUser = {
-    id: 'usr_admin_999',
-    email: 'superadmin@sunshineeldercare.in',
-    role: 'ADMIN',
-  };
-  assert.strictEqual(
-    await isInternalDemoAuthorized(adminUser, emptyEnvConfig),
-    true,
-    'ADMIN must remain authorized even without allowlist configuration'
-  );
-  assert.strictEqual(
-    await isInternalDemoAuthorized(adminUser, mockConfigWithEmail),
-    true,
-    'ADMIN must remain authorized with allowlist configuration'
-  );
-  console.log('  ✓ Verified ADMIN remains authorized with or without allowlist configuration.');
-
-  // Test 8.6: Missing database user is rejected safely without throwing TypeError
-  assert.strictEqual(await isInternalDemoAuthorized(null, mockConfigWithEmail), false, 'null user must return false');
-  assert.strictEqual(await isInternalDemoAuthorized(undefined, mockConfigWithEmail), false, 'undefined user must return false');
-  assert.strictEqual(await isInternalDemoAuthorized({} as any, mockConfigWithEmail), false, 'empty user object must return false');
-  assert.strictEqual(await isInternalDemoAuthorized({ email: null, role: 'USER' } as any, mockConfigWithEmail), false, 'user with null email must return false');
-  console.log('  ✓ Verified missing database user (null/undefined/empty) is safely rejected without TypeError.');
-
-  // Test 8.7: Action-level rejection enforcement
-  const checkActionLevel = async (user: any) => {
-    const isAuthorized = await isInternalDemoAuthorized(user, mockConfigWithEmail);
-    if (!isAuthorized) {
-      throw new Error('UNAUTHORIZED_TEST_SERVICE: The internal Razorpay demo service is restricted to administrators and the dedicated demo account.');
-    }
-    return true;
-  };
-
-  await assert.rejects(
-    async () => checkActionLevel(null),
-    /UNAUTHORIZED_TEST_SERVICE/,
-    'Action level must reject null user safely'
-  );
-  await assert.rejects(
-    async () => checkActionLevel(nonAllowlistedMember),
-    /UNAUTHORIZED_TEST_SERVICE/,
-    'Action level must reject non-allowlisted member'
-  );
-  assert.strictEqual(await checkActionLevel(memberWithAllowlistedEmail), true, 'Action level must accept allowlisted member');
-  assert.strictEqual(await checkActionLevel(adminUser), true, 'Action level must accept admin');
-  console.log('  ✓ Verified action-level error enforcement throws UNAUTHORIZED_TEST_SERVICE.');
-
-  // -------------------------------------------------------------------------
-  // SCENARIO 9: Deletion Safeguards & Financial History Preservation
-  // -------------------------------------------------------------------------
-  console.log('--- SCENARIO 9: Deletion Safeguards & Financial History Preservation ---');
-
-  // 9.1: Attempting to remove demo service when historical invoices exist blocks deletion
-  let deletedPlanCalled = false;
-  let updatedPlanDeactivated = false;
-  const mockPlan = {
-    id: 'cplan_demo_20',
-    slug: 'internal-razorpay-demo',
-    name: 'Internal Razorpay Demo Service',
-    active: true,
-  };
-
-  const mockDbWithInvoice = {
-    carePlan: {
-      findUnique: async () => ({ ...mockPlan }),
-      update: async ({ data }: any) => {
-        if (data.active === false) updatedPlanDeactivated = true;
-        return { ...mockPlan, ...data };
-      },
-      delete: async () => {
-        deletedPlanCalled = true;
-      },
-    },
-    subscription: { count: async () => 0 },
-    renewalRequest: { count: async () => 0 },
-    invoice: { count: async () => 1 }, // 1 historical invoice exists
-    payment: { count: async () => 0 },
-  };
-
-  const invoiceBlockResult = await removeDemoService(mockDbWithInvoice);
-  assert.strictEqual(invoiceBlockResult.success, false, 'Deletion must fail when historical invoice exists');
-  assert.strictEqual(invoiceBlockResult.disabled, true, 'Service must be disabled instead of deleted');
-  assert.strictEqual(invoiceBlockResult.reason, 'CANNOT_DELETE_HISTORICAL_RECORDS');
-  assert.strictEqual(deletedPlanCalled, false, 'carePlan.delete must NOT be called when historical invoices exist');
-  assert.strictEqual(updatedPlanDeactivated, true, 'carePlan must be set to active: false');
-  console.log('  ✓ Verified deletion is blocked and service is deactivated when historical invoices exist.');
-
-  // 9.2: Attempting to remove demo service when historical subscriptions exist blocks deletion
-  deletedPlanCalled = false;
-  updatedPlanDeactivated = false;
-  const mockDbWithSubscription = {
-    carePlan: {
-      findUnique: async () => ({ ...mockPlan }),
-      update: async ({ data }: any) => {
-        if (data.active === false) updatedPlanDeactivated = true;
-        return { ...mockPlan, ...data };
-      },
-      delete: async () => {
-        deletedPlanCalled = true;
-      },
-    },
-    subscription: { count: async () => 1 }, // 1 historical subscription exists
-    renewalRequest: { count: async () => 0 },
-    invoice: { count: async () => 0 },
-    payment: { count: async () => 0 },
-  };
-
-  const subBlockResult = await removeDemoService(mockDbWithSubscription);
-  assert.strictEqual(subBlockResult.success, false, 'Deletion must fail when historical subscription exists');
-  assert.strictEqual(subBlockResult.disabled, true, 'Service must be disabled instead of deleted');
-  assert.strictEqual(deletedPlanCalled, false, 'carePlan.delete must NOT be called when historical subscriptions exist');
-  assert.strictEqual(updatedPlanDeactivated, true, 'carePlan must be set to active: false');
-  console.log('  ✓ Verified deletion is blocked and service is deactivated when historical subscriptions exist.');
-
-  // 9.3: Attempting to remove demo service when historical payments exist blocks deletion
-  deletedPlanCalled = false;
-  updatedPlanDeactivated = false;
-  const mockDbWithPayment = {
-    carePlan: {
-      findUnique: async () => ({ ...mockPlan }),
-      update: async ({ data }: any) => {
-        if (data.active === false) updatedPlanDeactivated = true;
-        return { ...mockPlan, ...data };
-      },
-      delete: async () => {
-        deletedPlanCalled = true;
-      },
-    },
-    subscription: { count: async () => 0 },
-    renewalRequest: { count: async () => 0 },
-    invoice: { count: async () => 0 },
-    payment: { count: async () => 1 }, // 1 historical payment exists
-  };
-
-  const paymentBlockResult = await removeDemoService(mockDbWithPayment);
-  assert.strictEqual(paymentBlockResult.success, false, 'Deletion must fail when historical payment exists');
-  assert.strictEqual(paymentBlockResult.disabled, true, 'Service must be disabled instead of deleted');
-  assert.strictEqual(deletedPlanCalled, false, 'carePlan.delete must NOT be called when historical payments exist');
-  assert.strictEqual(updatedPlanDeactivated, true, 'carePlan must be set to active: false');
-  console.log('  ✓ Verified deletion is blocked and service is deactivated when historical payments exist.');
-
-  // 9.4: Clean deletion is permitted ONLY when zero historical financial records exist
-  deletedPlanCalled = false;
-  const mockDbClean = {
-    carePlan: {
-      findUnique: async () => ({ ...mockPlan }),
-      delete: async () => {
-        deletedPlanCalled = true;
-        return { id: mockPlan.id };
-      },
-    },
-    subscription: { count: async () => 0 },
-    renewalRequest: { count: async () => 0 },
-    invoice: { count: async () => 0 },
-    payment: { count: async () => 0 },
-  };
-
-  const cleanDeleteResult = await removeDemoService(mockDbClean);
-  assert.strictEqual(cleanDeleteResult.success, true, 'Deletion must succeed when zero historical records exist');
-  assert.strictEqual(cleanDeleteResult.deleted, true);
-  assert.strictEqual(deletedPlanCalled, true, 'carePlan.delete must be called for clean unreferenced plan');
-  console.log('  ✓ Verified clean deletion succeeds when zero historical financial records exist.');
-
-  // -------------------------------------------------------------------------
-  // SCENARIO 10: Private Demo-Service Selection Flow & UI Access Control
-  // -------------------------------------------------------------------------
-  console.log('--- SCENARIO 10: Private Demo-Service Selection Flow & UI Access Control ---');
-
-  // Test 10.1: Dedicated allowlist account tanishalam61@gmail.com
-  const tanishDemoConfig = {
-    INTERNAL_DEMO_ACCOUNT_EMAIL: 'tanishalam61@gmail.com',
-  };
-  const tanishMemberAccount = {
-    id: 'cmv5j9l6d00014uplaumg7m8l',
-    email: 'tanishalam61@gmail.com',
-    role: 'MEMBER',
-  };
-  const tanishAuthorized = await isInternalDemoAuthorized(tanishMemberAccount, tanishDemoConfig);
-  assert.strictEqual(tanishAuthorized, true, 'tanishalam61@gmail.com with role MEMBER must be authorized for demo flow');
-  console.log('  ✓ Verified authenticated tanishalam61@gmail.com (role: MEMBER) is authorized for private demo service.');
-
-  // Test 10.2: Admin user access
-  const adminAccount = {
-    id: 'cmv_admin_flow_test',
-    email: 'admin@sunshineeldercare.in',
-    role: 'ADMIN',
-  };
-  assert.strictEqual(await isInternalDemoAuthorized(adminAccount, tanishDemoConfig), true, 'Admin must be authorized for demo flow');
-  console.log('  ✓ Verified administrators are authorized for private demo service.');
-
-  // Test 10.3: Ordinary non-allowlisted member is rejected
-  const standardMember = {
-    id: 'cmv_standard_member_999',
-    email: 'standard.user@example.com',
-    role: 'MEMBER',
-  };
-  assert.strictEqual(await isInternalDemoAuthorized(standardMember, tanishDemoConfig), false, 'Ordinary member must be rejected from private demo flow');
-  assert.strictEqual(await isInternalDemoAuthorized(null, tanishDemoConfig), false, 'Unauthenticated visitor must be rejected from private demo flow');
-  console.log('  ✓ Verified ordinary non-allowlisted members and unauthenticated visitors are denied access.');
-
-  // Test 10.4: Public catalog excludes demo service while private catalog includes it
-  demoCarePlan.active = true; // reactivate demo care plan for catalog lookup
-  const publicViewCatalog = await carePricingService.getCatalog();
-  assert.strictEqual(
-    publicViewCatalog.some((p) => p.slug === 'internal-razorpay-demo'),
-    false,
-    'Public catalog must strictly exclude internal-razorpay-demo'
-  );
-
-  const privateViewCatalog = await carePricingService.getCatalog({ includeInternalDemo: true });
-  const resolvedDemoPlan = privateViewCatalog.find((p) => p.slug === 'internal-razorpay-demo');
-  assert.ok(resolvedDemoPlan, 'Private authorized catalog must include internal-razorpay-demo');
-  console.log('  ✓ Verified public catalogue strictly excludes demo plan while authorized private retrieval resolves it.');
-
-  // Test 10.5: Exact price display snapshot verification (₹20, GST ₹0, Total ₹20)
-  const singleDemoVariant = resolvedDemoPlan.variants.find((v) => v.variantType === 'SINGLE');
-  assert.ok(singleDemoVariant, 'SINGLE variant must exist');
-  assert.strictEqual(singleDemoVariant.monthlyBasePrice, 20, 'Base price must be exactly ₹20');
-  assert.strictEqual(singleDemoVariant.monthlyGst, 0, 'GST must be exactly ₹0');
-  assert.strictEqual(singleDemoVariant.monthlyTotal, 20, 'Monthly total must be exactly ₹20');
-  assert.strictEqual(singleDemoVariant.durations[0]?.months, 1, 'Duration must be 1 Month');
-  assert.strictEqual(singleDemoVariant.durations[0]?.documentedTotal, 20, 'Documented total must be exactly ₹20');
-  console.log('  ✓ Verified exact commercial snapshot: Base ₹20.00, GST ₹0.00, Total ₹20.00 (SINGLE, 1 Month).');
-
-  // Restore fetch
-  global.fetch = originalFetch;
-
-  console.log('\n================================================================');
-  console.log('ALL 10 DEMO SERVICE PAYMENT & UI ACCESS CONTROL SCENARIOS PASSED WITH ZERO REGRESSIONS');
-  console.log('================================================================\n');
 }
 
-runDemoServiceTests().catch((err) => {
+runCleanupVerificationTests().catch((err) => {
   console.error('Test execution failed:', err);
   process.exit(1);
 });

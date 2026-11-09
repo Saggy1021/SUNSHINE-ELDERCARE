@@ -1,8 +1,8 @@
 import { Reveal } from '@/components/yoga/reveal'
 import { Eyebrow } from '@/components/yoga/ornaments'
-import { carePricingService, type CarePlanCatalogEntry } from '@/lib/services/care-plans'
+import { carePricingService } from '@/lib/services/care-plans'
 import Link from 'next/link'
-import { ArrowRight, ShieldCheck } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 
 // Plan card images — maintained in order matching DB sortOrder
 export const PLAN_IMAGES: Record<string, string> = {
@@ -15,7 +15,7 @@ function formatINR(amount: number): string {
   return `₹${amount.toLocaleString('en-IN')}`
 }
 
-export async function CarePlansSection({ demoPlan }: { demoPlan?: CarePlanCatalogEntry | null } = {}) {
+export async function CarePlansSection() {
   const catalog = await carePricingService.getCatalog()
 
   return (
@@ -33,55 +33,6 @@ export async function CarePlansSection({ demoPlan }: { demoPlan?: CarePlanCatalo
             All prices are inclusive of applicable taxes.
           </p>
         </Reveal>
-
-        {/* Private Authorized Demo Service Card */}
-        {demoPlan && (
-          <Reveal className="mt-12">
-            <div className="relative overflow-hidden rounded-2xl border-2 border-amber-500/60 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-6 sm:p-8 shadow-lg">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                <div className="space-y-3">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-amber-500/20 px-3 py-1 text-xs font-semibold text-amber-800 dark:text-amber-200">
-                    <ShieldCheck className="size-4 text-amber-600 dark:text-amber-400" />
-                    Authorized Internal Demo Service
-                  </div>
-                  <h3 className="font-display text-2xl font-bold text-foreground sm:text-3xl">
-                    {demoPlan.name}
-                  </h3>
-                  <p className="max-w-2xl font-serif text-sm text-foreground/80 leading-relaxed">
-                    Dedicated testing service to validate live Razorpay payments, invoice generation, and settlement workflows.
-                  </p>
-                  <div className="flex flex-wrap items-center gap-3 pt-1 text-xs sm:text-sm">
-                    <div className="rounded-lg border border-border/80 bg-background/80 px-3 py-1.5 font-medium">
-                      Base Price: <strong className="text-foreground">₹20</strong>
-                    </div>
-                    <div className="rounded-lg border border-border/80 bg-background/80 px-3 py-1.5 font-medium">
-                      GST (18% Exempt): <strong className="text-foreground">₹0</strong>
-                    </div>
-                    <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-1.5 font-bold text-amber-900 dark:text-amber-200">
-                      Total: ₹20
-                    </div>
-                    <span className="text-xs text-muted-foreground font-serif">
-                      • Single Variant • 1 Month Duration
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row md:flex-col gap-3 shrink-0">
-                  <Link
-                    href={`/membership/${demoPlan.slug}`}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-gold px-6 py-3.5 text-sm font-semibold text-brown shadow-sm transition-all hover:bg-gold/90 hover:shadow-md"
-                  >
-                    Select Demo Service
-                    <ArrowRight className="size-4" />
-                  </Link>
-                  <span className="text-center text-[11px] text-muted-foreground font-serif">
-                    Restricted to authorized demo accounts
-                  </span>
-                </div>
-              </div>
-            </div>
-          </Reveal>
-        )}
 
         <div className="mt-16 grid gap-8 md:grid-cols-3">
           {catalog.map((plan, i) => {
