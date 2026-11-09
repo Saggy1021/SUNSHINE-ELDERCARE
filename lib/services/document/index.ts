@@ -2,6 +2,7 @@ import { db as prisma } from "@/lib/db";
 import crypto from "crypto";
 import { storageService } from "../storage";
 import { InvoiceDocumentService } from "../invoice-document";
+import { ReceiptDocumentService } from "../receipt-document";
 import { validateDocumentType, APPROVED_UPLOAD_DOCUMENT_TYPES } from "./validation";
 
 /**
@@ -54,6 +55,11 @@ export const documentService = {
 
     if (doc.invoiceId) {
       const buffer = await InvoiceDocumentService.generateInvoicePdf(doc.invoiceId);
+      return { buffer: Buffer.from(buffer), mimeType: "application/pdf", fileName: `${doc.displayName}.pdf` };
+    }
+
+    if (doc.receiptId) {
+      const buffer = await ReceiptDocumentService.generateReceiptPdf(doc.receiptId);
       return { buffer: Buffer.from(buffer), mimeType: "application/pdf", fileName: `${doc.displayName}.pdf` };
     }
 

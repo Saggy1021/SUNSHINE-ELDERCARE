@@ -15,8 +15,9 @@
 
 import { emailService } from '@/lib/services/email'
 import { getEmailConfig } from '@/lib/services/email/config'
-import { NotificationEventType } from '@/lib/services/email/types'
+import { NotificationEventType, EmailAttachment } from '@/lib/services/email/types'
 import { templateService } from '@/lib/services/email/template-service'
+import { ReceiptDocumentService } from '@/lib/services/receipt-document'
 import { db } from '@/lib/db'
 import { logger } from '@/lib/logger'
 import { hashToken } from '@/lib/auth/tokens'
@@ -107,7 +108,8 @@ async function safeSend(
   entityType: string,
   entityId: string,
   recipientEmail: string,
-  template: { subject: string; html: string; text: string }
+  template: { subject: string; html: string; text: string },
+  attachments?: EmailAttachment[]
 ): Promise<NotificationSendResult> {
   try {
     if (!recipientEmail) {
@@ -128,6 +130,7 @@ async function safeSend(
       subject: template.subject,
       html: template.html,
       text: template.text,
+      attachments,
     })
 
     if (notificationId) {
@@ -357,7 +360,28 @@ export const notificationService = {
       dashboardUrl: `${config.appBaseUrl}/dashboard`,
     })
 
-    await safeSend('PAYMENT_VERIFIED', 'Payment', payment.id, user.email, verifiedTemplate)
+    // Generate receipt PDF attachment if available
+    let receiptAttachment: EmailAttachment | undefined
+    try {
+      const receipt = await db.receipt.findFirst({ where: { paymentId: payment.id } })
+      if (receipt) {
+        const pdfBytes = await ReceiptDocumentService.generateReceiptPdf(receipt.id)
+        receiptAttachment = {
+          filename: `Receipt-${receipt.receiptNumber}.pdf`,
+          content: pdfBytes,
+          contentType: 'application/pdf',
+        }
+      }
+    } catch (pdfErr) {
+      logger.error('Failed to generate receipt PDF attachment for email (non-fatal)', {
+        paymentId: payment.id,
+        error: (pdfErr as Error).message,
+      })
+    }
+
+    const attachments = receiptAttachment ? [receiptAttachment] : undefined
+
+    await safeSend('PAYMENT_VERIFIED', 'Payment', payment.id, user.email, verifiedTemplate, attachments)
 
     // Membership activation/scheduled email
     const addOnNames = subscription.addOns?.map(a => a.addOn.name) || []
@@ -482,5 +506,109 @@ export const notificationService = {
     })
 
     await safeSend('PASSWORD_RESET', 'User', email, email, template)
+  },
+
+  /**
+   * Resend payment confirmation email and PDF receipt safely.
+   * Reuses the existing EmailNotification record and idempotency protections.
+   * Does NOT duplicate invoice, payment, receipt, or subscription.
+   */
+  async resendPaymentConfirmation(paymentId: string): Promise<NotificationSendResult> {
+    const config = getEmailConfig()
+    const payment = await db.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        invoice: { select: { invoiceNumber: true, referenceNumber: true } },
+        receipt: true,
+      },
+    })
+
+    if (!payment || payment.status !== 'VERIFIED') {
+      return { success: false, providerConfigured: false, error: 'Only verified payments can be resent' }
+    }
+
+    const recipientEmail = payment.user?.email
+    if (!recipientEmail) {
+      return { success: false, providerConfigured: false, error: 'Recipient email missing' }
+    }
+
+    const receipt = payment.receipt || (await db.receipt.findFirst({ where: { paymentId: payment.id } }))
+    if (!receipt) {
+      return { success: false, providerConfigured: false, error: 'Receipt record missing' }
+    }
+
+    let receiptAttachment: EmailAttachment | undefined
+    try {
+      const pdfBytes = await ReceiptDocumentService.generateReceiptPdf(receipt.id)
+      receiptAttachment = {
+        filename: `Receipt-${receipt.receiptNumber}.pdf`,
+        content: pdfBytes,
+        contentType: 'application/pdf',
+      }
+    } catch (pdfErr) {
+      logger.error('Failed to generate receipt PDF for resend', { paymentId, error: (pdfErr as Error).message })
+    }
+
+    const subscription = await db.subscription.findFirst({
+      where: { userId: payment.userId },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    const verifiedTemplate = await templateService.getTemplateContent('PAYMENT_VERIFIED', {
+      memberName: payment.user.name || 'Member',
+      amount: formatINR(payment.amount),
+      invoiceNumber: payment.invoice?.invoiceNumber || payment.invoice?.referenceNumber || 'N/A',
+      paymentMethod: payment.paymentMethod,
+      membershipStatus: subscription?.status || 'ACTIVE',
+      planName: receipt.relatedPlanName || 'Membership Care Plan',
+      startDate: subscription?.startDate ? formatDate(subscription.startDate) : 'N/A',
+      endDate: subscription?.endDate ? formatDate(subscription.endDate) : 'N/A',
+      dashboardUrl: `${config.appBaseUrl}/dashboard`,
+    })
+
+    // Find existing EmailNotification or create new tracking record
+    const notification = await db.emailNotification.findFirst({
+      where: {
+        eventType: 'PAYMENT_VERIFIED',
+        entityType: 'Payment',
+        entityId: payment.id,
+        recipientEmail,
+      },
+    })
+
+    const result = await emailService.send({
+      to: recipientEmail,
+      subject: verifiedTemplate.subject,
+      html: verifiedTemplate.html,
+      text: verifiedTemplate.text,
+      attachments: receiptAttachment ? [receiptAttachment] : undefined,
+    })
+
+    if (notification) {
+      await markNotificationResult(notification.id, result.success, result.error)
+    } else {
+      await db.emailNotification.create({
+        data: {
+          eventType: 'PAYMENT_VERIFIED',
+          entityType: 'Payment',
+          entityId: payment.id,
+          recipientEmail,
+          idempotencyKey: `PAYMENT_VERIFIED:Payment:${payment.id}`,
+          status: result.success ? 'SENT' : 'FAILED',
+          sentAt: result.success ? new Date() : undefined,
+          failedAt: result.success ? undefined : new Date(),
+          error: result.error,
+          attemptCount: 1,
+          lastAttemptAt: new Date(),
+        },
+      })
+    }
+
+    return {
+      success: result.success,
+      providerConfigured: result.providerConfigured,
+      error: result.error,
+    }
   },
 }

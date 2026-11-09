@@ -1,7 +1,11 @@
 import { db } from "../db";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 function formatINR(amount: number): string {
-  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
+  const formatted = new Intl.NumberFormat('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+  return `INR ${formatted}`;
 }
 
 function formatDate(date: Date): string {

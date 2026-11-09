@@ -81,12 +81,23 @@ export default async function FinancialDocumentsPage() {
               <p className="text-xs text-muted-foreground bg-card p-6 rounded-xl border border-border/60 text-center">No payment receipts available.</p>
             ) : (
               docs.receipts.map(receipt => (
-                <div key={receipt.id} className="bg-card p-4 rounded-xl border border-border/60 flex justify-between items-center shadow-xs">
-                  <div>
-                    <p className="font-semibold text-foreground text-sm font-mono">{receipt.receiptNumber}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{receipt.paymentDate.toLocaleDateString('en-GB')} • ₹{receipt.amount.toString()}</p>
+                <div key={receipt.id} className="bg-card p-4 rounded-xl border border-border/60 flex justify-between items-center shadow-xs hover:border-[#091329]/30 dark:hover:border-amber-400/30 transition-all">
+                  <div className="min-w-0 pr-3">
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-foreground text-sm font-mono">{receipt.receiptNumber}</p>
+                      <span className="text-[10px] uppercase font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200/60 dark:border-emerald-800/40">Verified</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">{receipt.paymentDate.toLocaleDateString('en-GB')} • ₹{receipt.amount.toString()}{receipt.relatedPlanName ? ` • ${receipt.relatedPlanName}` : ''}</p>
                   </div>
-                  <span className="text-[10px] uppercase font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-full border border-border/40">Verified</span>
+                  <a
+                    href={`/api/receipts/${receipt.id}/download`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-2 text-foreground hover:text-white hover:bg-[#091329] dark:hover:bg-[#B08A4A] rounded-lg transition-colors border border-border/60 shrink-0 shadow-2xs"
+                    title="Download Money Receipt"
+                  >
+                    <Download className="h-4 w-4" />
+                  </a>
                 </div>
               ))
             )}

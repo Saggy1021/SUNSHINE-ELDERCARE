@@ -118,6 +118,7 @@ export async function getMembers(query?: string, page: number = 1, limit: number
     db.user.findMany({
       where,
       include: {
+        memberProfile: true,
         subscriptions: {
           orderBy: { createdAt: 'desc' },
           take: 1

@@ -51,7 +51,13 @@ export async function getPendingPayments() {
   return db.payment.findMany({
     where: { status: "VERIFICATION_PENDING" },
     include: {
-      user: { select: { name: true, email: true } },
+      user: {
+        select: {
+          name: true,
+          email: true,
+          memberProfile: { select: { memberId: true } },
+        },
+      },
       invoice: true,
       renewalRequest: { select: { planName: true, variantType: true, durationMonths: true } }
     },
@@ -64,5 +70,38 @@ export async function getPaymentById(id: string) {
   if (!session?.user?.id) throw new Error("Unauthorized")
   const authorized = await AuthorizationService.can(session.user.id, PERMISSIONS.PAYMENT_VIEW)
   if (!authorized) throw new Error("Forbidden")
-  return await db.payment.findUnique({ where: { id }, include: { user: { include: { memberProfile: true } }, invoice: true, renewalRequest: { include: { carePlan: true } }, verifiedBy: true } })
+  return await db.payment.findUnique({
+    where: { id },
+    include: {
+      user: { include: { memberProfile: true } },
+      invoice: { include: { lineItems: true } },
+      renewalRequest: { include: { carePlan: true } },
+      verifiedBy: true,
+      receipt: true,
+    },
+  })
+}
+
+export async function resendPaymentConfirmationEmailAction(paymentId: string) {
+  const session = await auth()
+  if (!session?.user?.id) throw new Error("Unauthorized")
+
+  const authorized =
+    (await AuthorizationService.can(session.user.id, PERMISSIONS.PAYMENT_VERIFY)) ||
+    (await AuthorizationService.can(session.user.id, PERMISSIONS.PAYMENT_VIEW))
+
+  if (!authorized) throw new Error("Forbidden: Administrator privilege required")
+
+  const { notificationService } = await import('@/lib/services/notification')
+  const result = await notificationService.resendPaymentConfirmation(paymentId)
+
+  if (!result.success) {
+    throw new Error(result.error || 'Failed to resend confirmation email')
+  }
+
+  const { revalidatePath } = await import('next/cache')
+  revalidatePath(`/admin/payments/${paymentId}`)
+  revalidatePath('/admin/payments')
+
+  return { success: true, message: 'Confirmation email and receipt resent successfully.' }
 }
