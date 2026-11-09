@@ -448,10 +448,29 @@ export function accountVerificationEmail(data: {
     <div style="margin:24px 0;text-align:center;">
       <span style="display:inline-block;padding:16px 32px;background-color:#f8fafc;color:#1e293b;font-size:32px;font-weight:700;letter-spacing:8px;border:1px solid #e2e8f0;border-radius:12px;">${data.otp}</span>
     </div>
-    ${securityNotice('This code will expire in 15 minutes. Do not share this OTP with anyone. Our support team will never ask for your OTP.')}
+    ${securityNotice('This code will expire in 5 minutes. Do not share this OTP with anyone. Our support team will never ask for your OTP.')}
     ${paragraph('If you need assistance, please contact our support team.')}
   `)
-  const text = `Dear ${data.memberName},\n\nPlease verify your email address using this 6-digit code: ${data.otp}\n\nThis code will expire in 15 minutes. Do not share it with anyone.`
+  const text = `Dear ${data.memberName},\n\nPlease verify your email address using this 6-digit code: ${data.otp}\n\nThis code will expire in 5 minutes. Do not share it with anyone.`
+  return { subject, html, text }
+}
+
+export function loginOtpEmail(data: {
+  memberName: string
+  otp: string
+}): { subject: string; html: string; text: string } {
+  const subject = 'Your Sunshine Eldercare Login Code'
+  const html = baseLayout(`
+    ${heading('Your Login Code')}
+    ${paragraph(`Dear ${data.memberName},`)}
+    ${paragraph('Use the 6-digit code below to sign in to your Sunshine Eldercare member account:')}
+    <div style="margin:24px 0;text-align:center;">
+      <span style="display:inline-block;padding:16px 32px;background-color:#f8fafc;color:#1e293b;font-size:32px;font-weight:700;letter-spacing:8px;border:1px solid #e2e8f0;border-radius:12px;">${data.otp}</span>
+    </div>
+    ${securityNotice('This code will expire in 5 minutes. Do not share this OTP with anyone. Our support team will never ask for your OTP.')}
+    ${paragraph('If you did not request this login code, please ignore this email or contact support if you suspect unauthorized activity.')}
+  `)
+  const text = `Dear ${data.memberName},\n\nYour Sunshine Eldercare login code is: ${data.otp}\n\nThis code will expire in 5 minutes. Do not share it with anyone.`
   return { subject, html, text }
 }
 

@@ -10,8 +10,13 @@ export class SmtpAdapter implements EmailProviderAdapter {
     const config = getEmailConfig()
     
     // Explicitly validate configuration before initializing transport
-    if (!config.smtp.host || !config.smtp.user || !config.smtp.pass) {
-      throw new Error('SMTP configuration is incomplete. Host, user, and pass are required.')
+    const missing: string[] = []
+    if (!config.smtp.host) missing.push('SMTP_HOST')
+    if (!config.smtp.user) missing.push('SMTP_USER')
+    if (!config.smtp.pass) missing.push('SMTP_PASS')
+
+    if (missing.length > 0) {
+      throw new Error(`SMTP configuration is incomplete. Missing required environment variables: ${missing.join(', ')}. Note: The application strictly reads SMTP_PASS.`)
     }
 
     this.transporter = nodemailer.createTransport({

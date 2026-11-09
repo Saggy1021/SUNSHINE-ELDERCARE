@@ -15,10 +15,81 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       name: "Credentials",
       credentials: {
         email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" }
+        password: { label: "Password", type: "password" },
+        otp: { label: "OTP", type: "text" },
+        authType: { label: "AuthType", type: "text" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
+        if (!credentials?.email) {
+          return null
+        }
+
+        const normalizedEmail = (credentials.email as string).toLowerCase().trim()
+        const authType = (credentials.authType as string) || (credentials.otp ? 'otp' : 'password')
+
+        if (authType === 'otp') {
+          const rawOtp = (credentials.otp as string)?.trim()
+          if (!rawOtp) {
+            return null
+          }
+
+          const { RateLimitService } = await import('@/lib/services/rate-limit')
+
+          // 1. IP-level rate limiting: prevents automated distributed brute-force without deleting user tokens
+          try {
+            await RateLimitService.checkLimit('AUTHENTICATION')
+          } catch (ipError: any) {
+            if (ipError.name === 'RateLimitError') {
+              throw new Error('Too many login attempts from your IP. Please try again later.')
+            }
+            throw ipError
+          }
+
+          // 2. Email-level rate limiting: strictly limits verification attempts against this email
+          try {
+            await RateLimitService.checkLimit('OTP_VERIFICATION', normalizedEmail)
+          } catch (e: any) {
+            if (e.name === 'RateLimitError') {
+              // Delete active tokens on rate limit violation to prevent brute forcing of this token
+              await db.verificationToken.deleteMany({
+                where: { identifier: `login_${normalizedEmail}` }
+              })
+              throw new Error('Too many failed attempts. OTP invalidated. Please request a new one.')
+            }
+            throw e
+          }
+
+          const { verifyLoginOtpToken } = await import('@/lib/auth/tokens')
+          const verifyResult = await verifyLoginOtpToken(normalizedEmail, rawOtp)
+          if (!verifyResult.valid) {
+            if (verifyResult.reason === 'EXPIRED') {
+              throw new Error('OTP has expired. Please request a new code.')
+            }
+            return null
+          }
+
+          const user = await db.user.findUnique({
+            where: { email: normalizedEmail }
+          })
+
+          // Strict explicit allowlist: Only ACTIVE users may authenticate.
+          // Non-active accounts (PENDING_VERIFICATION, SUSPENDED, BLOCKED, INACTIVE) are strictly rejected.
+          // Automatic activation of PENDING_VERIFICATION is forbidden; users must complete /verify.
+          if (!user || user.status !== 'ACTIVE') {
+            return null
+          }
+
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            sessionVersion: user.sessionVersion,
+          }
+        }
+
+        // --- PASSWORD AUTHENTICATION (PRESERVED) ---
+        if (!credentials?.password) {
           return null
         }
         
@@ -30,8 +101,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             throw new Error('Too many login attempts. Please try again later.')
           }
         }
-
-        const normalizedEmail = (credentials.email as string).toLowerCase()
 
         const user = await db.user.findUnique({
           where: {
@@ -45,7 +114,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           user?.passwordHash || DUMMY_HASH
         )
 
-        if (!user || !user.passwordHash || user.status === 'INACTIVE' || user.status === 'PENDING_VERIFICATION') {
+        // Strict explicit allowlist: Only ACTIVE accounts with valid password hashes can log in
+        if (!user || !user.passwordHash || user.status !== 'ACTIVE') {
           return null
         }
 
@@ -84,8 +154,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           select: { role: true, sessionVersion: true, status: true }
         })
 
-        // Invalidate session if user deleted, INACTIVE, PENDING_VERIFICATION, or sessionVersion incremented (e.g., password reset)
-        if (!dbUser || dbUser.status === 'INACTIVE' || dbUser.status === 'PENDING_VERIFICATION' || dbUser.sessionVersion !== token.sessionVersion) {
+        // Invalidate session if user deleted, non-ACTIVE (e.g., SUSPENDED, BLOCKED, INACTIVE), or sessionVersion incremented
+        if (!dbUser || dbUser.status !== 'ACTIVE' || dbUser.sessionVersion !== token.sessionVersion) {
           // Returning an empty token effectively revokes the session
           return {} as any
         }
