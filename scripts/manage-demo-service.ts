@@ -125,18 +125,91 @@ export async function disableDemoService(prismaClient: any = prisma) {
 }
 
 export async function removeDemoService(prismaClient: any = prisma) {
-  console.log(`[DemoService] Deleting "${DEMO_SERVICE_CONFIG.slug}"...`);
+  console.log(`[DemoService] Checking historical financial records for "${DEMO_SERVICE_CONFIG.slug}"...`);
   const plan = await prismaClient.carePlan.findUnique({
     where: { slug: DEMO_SERVICE_CONFIG.slug },
   });
   if (!plan) {
     console.log(`[DemoService] Service does not exist. Nothing to remove.`);
-    return;
+    return { success: false, reason: 'NOT_FOUND' };
   }
+
+  // Prevent deletion if any historical financial records (invoices, subscriptions, payments) exist
+  const [subscriptionsCount, renewalsCount, invoicesCount, paymentsCount] = await Promise.all([
+    prismaClient.subscription.count({ where: { carePlanId: plan.id } }),
+    prismaClient.renewalRequest.count({ where: { carePlanId: plan.id } }),
+    prismaClient.invoice.count({
+      where: {
+        lineItems: {
+          some: {
+            OR: [
+              { planName: plan.name },
+              { description: { contains: plan.name, mode: 'insensitive' } },
+              { description: { contains: plan.slug, mode: 'insensitive' } },
+            ],
+          },
+        },
+      },
+    }),
+    prismaClient.payment.count({
+      where: {
+        OR: [
+          {
+            invoice: {
+              lineItems: {
+                some: {
+                  OR: [
+                    { planName: plan.name },
+                    { description: { contains: plan.name, mode: 'insensitive' } },
+                    { description: { contains: plan.slug, mode: 'insensitive' } },
+                  ],
+                },
+              },
+            },
+          },
+          { renewalRequest: { carePlanId: plan.id } },
+        ],
+      },
+    }),
+  ]);
+
+  const hasHistoricalRecords =
+    subscriptionsCount > 0 || renewalsCount > 0 || invoicesCount > 0 || paymentsCount > 0;
+
+  if (hasHistoricalRecords) {
+    console.warn(
+      `[DemoService] ⚠️ Deletion blocked: Historical financial records reference "${plan.slug}".`
+    );
+    console.log(
+      `  - Subscriptions: ${subscriptionsCount}, Renewals: ${renewalsCount}, Invoices: ${invoicesCount}, Payments: ${paymentsCount}`
+    );
+    console.log(
+      `[DemoService] Preferring deactivation: setting active = false to preserve financial & audit history.`
+    );
+    await prismaClient.carePlan.update({
+      where: { id: plan.id },
+      data: { active: false },
+    });
+    console.log(
+      `[DemoService] ✓ Demo service safely deactivated (active: false). All historical financial records preserved.`
+    );
+    return {
+      success: false,
+      disabled: true,
+      reason: 'CANNOT_DELETE_HISTORICAL_RECORDS',
+      subscriptionsCount,
+      renewalsCount,
+      invoicesCount,
+      paymentsCount,
+    };
+  }
+
+  console.log(`[DemoService] No historical financial records found. Deleting "${DEMO_SERVICE_CONFIG.slug}"...`);
   await prismaClient.carePlan.delete({
     where: { slug: DEMO_SERVICE_CONFIG.slug },
   });
   console.log(`[DemoService] ✓ Successfully deleted "${DEMO_SERVICE_CONFIG.slug}" and associated variants.`);
+  return { success: true, deleted: true };
 }
 
 export async function getDemoServiceStatus(prismaClient: any = prisma) {

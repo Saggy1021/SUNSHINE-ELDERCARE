@@ -386,6 +386,66 @@ export async function deleteDemoCarePlan(id: string) {
   if (!plan || plan.slug !== 'internal-razorpay-demo') {
     throw new Error('Only the internal demo service may be deleted via this administrative action.')
   }
+
+  // Prevent deletion if any historical financial records (invoices, subscriptions, payments) reference it
+  const [subscriptionsCount, renewalsCount, invoicesCount, paymentsCount] = await Promise.all([
+    db.subscription.count({ where: { carePlanId: plan.id } }),
+    db.renewalRequest.count({ where: { carePlanId: plan.id } }),
+    db.invoice.count({
+      where: {
+        lineItems: {
+          some: {
+            OR: [
+              { planName: plan.name },
+              { description: { contains: plan.name, mode: 'insensitive' } },
+              { description: { contains: plan.slug, mode: 'insensitive' } },
+            ],
+          },
+        },
+      },
+    }),
+    db.payment.count({
+      where: {
+        OR: [
+          {
+            invoice: {
+              lineItems: {
+                some: {
+                  OR: [
+                    { planName: plan.name },
+                    { description: { contains: plan.name, mode: 'insensitive' } },
+                    { description: { contains: plan.slug, mode: 'insensitive' } },
+                  ],
+                },
+              },
+            },
+          },
+          { renewalRequest: { carePlanId: plan.id } },
+        ],
+      },
+    }),
+  ])
+
+  const hasHistoricalRecords =
+    subscriptionsCount > 0 || renewalsCount > 0 || invoicesCount > 0 || paymentsCount > 0
+
+  if (hasHistoricalRecords) {
+    // Prefer disabling the demo plan rather than deleting it; preserve financial history
+    await db.carePlan.update({ where: { id }, data: { active: false } })
+    await logAudit(adminId, "CARE_PLAN_STATUS_CHANGED", "CarePlan", id, {
+      active: false,
+      reason: "Deletion blocked: historical financial records exist. Service deactivated to preserve audit integrity.",
+      subscriptionsCount,
+      renewalsCount,
+      invoicesCount,
+      paymentsCount,
+    })
+    revalidatePath('/admin/add-ons')
+    throw new Error(
+      'CANNOT_DELETE_HISTORICAL_RECORDS: The demo service cannot be deleted because historical financial records (invoices, subscriptions, or payments) reference it. The service has been deactivated (active: false) instead to preserve financial history.'
+    )
+  }
+
   await db.carePlan.delete({ where: { id } })
   await logAudit(adminId, "DEMO_CARE_PLAN_DELETED", "CarePlan", id, { slug: plan.slug })
   revalidatePath('/admin/add-ons')

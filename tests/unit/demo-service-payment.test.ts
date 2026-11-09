@@ -13,6 +13,7 @@ import {
 import { settleSuccessfulPayment } from '../../lib/services/payment/settlement';
 import { DocumentSequenceService } from '../../lib/services/document-sequence';
 import { isInternalDemoAuthorized } from '../../app/actions/invoices';
+import { removeDemoService, disableDemoService, DEMO_SERVICE_CONFIG } from '../../scripts/manage-demo-service';
 
 /**
  * Sunshine Eldercare — Temporary ₹20 Demo Service & Razorpay Live Workflow Test Suite
@@ -647,11 +648,127 @@ async function runDemoServiceTests() {
   assert.strictEqual(await checkActionLevel(adminUser), true, 'Action level must accept admin');
   console.log('  ✓ Verified action-level error enforcement throws UNAUTHORIZED_TEST_SERVICE.');
 
+  // -------------------------------------------------------------------------
+  // SCENARIO 9: Deletion Safeguards & Financial History Preservation
+  // -------------------------------------------------------------------------
+  console.log('--- SCENARIO 9: Deletion Safeguards & Financial History Preservation ---');
+
+  // 9.1: Attempting to remove demo service when historical invoices exist blocks deletion
+  let deletedPlanCalled = false;
+  let updatedPlanDeactivated = false;
+  const mockPlan = {
+    id: 'cplan_demo_20',
+    slug: 'internal-razorpay-demo',
+    name: 'Internal Razorpay Demo Service',
+    active: true,
+  };
+
+  const mockDbWithInvoice = {
+    carePlan: {
+      findUnique: async () => ({ ...mockPlan }),
+      update: async ({ data }: any) => {
+        if (data.active === false) updatedPlanDeactivated = true;
+        return { ...mockPlan, ...data };
+      },
+      delete: async () => {
+        deletedPlanCalled = true;
+      },
+    },
+    subscription: { count: async () => 0 },
+    renewalRequest: { count: async () => 0 },
+    invoice: { count: async () => 1 }, // 1 historical invoice exists
+    payment: { count: async () => 0 },
+  };
+
+  const invoiceBlockResult = await removeDemoService(mockDbWithInvoice);
+  assert.strictEqual(invoiceBlockResult.success, false, 'Deletion must fail when historical invoice exists');
+  assert.strictEqual(invoiceBlockResult.disabled, true, 'Service must be disabled instead of deleted');
+  assert.strictEqual(invoiceBlockResult.reason, 'CANNOT_DELETE_HISTORICAL_RECORDS');
+  assert.strictEqual(deletedPlanCalled, false, 'carePlan.delete must NOT be called when historical invoices exist');
+  assert.strictEqual(updatedPlanDeactivated, true, 'carePlan must be set to active: false');
+  console.log('  ✓ Verified deletion is blocked and service is deactivated when historical invoices exist.');
+
+  // 9.2: Attempting to remove demo service when historical subscriptions exist blocks deletion
+  deletedPlanCalled = false;
+  updatedPlanDeactivated = false;
+  const mockDbWithSubscription = {
+    carePlan: {
+      findUnique: async () => ({ ...mockPlan }),
+      update: async ({ data }: any) => {
+        if (data.active === false) updatedPlanDeactivated = true;
+        return { ...mockPlan, ...data };
+      },
+      delete: async () => {
+        deletedPlanCalled = true;
+      },
+    },
+    subscription: { count: async () => 1 }, // 1 historical subscription exists
+    renewalRequest: { count: async () => 0 },
+    invoice: { count: async () => 0 },
+    payment: { count: async () => 0 },
+  };
+
+  const subBlockResult = await removeDemoService(mockDbWithSubscription);
+  assert.strictEqual(subBlockResult.success, false, 'Deletion must fail when historical subscription exists');
+  assert.strictEqual(subBlockResult.disabled, true, 'Service must be disabled instead of deleted');
+  assert.strictEqual(deletedPlanCalled, false, 'carePlan.delete must NOT be called when historical subscriptions exist');
+  assert.strictEqual(updatedPlanDeactivated, true, 'carePlan must be set to active: false');
+  console.log('  ✓ Verified deletion is blocked and service is deactivated when historical subscriptions exist.');
+
+  // 9.3: Attempting to remove demo service when historical payments exist blocks deletion
+  deletedPlanCalled = false;
+  updatedPlanDeactivated = false;
+  const mockDbWithPayment = {
+    carePlan: {
+      findUnique: async () => ({ ...mockPlan }),
+      update: async ({ data }: any) => {
+        if (data.active === false) updatedPlanDeactivated = true;
+        return { ...mockPlan, ...data };
+      },
+      delete: async () => {
+        deletedPlanCalled = true;
+      },
+    },
+    subscription: { count: async () => 0 },
+    renewalRequest: { count: async () => 0 },
+    invoice: { count: async () => 0 },
+    payment: { count: async () => 1 }, // 1 historical payment exists
+  };
+
+  const paymentBlockResult = await removeDemoService(mockDbWithPayment);
+  assert.strictEqual(paymentBlockResult.success, false, 'Deletion must fail when historical payment exists');
+  assert.strictEqual(paymentBlockResult.disabled, true, 'Service must be disabled instead of deleted');
+  assert.strictEqual(deletedPlanCalled, false, 'carePlan.delete must NOT be called when historical payments exist');
+  assert.strictEqual(updatedPlanDeactivated, true, 'carePlan must be set to active: false');
+  console.log('  ✓ Verified deletion is blocked and service is deactivated when historical payments exist.');
+
+  // 9.4: Clean deletion is permitted ONLY when zero historical financial records exist
+  deletedPlanCalled = false;
+  const mockDbClean = {
+    carePlan: {
+      findUnique: async () => ({ ...mockPlan }),
+      delete: async () => {
+        deletedPlanCalled = true;
+        return { id: mockPlan.id };
+      },
+    },
+    subscription: { count: async () => 0 },
+    renewalRequest: { count: async () => 0 },
+    invoice: { count: async () => 0 },
+    payment: { count: async () => 0 },
+  };
+
+  const cleanDeleteResult = await removeDemoService(mockDbClean);
+  assert.strictEqual(cleanDeleteResult.success, true, 'Deletion must succeed when zero historical records exist');
+  assert.strictEqual(cleanDeleteResult.deleted, true);
+  assert.strictEqual(deletedPlanCalled, true, 'carePlan.delete must be called for clean unreferenced plan');
+  console.log('  ✓ Verified clean deletion succeeds when zero historical financial records exist.');
+
   // Restore fetch
   global.fetch = originalFetch;
 
   console.log('\n================================================================');
-  console.log('ALL 8 DEMO SERVICE PAYMENT SCENARIOS PASSED WITH ZERO REGRESSIONS');
+  console.log('ALL 9 DEMO SERVICE PAYMENT & GOVERNANCE SCENARIOS PASSED WITH ZERO REGRESSIONS');
   console.log('================================================================\n');
 }
 
