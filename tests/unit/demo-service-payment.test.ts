@@ -315,10 +315,84 @@ async function runCleanupVerificationTests() {
     return sub;
   };
 
+  (db.subscription as any).findFirst = async ({ where }: any) => {
+    return (
+      subscriptionsDatabase.find(
+        (sub) => sub.userId === where?.userId && (!where?.status || sub.status === where?.status)
+      ) ||
+      subscriptionsDatabase[0] ||
+      null
+    );
+  };
+
+  (db.subscription as any).updateMany = async ({ where, data }: any) => {
+    let count = 0;
+    for (const sub of subscriptionsDatabase) {
+      if (sub.userId === where?.userId && (where?.status === undefined || sub.status === where?.status)) {
+        Object.assign(sub, data);
+        count++;
+      }
+    }
+    return { count };
+  };
+
+  (db as any).subscriptionAddOn = {
+    createMany: async () => ({ count: 0 }),
+  };
+
   (db.auditLog as any).create = async ({ data }: any) => {
     const log = { ...data, id: `audit_${Date.now()}`, createdAt: new Date() };
     auditLogsDatabase.push(log);
     return log;
+  };
+
+  const memberProfilesDatabase: any[] = [];
+  let nextMemberSeq = 1001;
+
+  (db as any).memberProfile = {
+    findUnique: async ({ where }: any) => {
+      return memberProfilesDatabase.find((p) => p.userId === where.userId) || null;
+    },
+    update: async ({ where, data }: any) => {
+      const p = memberProfilesDatabase.find((item) => item.userId === where.userId);
+      if (p) Object.assign(p, data);
+      return p;
+    },
+    create: async ({ data }: any) => {
+      const p = { ...data, id: `prof_${Date.now()}` };
+      memberProfilesDatabase.push(p);
+      return p;
+    },
+  };
+
+  (db as any).memberSequence = {
+    upsert: async () => {
+      const val = nextMemberSeq++;
+      return { id: 'singleton', currentSequence: val };
+    },
+  };
+
+  (db as any).memberDocument = {
+    create: async ({ data }: any) => {
+      return { ...data, id: `mdoc_${Date.now()}` };
+    },
+  };
+
+  (db as any).user = {
+    findUnique: async () => ({ id: 'usr_clean_1', name: 'Dr. Jane Doe', email: 'jane@example.com' }),
+  };
+
+  (db.receipt as any).findFirst = async () => receiptsDatabase[0] || null;
+  (db.receipt as any).findUnique = async () => receiptsDatabase[0] || null;
+
+  (db as any).emailTemplate = {
+    findUnique: async () => null,
+  };
+
+  (db as any).emailNotification = {
+    findFirst: async () => null,
+    create: async ({ data }: any) => ({ ...data, id: `notif_${Date.now()}` }),
+    update: async ({ where, data }: any) => ({ ...data }),
   };
 
   (db as any).$transaction = async (fn: (tx: any) => Promise<any>) => {

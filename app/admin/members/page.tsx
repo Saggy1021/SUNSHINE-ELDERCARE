@@ -55,7 +55,12 @@ export default async function AdminMembersPage({
               ) : members.map((member) => (
                 <tr key={member.id} className="hover:bg-slate-50/60 transition-colors">
                   <td className="px-5 py-3.5 font-medium text-slate-900">
-                    {member.name || "N/A"}
+                    <p>{member.name || "N/A"}</p>
+                    {member.memberProfile?.memberId && (
+                      <span className="inline-block font-mono text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-1.5 py-0.5 rounded mt-0.5">
+                        {member.memberProfile.memberId}
+                      </span>
+                    )}
                   </td>
                   <td className="px-5 py-3.5 text-slate-600">
                     {member.email}

@@ -201,6 +201,8 @@ async function runRazorpayTests() {
       inMemoryReceipt = { ...data, id: `rec_${receiptCreationCount}` };
       return inMemoryReceipt;
     },
+    findFirst: async () => inMemoryReceipt,
+    findUnique: async () => inMemoryReceipt,
   };
 
   (db as any).subscription = {
@@ -213,6 +215,42 @@ async function runRazorpayTests() {
     update: async ({ data }: any) => {
       if (inMemorySubscription) Object.assign(inMemorySubscription, data);
       return inMemorySubscription;
+    },
+    updateMany: async ({ where, data }: any) => {
+      if (inMemorySubscription) Object.assign(inMemorySubscription, data);
+      return { count: inMemorySubscription ? 1 : 0 };
+    },
+  };
+
+  const inMemoryProfiles: any[] = [];
+  let memberSeq = 1001;
+
+  (db as any).memberProfile = {
+    findUnique: async ({ where }: any) => {
+      return inMemoryProfiles.find((p) => p.userId === where?.userId) || null;
+    },
+    update: async ({ where, data }: any) => {
+      const p = inMemoryProfiles.find((item) => item.userId === where?.userId);
+      if (p) Object.assign(p, data);
+      return p;
+    },
+    create: async ({ data }: any) => {
+      const p = { ...data, id: `prof_${Date.now()}` };
+      inMemoryProfiles.push(p);
+      return p;
+    },
+  };
+
+  (db as any).memberSequence = {
+    upsert: async () => {
+      return { id: 'singleton', currentSequence: memberSeq++ };
+    },
+  };
+
+  (db as any).memberDocument = {
+    findUnique: async () => null,
+    create: async ({ data }: any) => {
+      return { ...data, id: `mdoc_${Date.now()}` };
     },
   };
 
@@ -258,6 +296,17 @@ async function runRazorpayTests() {
 
   (db as any).carePlan = {
     findFirst: async () => ({ id: 'plan_shield', slug: 'shield-shine', name: 'Shield Shine' }),
+    findUnique: async () => ({ id: 'plan_shield', slug: 'shield-shine', name: 'Shield Shine' }),
+  };
+
+  (db as any).emailTemplate = {
+    findUnique: async () => null,
+  };
+
+  (db as any).emailNotification = {
+    findFirst: async () => null,
+    create: async ({ data }: any) => ({ ...data, id: `notif_${Date.now()}` }),
+    update: async ({ where, data }: any) => ({ ...data }),
   };
 
   (db as any).user = {

@@ -41,6 +41,11 @@ export default async function AdminPaymentsPage() {
                   <td className="px-5 py-3.5">
                     <p className="font-medium text-slate-900">{payment.user.name || "Unknown"}</p>
                     <p className="text-xs text-slate-500 mt-0.5">{payment.user.email}</p>
+                    {payment.user.memberProfile?.memberId && (
+                      <span className="inline-block font-mono text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-1.5 py-0.5 rounded mt-1">
+                        {payment.user.memberProfile.memberId}
+                      </span>
+                    )}
                   </td>
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-1.5 font-medium text-slate-900 text-xs">

@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { DocumentSequenceService } from '@/lib/services/document-sequence';
+import { MemberIdentityService } from '@/lib/services/member-identity';
 import { notificationService } from '@/lib/services/notification';
 import { calculateEndDate } from '@/lib/services/dates';
 
@@ -235,6 +236,7 @@ export async function settleSuccessfulPayment(
     if (!lockedInvoice) {
       lockedInvoice = await tx.invoice.findUnique({
         where: { id: targetInvoiceId },
+        include: { lineItems: true },
       });
     }
 
@@ -348,9 +350,22 @@ export async function settleSuccessfulPayment(
       },
     });
 
-    // Generate Single Receipt
+    // 1. Generate/Ensure unique Member ID on first verified capture
+    const memberVariantType =
+      payment.renewalRequest?.variantType ||
+      payment.invoice?.lineItems?.[0]?.variantType ||
+      (lockedInvoice as any).lineItems?.[0]?.variantType ||
+      'SINGLE';
+
+    await MemberIdentityService.ensureMemberIdForUser(
+      payment.userId,
+      memberVariantType,
+      tx
+    );
+
+    // 2. Generate Single Immutable Receipt Snapshot
     const receiptNumber = await DocumentSequenceService.generateReceiptNumber(now, tx);
-    await tx.receipt.create({
+    const createdReceipt = await tx.receipt.create({
       data: {
         receiptNumber,
         invoiceId: lockedInvoice.id,
@@ -368,11 +383,54 @@ export async function settleSuccessfulPayment(
           payment.renewalRequest?.planName ||
           payment.renewalRequest?.carePlan?.name ||
           payment.invoice?.lineItems?.[0]?.planName ||
+          (lockedInvoice as any).lineItems?.[0]?.planName ||
           'Membership Care Plan',
       },
     });
 
-    // Membership / Subscription Lifecycle Transition
+    // 3. Register Receipt in MemberDocument (if supported by client)
+    if (tx.memberDocument && typeof tx.memberDocument.create === 'function') {
+      const existingReceiptDoc = typeof tx.memberDocument.findUnique === 'function'
+        ? await tx.memberDocument.findUnique({
+            where: { receiptId: createdReceipt.id },
+          })
+        : null;
+      if (!existingReceiptDoc) {
+        await tx.memberDocument.create({
+          data: {
+            userId: payment.userId,
+            documentType: 'RECEIPT',
+            displayName: `Money Receipt - ${receiptNumber}`,
+            mimeType: 'application/pdf',
+            receiptId: createdReceipt.id,
+            status: 'ACTIVE',
+            visibility: 'PRIVATE',
+          },
+        });
+      }
+
+      // Also register Invoice in MemberDocument if not already registered
+      const existingInvDoc = typeof tx.memberDocument.findUnique === 'function'
+        ? await tx.memberDocument.findUnique({
+            where: { invoiceId: lockedInvoice.id },
+          })
+        : null;
+      if (!existingInvDoc) {
+        await tx.memberDocument.create({
+          data: {
+            userId: payment.userId,
+            documentType: 'INVOICE',
+            displayName: `Tax Invoice - ${officialInvoiceNumber}`,
+            mimeType: 'application/pdf',
+            invoiceId: lockedInvoice.id,
+            status: 'ACTIVE',
+            visibility: 'PRIVATE',
+          },
+        });
+      }
+    }
+
+    // 4. Membership / Subscription Lifecycle Transition
     if (payment.renewalRequest) {
       const renewal = payment.renewalRequest;
       const isFuture = renewal.requestedStartDate > now;
@@ -439,7 +497,9 @@ export async function settleSuccessfulPayment(
       });
     } else if (lockedInvoice.planId) {
       // Direct plan subscription purchase (outside renewal workflow)
-      const durationMonths = 1;
+      const lineItem = payment.invoice?.lineItems?.[0] || (lockedInvoice as any).lineItems?.[0];
+      const durationMonths = lineItem?.durationMonths || 1;
+      const purchaseVariantType = lineItem?.variantType || 'SINGLE';
       const calculatedEndDate = calculateEndDate(now, durationMonths);
 
       // Check if planId matches a CarePlan or legacy Plan
@@ -455,11 +515,24 @@ export async function settleSuccessfulPayment(
         legacyPlanId = legacyPlan?.id || null;
       }
 
+      // Expire prior active subscription to prevent overlapping active memberships
+      await tx.subscription.updateMany({
+        where: {
+          userId: payment.userId,
+          status: 'ACTIVE',
+        },
+        data: {
+          status: 'EXPIRED',
+          endDate: now,
+        },
+      });
+
       const newSub = await tx.subscription.create({
         data: {
           userId: payment.userId,
           carePlanId: carePlan?.id || null,
           planId: legacyPlanId,
+          variantType: purchaseVariantType,
           durationMonths,
           startDate: now,
           endDate: calculatedEndDate,
@@ -508,7 +581,7 @@ export async function settleSuccessfulPayment(
   }
 
   // 5. Fire asynchronous notifications outside of $transaction (primary settlement only)
-  if (payment.renewalRequest) {
+  try {
     const updatedSub = await db.subscription.findFirst({
       where: { userId: payment.userId },
       include: { addOns: { include: { addOn: true } } },
@@ -528,6 +601,8 @@ export async function settleSuccessfulPayment(
         })
         .catch((e) => console.error('Notification dispatch error:', e));
     }
+  } catch (notifErr) {
+    console.error('Failed to trigger post-payment notification dispatch:', notifErr);
   }
 
   return {

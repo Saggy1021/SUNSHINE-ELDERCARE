@@ -1,7 +1,12 @@
 import { db } from "../db";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+
 function formatINR(amount: number): string {
-  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
+  const formatted = new Intl.NumberFormat('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+  return `INR ${formatted}`;
 }
 
 function formatDate(date: Date): string {
@@ -15,12 +20,23 @@ function formatDate(date: Date): string {
 export class ReceiptDocumentService {
   /**
    * Generates a final PDF document from the immutable receipt snapshot.
+   * Includes Member ID, financial breakdown (taxable/GST/total), duration, and verified payment status.
    */
-  static async generateReceiptPdf(receiptId: string): Promise<Uint8Array> {
-    const receipt = await db.receipt.findUnique({
+  static async generateReceiptPdf(receiptId: string, client: any = db): Promise<Uint8Array> {
+    const receipt = await client.receipt.findUnique({
       where: { id: receiptId },
       include: {
-        invoice: true,
+        invoice: {
+          include: {
+            lineItems: true,
+          },
+        },
+        user: {
+          include: {
+            memberProfile: true,
+          },
+        },
+        payment: true,
       },
     });
 
@@ -34,69 +50,105 @@ export class ReceiptDocumentService {
     const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
     // Styling
-    const brandColor = rgb(0.12, 0.22, 0.38); // Navy
-    const successColor = rgb(0.1, 0.6, 0.2); // Green
+    const brandColor = rgb(0.04, 0.08, 0.16); // #091329 Navy
+    const successColor = rgb(0.08, 0.55, 0.24); // Emerald Green
+    const mutedColor = rgb(0.4, 0.45, 0.5);
     
     // Header
-    page.drawText('SUNSHINE ELDERCARE', { x: 50, y: height - 50, size: 24, font: boldFont, color: brandColor });
-    page.drawText('PAYMENT RECEIPT', { x: width - 250, y: height - 50, size: 20, font: boldFont });
+    page.drawText('SUNSHINE ELDERCARE', { x: 50, y: height - 50, size: 22, font: boldFont, color: brandColor });
+    page.drawText('MONEY RECEIPT', { x: width - 230, y: height - 50, size: 18, font: boldFont, color: brandColor });
     
     // Business Info
-    page.drawText('123 Sunshine Avenue, Care City, 400001', { x: 50, y: height - 70, size: 10, font });
-    page.drawText('info.sunshineeldercare@gmail.com | +91 98765 43210', { x: 50, y: height - 85, size: 10, font });
+    page.drawText('Sunshine Eldercare Private Limited', { x: 50, y: height - 68, size: 9, font: boldFont });
+    page.drawText('Salt Lake Sector 5, Kolkata, West Bengal - 700091', { x: 50, y: height - 80, size: 8, font, color: mutedColor });
+    page.drawText('support@sunshineeldercare.in | www.sunshineeldercare.in', { x: 50, y: height - 92, size: 8, font, color: mutedColor });
 
-    // Receipt Details
-    page.drawText(`Receipt Number: ${receipt.receiptNumber}`, { x: width - 200, y: height - 90, size: 10, font: boldFont });
-    page.drawText(`Date: ${formatDate(receipt.paymentDate)}`, { x: width - 200, y: height - 105, size: 10, font });
-    if (receipt.invoice) {
-      page.drawText(`Against Invoice: ${receipt.invoice.invoiceNumber || receipt.invoice.referenceNumber}`, { x: width - 200, y: height - 120, size: 10, font });
-    }
+    // Receipt Meta Box (Right Side)
+    const memberId = receipt.user?.memberProfile?.memberId || 'N/A';
+    const invoiceNum = receipt.invoice?.invoiceNumber || receipt.invoice?.referenceNumber || 'N/A';
+
+    page.drawText(`Receipt No: ${receipt.receiptNumber}`, { x: width - 230, y: height - 72, size: 9, font: boldFont });
+    page.drawText(`Date: ${formatDate(receipt.paymentDate)}`, { x: width - 230, y: height - 84, size: 9, font });
+    page.drawText(`Invoice No: ${invoiceNum}`, { x: width - 230, y: height - 96, size: 9, font });
+    page.drawText(`Member ID: ${memberId}`, { x: width - 230, y: height - 108, size: 9, font: boldFont, color: brandColor });
 
     // Customer Snapshot
-    const yCustomer = height - 150;
-    page.drawText('RECEIVED FROM:', { x: 50, y: yCustomer, size: 10, font: boldFont });
-    page.drawText(receipt.customerName, { x: 50, y: yCustomer - 15, size: 10, font });
-    if (receipt.customerEmail) page.drawText(receipt.customerEmail, { x: 50, y: yCustomer - 30, size: 10, font });
-    if (receipt.customerAddress) page.drawText(receipt.customerAddress.substring(0, 50), { x: 50, y: yCustomer - 45, size: 10, font });
-
-    // Payment Details Header
-    const tableTop = yCustomer - 90;
-    page.drawLine({ start: { x: 50, y: tableTop }, end: { x: width - 50, y: tableTop }, thickness: 1 });
-    page.drawText('Description', { x: 50, y: tableTop - 15, size: 10, font: boldFont });
-    page.drawText('Details', { x: width - 200, y: tableTop - 15, size: 10, font: boldFont });
-    page.drawLine({ start: { x: 50, y: tableTop - 25 }, end: { x: width - 50, y: tableTop - 25 }, thickness: 1 });
-
-    // Payment Details
-    let yPos = tableTop - 45;
-    
-    page.drawText('Amount Received', { x: 50, y: yPos, size: 10, font });
-    page.drawText(formatINR(receipt.amount.toNumber()), { x: width - 200, y: yPos, size: 10, font: boldFont });
-    yPos -= 20;
-
-    page.drawText('Payment Method', { x: 50, y: yPos, size: 10, font });
-    page.drawText(receipt.paymentMethod, { x: width - 200, y: yPos, size: 10, font });
-    yPos -= 20;
-
-    if (receipt.paymentReference) {
-      page.drawText('Transaction Reference', { x: 50, y: yPos, size: 10, font });
-      page.drawText(receipt.paymentReference, { x: width - 200, y: yPos, size: 10, font });
-      yPos -= 20;
+    const yCustomer = height - 140;
+    page.drawLine({ start: { x: 50, y: yCustomer + 10 }, end: { x: width - 50, y: yCustomer + 10 }, thickness: 0.5, color: rgb(0.85, 0.85, 0.85) });
+    page.drawText('RECEIVED FROM / MEMBER DETAILS:', { x: 50, y: yCustomer - 5, size: 9, font: boldFont, color: brandColor });
+    page.drawText(`Name: ${receipt.customerName || receipt.user?.name || 'Member'}`, { x: 50, y: yCustomer - 20, size: 9, font });
+    if (receipt.customerEmail || receipt.user?.email) {
+      page.drawText(`Email: ${receipt.customerEmail || receipt.user?.email}`, { x: 50, y: yCustomer - 32, size: 9, font });
+    }
+    if (receipt.customerAddress) {
+      page.drawText(`Address: ${receipt.customerAddress.substring(0, 60)}`, { x: 50, y: yCustomer - 44, size: 9, font, color: mutedColor });
     }
 
-    if (receipt.relatedPlanName) {
-      page.drawText('For Membership Plan', { x: 50, y: yPos, size: 10, font });
-      page.drawText(receipt.relatedPlanName.substring(0, 40), { x: width - 200, y: yPos, size: 10, font });
-      yPos -= 20;
+    // Payment Details Table
+    const tableTop = yCustomer - 65;
+    page.drawLine({ start: { x: 50, y: tableTop }, end: { x: width - 50, y: tableTop }, thickness: 1, color: brandColor });
+    page.drawText('Description / Financial Breakdown', { x: 50, y: tableTop - 14, size: 9, font: boldFont, color: brandColor });
+    page.drawText('Details', { x: width - 230, y: tableTop - 14, size: 9, font: boldFont, color: brandColor });
+    page.drawLine({ start: { x: 50, y: tableTop - 22 }, end: { x: width - 50, y: tableTop - 22 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
+
+    let yPos = tableTop - 38;
+    const lineHeight = 18;
+
+    // Plan Name
+    const planName = receipt.relatedPlanName || receipt.invoice?.lineItems?.[0]?.planName || 'Membership Care Plan';
+    page.drawText('Care Plan', { x: 50, y: yPos, size: 9, font });
+    page.drawText(planName.substring(0, 45), { x: width - 230, y: yPos, size: 9, font: boldFont });
+    yPos -= lineHeight;
+
+    // Duration
+    const durationMonths = receipt.invoice?.lineItems?.[0]?.durationMonths;
+    const durationText = durationMonths ? `${durationMonths} Month${durationMonths > 1 ? 's' : ''}` : '1 Month';
+    page.drawText('Membership Duration', { x: 50, y: yPos, size: 9, font });
+    page.drawText(durationText, { x: width - 230, y: yPos, size: 9, font });
+    yPos -= lineHeight;
+
+    // Payment Method
+    page.drawText('Payment Method', { x: 50, y: yPos, size: 9, font });
+    page.drawText(receipt.paymentMethod || 'ONLINE', { x: width - 230, y: yPos, size: 9, font });
+    yPos -= lineHeight;
+
+    // Transaction Reference
+    const paymentRef = receipt.paymentReference || receipt.payment?.reference || 'N/A';
+    page.drawText('Transaction Reference', { x: 50, y: yPos, size: 9, font });
+    page.drawText(paymentRef, { x: width - 230, y: yPos, size: 9, font: boldFont });
+    yPos -= lineHeight;
+
+    // Financial Breakdown: Taxable / Base Amount
+    if (receipt.invoice?.subtotal) {
+      page.drawText('Taxable / Base Amount', { x: 50, y: yPos, size: 9, font });
+      page.drawText(formatINR(receipt.invoice.subtotal.toNumber()), { x: width - 230, y: yPos, size: 9, font });
+      yPos -= lineHeight;
     }
 
-    page.drawLine({ start: { x: 50, y: yPos }, end: { x: width - 50, y: yPos }, thickness: 1 });
+    // Financial Breakdown: GST
+    if (receipt.invoice?.taxAmount) {
+      page.drawText('Applicable GST (18%)', { x: 50, y: yPos, size: 9, font });
+      page.drawText(formatINR(receipt.invoice.taxAmount.toNumber()), { x: width - 230, y: yPos, size: 9, font });
+      yPos -= lineHeight;
+    }
+
+    // Divider before Total
+    page.drawLine({ start: { x: 50, y: yPos + 4 }, end: { x: width - 50, y: yPos + 4 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
+
+    // Total Amount Received
+    page.drawText('Total Amount Paid', { x: 50, y: yPos - 12, size: 10, font: boldFont, color: brandColor });
+    page.drawText(formatINR(receipt.amount.toNumber()), { x: width - 230, y: yPos - 12, size: 11, font: boldFont, color: brandColor });
+    yPos -= lineHeight + 8;
+
+    page.drawLine({ start: { x: 50, y: yPos + 4 }, end: { x: width - 50, y: yPos + 4 }, thickness: 1, color: brandColor });
     
-    yPos -= 30;
-    page.drawText('PAYMENT SUCCESSFUL', { x: 50, y: yPos, size: 14, font: boldFont, color: successColor });
+    // Payment Status Stamp
+    yPos -= 28;
+    page.drawText('PAYMENT STATUS: VERIFIED & CONFIRMED', { x: 50, y: yPos, size: 12, font: boldFont, color: successColor });
 
     // Footer
-    page.drawText('Thank you for your payment.', { x: 50, y: 50, size: 10, font, color: rgb(0.5, 0.5, 0.5) });
-    page.drawText('This is a computer-generated document. No signature is required.', { x: 50, y: 35, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
+    page.drawText('Thank you for choosing Sunshine Eldercare.', { x: 50, y: 50, size: 9, font: boldFont, color: brandColor });
+    page.drawText('This is an official computer-generated receipt. For queries, contact support@sunshineeldercare.in.', { x: 50, y: 36, size: 8, font, color: mutedColor });
 
     return await pdfDoc.save();
   }
