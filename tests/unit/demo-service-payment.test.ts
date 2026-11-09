@@ -764,11 +764,72 @@ async function runDemoServiceTests() {
   assert.strictEqual(deletedPlanCalled, true, 'carePlan.delete must be called for clean unreferenced plan');
   console.log('  ✓ Verified clean deletion succeeds when zero historical financial records exist.');
 
+  // -------------------------------------------------------------------------
+  // SCENARIO 10: Private Demo-Service Selection Flow & UI Access Control
+  // -------------------------------------------------------------------------
+  console.log('--- SCENARIO 10: Private Demo-Service Selection Flow & UI Access Control ---');
+
+  // Test 10.1: Dedicated allowlist account tanishalam61@gmail.com
+  const tanishDemoConfig = {
+    INTERNAL_DEMO_ACCOUNT_EMAIL: 'tanishalam61@gmail.com',
+  };
+  const tanishMemberAccount = {
+    id: 'cmv5j9l6d00014uplaumg7m8l',
+    email: 'tanishalam61@gmail.com',
+    role: 'MEMBER',
+  };
+  const tanishAuthorized = await isInternalDemoAuthorized(tanishMemberAccount, tanishDemoConfig);
+  assert.strictEqual(tanishAuthorized, true, 'tanishalam61@gmail.com with role MEMBER must be authorized for demo flow');
+  console.log('  ✓ Verified authenticated tanishalam61@gmail.com (role: MEMBER) is authorized for private demo service.');
+
+  // Test 10.2: Admin user access
+  const adminAccount = {
+    id: 'cmv_admin_flow_test',
+    email: 'admin@sunshineeldercare.in',
+    role: 'ADMIN',
+  };
+  assert.strictEqual(await isInternalDemoAuthorized(adminAccount, tanishDemoConfig), true, 'Admin must be authorized for demo flow');
+  console.log('  ✓ Verified administrators are authorized for private demo service.');
+
+  // Test 10.3: Ordinary non-allowlisted member is rejected
+  const standardMember = {
+    id: 'cmv_standard_member_999',
+    email: 'standard.user@example.com',
+    role: 'MEMBER',
+  };
+  assert.strictEqual(await isInternalDemoAuthorized(standardMember, tanishDemoConfig), false, 'Ordinary member must be rejected from private demo flow');
+  assert.strictEqual(await isInternalDemoAuthorized(null, tanishDemoConfig), false, 'Unauthenticated visitor must be rejected from private demo flow');
+  console.log('  ✓ Verified ordinary non-allowlisted members and unauthenticated visitors are denied access.');
+
+  // Test 10.4: Public catalog excludes demo service while private catalog includes it
+  demoCarePlan.active = true; // reactivate demo care plan for catalog lookup
+  const publicViewCatalog = await carePricingService.getCatalog();
+  assert.strictEqual(
+    publicViewCatalog.some((p) => p.slug === 'internal-razorpay-demo'),
+    false,
+    'Public catalog must strictly exclude internal-razorpay-demo'
+  );
+
+  const privateViewCatalog = await carePricingService.getCatalog({ includeInternalDemo: true });
+  const resolvedDemoPlan = privateViewCatalog.find((p) => p.slug === 'internal-razorpay-demo');
+  assert.ok(resolvedDemoPlan, 'Private authorized catalog must include internal-razorpay-demo');
+  console.log('  ✓ Verified public catalogue strictly excludes demo plan while authorized private retrieval resolves it.');
+
+  // Test 10.5: Exact price display snapshot verification (₹20, GST ₹0, Total ₹20)
+  const singleDemoVariant = resolvedDemoPlan.variants.find((v) => v.variantType === 'SINGLE');
+  assert.ok(singleDemoVariant, 'SINGLE variant must exist');
+  assert.strictEqual(singleDemoVariant.monthlyBasePrice, 20, 'Base price must be exactly ₹20');
+  assert.strictEqual(singleDemoVariant.monthlyGst, 0, 'GST must be exactly ₹0');
+  assert.strictEqual(singleDemoVariant.monthlyTotal, 20, 'Monthly total must be exactly ₹20');
+  assert.strictEqual(singleDemoVariant.durations[0]?.months, 1, 'Duration must be 1 Month');
+  assert.strictEqual(singleDemoVariant.durations[0]?.documentedTotal, 20, 'Documented total must be exactly ₹20');
+  console.log('  ✓ Verified exact commercial snapshot: Base ₹20.00, GST ₹0.00, Total ₹20.00 (SINGLE, 1 Month).');
+
   // Restore fetch
   global.fetch = originalFetch;
 
   console.log('\n================================================================');
-  console.log('ALL 9 DEMO SERVICE PAYMENT & GOVERNANCE SCENARIOS PASSED WITH ZERO REGRESSIONS');
+  console.log('ALL 10 DEMO SERVICE PAYMENT & UI ACCESS CONTROL SCENARIOS PASSED WITH ZERO REGRESSIONS');
   console.log('================================================================\n');
 }
 
