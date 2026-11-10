@@ -15,11 +15,35 @@ export function Reveal({
   as?: 'div' | 'li' | 'section' | 'article'
 }) {
   const ref = useRef<HTMLElement | null>(null)
-  const [visible, setVisible] = useState(false)
+  const [status, setStatus] = useState<'initial' | 'pending' | 'visible'>('initial')
 
   useEffect(() => {
     const el = ref.current
     if (!el) return
+
+    // 1. Respect prefers-reduced-motion: leave content visible without animation
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return
+    }
+
+    // 2. If IntersectionObserver is not supported, remain visible
+    if (typeof IntersectionObserver === 'undefined') {
+      return
+    }
+
+    // 3. Check if element is already within the viewport or above it
+    const rect = el.getBoundingClientRect()
+    const isAboveOrInView = rect.top < window.innerHeight && rect.bottom > 0
+    const isPast = rect.bottom <= 0
+
+    if (isAboveOrInView || isPast) {
+      // Content is already in view on mount (e.g. above-the-fold or navigated anchor)
+      // Keep in 'initial' state (opacity: 1) to avoid an abrupt flicker or jump to 0.
+      return
+    }
+
+    // 4. Element is below the fold. Arm it for scroll reveal animation.
+    setStatus('pending')
 
     let fallbackTimeout: NodeJS.Timeout
 
@@ -27,7 +51,7 @@ export function Reveal({
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting || entry.boundingClientRect.top < window.innerHeight) {
-            setVisible(true)
+            setStatus('visible')
             observer.unobserve(entry.target)
             clearTimeout(fallbackTimeout)
           }
@@ -38,12 +62,11 @@ export function Reveal({
     
     observer.observe(el)
 
-    // Fallback: If 600ms passes and it hasn't triggered, force it to be visible.
-    // This is a defensive mechanism against Next.js cache restoration skipping the observer cycle.
+    // Defensive fallback: If 1500ms passes after arming and observer hasn't fired, ensure visibility
     fallbackTimeout = setTimeout(() => {
-      setVisible(true)
+      setStatus('visible')
       if (el) observer.unobserve(el)
-    }, 600)
+    }, 1500)
 
     return () => {
       observer.disconnect()
@@ -55,7 +78,12 @@ export function Reveal({
   return (
     <Component
       ref={ref}
-      className={cn('reveal', visible && 'is-visible', className)}
+      className={cn(
+        'reveal',
+        status === 'pending' && 'reveal-pending',
+        status === 'visible' && 'is-visible',
+        className
+      )}
       style={{ animationDelay: `${delay}ms` }}
     >
       {children}
