@@ -32,7 +32,18 @@ export function ForgotPasswordForm() {
         setError(res.error || 'Failed to request password reset. Please try again.')
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'An unexpected error occurred. Please try again.')
+      const rawMessage = err instanceof Error ? err.message : ''
+      // Guard against React minified errors or server digests leaking into user-facing alert UI
+      if (
+        !rawMessage ||
+        rawMessage.includes('Minified React error') ||
+        rawMessage.includes('Server Components render') ||
+        rawMessage.includes('digest')
+      ) {
+        setError('Failed to process password reset request. Please try again later.')
+      } else {
+        setError(rawMessage)
+      }
     } finally {
       setIsPending(false)
     }

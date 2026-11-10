@@ -1,5 +1,4 @@
 import { Metadata } from "next"
-import { Suspense } from "react"
 import { ForgotPasswordForm } from "./forgot-password-form"
 
 export const metadata: Metadata = {
@@ -17,9 +16,7 @@ export default function ForgotPasswordPage() {
             Enter your registered email to receive a password reset link.
           </p>
         </div>
-        <Suspense fallback={<div className="h-40 animate-pulse bg-gold/10 rounded-xl" />}>
-          <ForgotPasswordForm />
-        </Suspense>
+        <ForgotPasswordForm />
       </div>
     </main>
   )

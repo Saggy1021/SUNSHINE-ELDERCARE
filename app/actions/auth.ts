@@ -241,6 +241,7 @@ export async function requestPasswordReset(input: FormData | { email: string } |
       message: "If an account exists for this email, a password reset link has been sent. Please check your inbox and spam folder." 
     }
   } catch (error: any) {
+    console.error('[requestPasswordReset] Error processing request:', error)
     if (error?.name === 'RateLimitError') {
       return { success: false, error: 'Too many requests. Please try again later.' }
     }
