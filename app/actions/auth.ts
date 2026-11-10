@@ -8,7 +8,7 @@ import { documentService } from '@/lib/services/document'
 import { validateUpload } from '@/lib/services/document/validation'
 
 import { ROLES } from '@/lib/auth/roles'
-import { generateEmailVerificationToken, generatePasswordResetToken, hashToken } from '@/lib/auth/tokens'
+import { generateEmailVerificationToken, generatePasswordResetToken, verifyPasswordResetToken, hashToken } from '@/lib/auth/tokens'
 
 import { RateLimitService } from '@/lib/services/rate-limit'
 import { memberRegistrationSchema } from '@/lib/validations/member'
@@ -176,33 +176,75 @@ export async function registerUser(formData: FormData) {
   }
 }
 
-export async function requestPasswordReset(formData: FormData) {
+export async function requestPasswordReset(input: FormData | { email: string } | string) {
   try {
-    await RateLimitService.checkLimit('AUTHENTICATION')
-    const email = formData.get('email') as string
-    
-    if (!email) {
-      return { success: false, error: "Email is required" }
+    let email = ''
+    if (typeof input === 'string') {
+      email = input
+    } else if (input instanceof FormData) {
+      email = (input.get('email') as string) || ''
+    } else if (input && typeof input === 'object' && 'email' in input) {
+      email = (input as any).email || ''
     }
 
-    const normalizedEmail = email.toLowerCase()
+    const normalizedEmail = email.toLowerCase().trim()
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!normalizedEmail || !emailRegex.test(normalizedEmail)) {
+      return { success: false, error: "Please enter a valid email address." }
+    }
+
+    // 1. IP-level rate limiting
+    try {
+      await RateLimitService.checkLimit('AUTHENTICATION')
+    } catch (ipError: any) {
+      if (ipError?.name === 'RateLimitError') {
+        return { success: false, error: 'Too many requests from your IP. Please try again later.' }
+      }
+      throw ipError
+    }
+
+    // 2. Email-level rate limiting (max 5 requests per 15 min per email)
+    try {
+      await RateLimitService.checkLimit('OTP_RESEND', normalizedEmail)
+    } catch (emailError: any) {
+      if (emailError?.name === 'RateLimitError') {
+        return { success: false, error: 'Too many reset requests for this email. Please try again later.' }
+      }
+      throw emailError
+    }
 
     const user = await db.user.findUnique({
       where: { email: normalizedEmail }
     })
 
-    // Secure behavior: Do not reveal if the account exists
-    if (user) {
+    // Strict account enumeration mitigation:
+    // If user does not exist or is not ACTIVE, execute simulated crypto delay
+    // and return the identical success message.
+    if (user && user.status === 'ACTIVE') {
       const rawToken = await generatePasswordResetToken(normalizedEmail)
-      await notificationService.onPasswordReset(normalizedEmail, user.name || 'Member', rawToken)
+      const sendResult = await notificationService.onPasswordReset(
+        normalizedEmail,
+        user.name || 'Member',
+        rawToken
+      )
+
+      if (!sendResult.success && !sendResult.providerConfigured && process.env.NODE_ENV === 'production') {
+        return { success: false, error: 'Email delivery is currently unconfigured. Please contact support.' }
+      }
+    } else {
+      // Constant-time execution simulation preventing timing side-channel attacks
+      await bcrypt.hash('simulated_timing_delay_for_enumeration_protection', 10)
     }
 
-    return { success: true, message: "If an account exists, a password reset link has been sent." }
+    return { 
+      success: true, 
+      message: "If an account exists for this email, a password reset link has been sent. Please check your inbox and spam folder." 
+    }
   } catch (error: any) {
     if (error?.name === 'RateLimitError') {
       return { success: false, error: 'Too many requests. Please try again later.' }
     }
-    return { success: false, error: "Failed to process password reset request." }
+    return { success: false, error: "Failed to process password reset request. Please try again." }
   }
 }
 
@@ -272,52 +314,117 @@ export async function verifyEmail(email: string, rawToken: string) {
   }
 }
 
-export async function resetPassword(formData: FormData) {
+export async function resetPassword(
+  input: FormData | { email: string; token: string; password: string; confirmPassword?: string }
+) {
   try {
+    let email = ''
+    let rawToken = ''
+    let newPassword = ''
+    let confirmPassword = ''
+
+    if (input instanceof FormData) {
+      email = (input.get('email') as string) || ''
+      rawToken = (input.get('token') as string) || ''
+      newPassword = (input.get('password') as string) || ''
+      confirmPassword = (input.get('confirmPassword') as string) || ''
+    } else if (input && typeof input === 'object') {
+      email = input.email || ''
+      rawToken = input.token || ''
+      newPassword = input.password || ''
+      confirmPassword = input.confirmPassword || ''
+    }
+
+    const normalizedEmail = email.toLowerCase().trim()
+    const trimmedToken = rawToken.trim()
+
+    if (!normalizedEmail || !trimmedToken) {
+      return { success: false, error: "Invalid or missing reset token." }
+    }
+
+    if (!newPassword || newPassword.length < 8) {
+      return { success: false, error: "Password must be at least 8 characters long." }
+    }
+
+    if (newPassword.length > 128) {
+      return { success: false, error: "Password must not exceed 128 characters." }
+    }
+
+    if (confirmPassword && newPassword !== confirmPassword) {
+      return { success: false, error: "Passwords do not match. Please ensure both passwords are identical." }
+    }
+
+    // Rate limiting to prevent brute-forcing reset tokens
     await RateLimitService.checkLimit('AUTHENTICATION')
-    const email = (formData.get('email') as string)?.toLowerCase()
-    const rawToken = formData.get('token') as string
-    const newPassword = formData.get('password') as string
 
-    if (!email || !rawToken || !newPassword || newPassword.length < 8) {
-      return { success: false, error: "Invalid input" }
-    }
-
-    const hashedToken = hashToken(rawToken)
-    const identifier = `reset_${email}`
-
-    const existingToken = await db.verificationToken.findFirst({
-      where: { identifier, token: hashedToken }
-    })
-
-    if (!existingToken) {
-      return { success: false, error: "Invalid or expired token" }
-    }
-
-    if (new Date(existingToken.expires) < new Date()) {
-      return { success: false, error: "Token has expired" }
-    }
+    const hashedToken = hashToken(trimmedToken)
+    const identifier = `reset_${normalizedEmail}`
 
     const passwordHash = await bcrypt.hash(newPassword, 10)
 
-    await db.user.update({
-      where: { email },
-      data: { 
-        passwordHash,
-        sessionVersion: { increment: 1 } 
+    // Execute verification, user update, and token consumption atomically to eliminate TOCTOU race conditions
+    const transactionResult = await db.$transaction(async (tx) => {
+      const existingToken = await tx.verificationToken.findFirst({
+        where: { identifier, token: hashedToken }
+      })
+
+      if (!existingToken) {
+        return { success: false, error: "Invalid or expired reset link. Please request a new one." }
       }
+
+      if (new Date(existingToken.expires) < new Date()) {
+        await tx.verificationToken.deleteMany({
+          where: { identifier }
+        })
+        return { success: false, error: "Password reset link has expired. Please request a new one." }
+      }
+
+      const user = await tx.user.findUnique({
+        where: { email: normalizedEmail }
+      })
+
+      if (!user) {
+        return { success: false, error: "Invalid or expired reset link. Please request a new one." }
+      }
+
+      // Atomic update: new password hash + increment sessionVersion to invalidate all active JWT sessions
+      await tx.user.update({
+        where: { email: normalizedEmail },
+        data: { 
+          passwordHash,
+          sessionVersion: { increment: 1 } 
+        }
+      })
+
+      // Consume single-use token immediately to prevent replay
+      await tx.verificationToken.deleteMany({
+        where: { identifier }
+      })
+
+      return { success: true }
     })
 
-    await db.verificationToken.delete({
-      where: { identifier_token: { identifier, token: hashedToken } }
-    })
+    if (!transactionResult.success) {
+      return transactionResult
+    }
 
-    return { success: true, message: "Password updated successfully" }
+    return { success: true, message: "Your password has been updated successfully." }
   } catch (error: any) {
     if (error?.name === 'RateLimitError') {
       return { success: false, error: 'Too many requests. Please try again later.' }
     }
-    return { success: false, error: "Password reset failed" }
+    return { success: false, error: "Password reset failed. Please try again." }
+  }
+}
+
+export async function validatePasswordResetTokenAction(
+  email: string,
+  token: string
+): Promise<{ valid: boolean; reason?: 'INVALID' | 'EXPIRED' }> {
+  try {
+    return await verifyPasswordResetToken(email, token)
+  } catch {
+    return { valid: false, reason: 'INVALID' }
   }
 }
 

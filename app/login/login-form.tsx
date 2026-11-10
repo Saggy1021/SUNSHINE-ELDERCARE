@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 import Link from 'next/link'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Eye, EyeOff } from 'lucide-react'
 import { requestLoginOtp } from '@/app/actions/auth'
 
 type AuthState = 'idle' | 'submitting' | 'authenticating' | 'redirecting' | 'completed'
@@ -16,6 +16,10 @@ export function LoginForm() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [state, setState] = useState<AuthState>('idle')
+  const [showPassword, setShowPassword] = useState(false)
+
+  // Password reset success banner
+  const isResetSuccess = searchParams.get('reset') === 'success'
 
   // OTP-specific states
   const [otpEmail, setOtpEmail] = useState('')
@@ -212,6 +216,16 @@ export function LoginForm() {
         </div>
       )}
 
+      {isResetSuccess && !error && !success && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="rounded-md bg-green-500/10 p-3 text-sm text-green-700 border border-green-500/20"
+        >
+          Your password has been reset successfully. Please sign in with your new password.
+        </div>
+      )}
+
       {authMode === 'password' ? (
         /* PASSWORD LOGIN FORM */
         <form onSubmit={handlePasswordSubmit} className="flex flex-col gap-5" aria-busy={isPending}>
@@ -240,14 +254,38 @@ export function LoginForm() {
             >
               Password
             </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              disabled={isPending}
-              className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
-            />
+            <div className="relative">
+              <input
+                id="password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                required
+                disabled={isPending}
+                className="w-full rounded-xl border border-input bg-background px-4 py-3 pr-11 font-serif text-base outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                disabled={isPending}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-foreground/50 hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 rounded-md transition-colors disabled:opacity-50"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                title={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-5 w-5" aria-hidden="true" />
+                ) : (
+                  <Eye className="h-5 w-5" aria-hidden="true" />
+                )}
+              </button>
+            </div>
+            <div className="flex justify-end mt-1.5">
+              <Link
+                href="/forgot-password"
+                className="text-xs sm:text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-primary/20 rounded"
+              >
+                Forgot password?
+              </Link>
+            </div>
           </div>
 
           <button

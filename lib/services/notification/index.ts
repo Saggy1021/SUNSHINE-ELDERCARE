@@ -496,7 +496,7 @@ export const notificationService = {
   /**
    * Password Reset
    */
-  async onPasswordReset(email: string, name: string, token: string) {
+  async onPasswordReset(email: string, name: string, token: string): Promise<NotificationSendResult> {
     const config = getEmailConfig()
     const resetUrl = `${config.appBaseUrl}/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`
 
@@ -505,7 +505,9 @@ export const notificationService = {
       resetUrl
     })
 
-    await safeSend('PASSWORD_RESET', 'User', email, email, template)
+    const tokenHash = hashToken(token)
+    // Incorporate token hash in entityId so subsequent reset requests are not blocked by duplicate locking
+    return await safeSend('PASSWORD_RESET', 'User', `${email.toLowerCase().trim()}:${tokenHash.substring(0, 10)}`, email, template)
   },
 
   /**

@@ -90,21 +90,16 @@ export async function verifyLoginOtpToken(email: string, rawOtp: string): Promis
 }
 
 export async function generatePasswordResetToken(email: string) {
-  const rawToken = crypto.randomUUID();
+  const rawToken = crypto.randomBytes(32).toString("hex");
   const hashedToken = hashToken(rawToken);
   // Expire in 1 hour
-  const expires = new Date(new Date().getTime() + 1000 * 60 * 60); 
-  const identifier = `reset_${email}`;
+  const expires = new Date(Date.now() + 1000 * 60 * 60); 
+  const identifier = `reset_${email.toLowerCase().trim()}`;
 
-  const existingToken = await db.verificationToken.findFirst({
+  // Invalidate any previously unconsumed reset tokens for this email
+  await db.verificationToken.deleteMany({
     where: { identifier },
   });
-
-  if (existingToken) {
-    await db.verificationToken.delete({
-      where: { identifier_token: { identifier, token: existingToken.token } },
-    });
-  }
 
   await db.verificationToken.create({
     data: {
@@ -115,4 +110,36 @@ export async function generatePasswordResetToken(email: string) {
   });
 
   return rawToken;
+}
+
+export async function verifyPasswordResetToken(
+  email: string,
+  rawToken: string
+): Promise<{ valid: boolean; reason?: 'INVALID' | 'EXPIRED' }> {
+  if (!email || !rawToken) {
+    return { valid: false, reason: 'INVALID' };
+  }
+  const normalizedEmail = email.toLowerCase().trim();
+  const trimmedToken = rawToken.trim();
+  const hashedToken = hashToken(trimmedToken);
+  const identifier = `reset_${normalizedEmail}`;
+
+  const existingToken = await db.verificationToken.findFirst({
+    where: { identifier, token: hashedToken },
+  });
+
+  if (!existingToken) {
+    return { valid: false, reason: 'INVALID' };
+  }
+
+  // Check expiration
+  if (new Date(existingToken.expires) < new Date()) {
+    // Delete expired token
+    await db.verificationToken.deleteMany({
+      where: { identifier },
+    });
+    return { valid: false, reason: 'EXPIRED' };
+  }
+
+  return { valid: true };
 }

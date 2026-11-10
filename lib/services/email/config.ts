@@ -42,7 +42,7 @@ export function getEmailConfig(): EmailConfig {
     fromAddress: process.env.EMAIL_FROM || 'care@sunshineeldercare.in',
     replyToAddress: process.env.EMAIL_REPLY_TO || 'care@sunshineeldercare.in',
     adminNotificationAddress: process.env.ADMIN_NOTIFICATION_EMAIL || process.env.CONTACT_EMAIL_RECIPIENT || '',
-    appBaseUrl: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+    appBaseUrl: process.env.NEXT_PUBLIC_APP_URL || (process.env.NODE_ENV === 'production' ? 'https://www.sunshineeldercare.in' : 'http://localhost:3000'),
     companyName: 'SUNSHINE ELDERCARE',
     companyTagline: 'COMPASSIONATE CARE FOR SENIORS',
     smtp: {
