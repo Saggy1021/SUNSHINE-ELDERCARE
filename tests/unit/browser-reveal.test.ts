@@ -65,7 +65,7 @@ async function runBrowserTests() {
     })
 
     for (const item of opacitiesNoJs) {
-      assert(item !== null, `Element ${item?.id} must exist`)
+      if (!item) throw new Error('Expected element result in opacitiesNoJs')
       assert.equal(item.opacity, '1', `Element ${item.id} must have opacity: 1 when JS is disabled`)
       assert.notEqual(item.visibility, 'hidden', `Element ${item.id} must not be hidden`)
       console.log(`  ✓ ${item.id}: computed opacity = ${item.opacity}, visibility = ${item.visibility} (VISIBLE)`)
@@ -141,6 +141,7 @@ async function runBrowserTests() {
     // 1. Check top section (above fold): must be opacity 1 immediately
     const topSectionStyle = await jsPage.evaluate(() => {
       const el = document.getElementById('top-section')
+      if (!el) throw new Error('Element #top-section not found in DOM')
       const style = window.getComputedStyle(el)
       return {
         opacity: style.opacity,
@@ -154,6 +155,7 @@ async function runBrowserTests() {
     // 2. Check below fold section: must be armed with reveal-pending
     const belowFoldStyle = await jsPage.evaluate(() => {
       const el = document.getElementById('below-fold-section')
+      if (!el) throw new Error('Element #below-fold-section not found in DOM')
       const style = window.getComputedStyle(el)
       return {
         opacity: style.opacity,
@@ -167,12 +169,15 @@ async function runBrowserTests() {
     // 3. Scroll to below fold section
     console.log('  * Scrolling to below-fold section...')
     await jsPage.evaluate(() => {
-      document.getElementById('below-fold-section').scrollIntoView()
+      const el = document.getElementById('below-fold-section')
+      if (!el) throw new Error('Element #below-fold-section not found in DOM')
+      el.scrollIntoView()
     })
     await jsPage.waitForTimeout(300)
 
     const scrolledStyle = await jsPage.evaluate(() => {
       const el = document.getElementById('below-fold-section')
+      if (!el) throw new Error('Element #below-fold-section not found in DOM')
       const style = window.getComputedStyle(el)
       return {
         opacity: style.opacity,
@@ -199,8 +204,11 @@ async function runBrowserTests() {
     await rmPage.setContent(htmlWithJs)
 
     const rmStyles = await rmPage.evaluate(() => {
-      const top = window.getComputedStyle(document.getElementById('top-section'))
-      const below = window.getComputedStyle(document.getElementById('below-fold-section'))
+      const topEl = document.getElementById('top-section')
+      const belowEl = document.getElementById('below-fold-section')
+      if (!topEl || !belowEl) throw new Error('Required elements not found in DOM')
+      const top = window.getComputedStyle(topEl)
+      const below = window.getComputedStyle(belowEl)
       return {
         topOpacity: top.opacity,
         belowOpacity: below.opacity,
