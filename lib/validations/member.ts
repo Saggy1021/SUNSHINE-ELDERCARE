@@ -3,7 +3,7 @@ import { z } from "zod";
 export const memberRegistrationSchema = z.object({
   // Auth fields
   email: z.string().email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  password: z.string().min(8, "Password must be at least 8 characters").max(128, "Password must not exceed 128 characters"),
   
   // SECTION A: MEMBER DETAILS
   firstName: z.string().min(1, "First Name is required"),

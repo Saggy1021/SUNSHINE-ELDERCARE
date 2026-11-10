@@ -44,7 +44,10 @@ export default async function RootLayout({
   children: React.ReactNode
 }>) {
   const [session, settingsMap] = await Promise.all([
-    auth(),
+    auth().catch((err) => {
+      console.warn('[RootLayout] auth() session lookup warning:', err?.message || err);
+      return null;
+    }),
     CmsService.getSettingsMap().catch(() => ({}))
   ]);
   return (
