@@ -228,10 +228,16 @@
 }
 
 .reveal {
-  opacity: 0;
+  opacity: 1;
 }
+
+.reveal.reveal-pending {
+  opacity: 0;
+  transform: translateY(36px);
+}
+
 .reveal.is-visible {
-  animation: reveal-up 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: reveal-up 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -241,8 +247,11 @@
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
   }
-  .reveal {
+  .reveal,
+  .reveal.reveal-pending {
     opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
   }
 }
 
