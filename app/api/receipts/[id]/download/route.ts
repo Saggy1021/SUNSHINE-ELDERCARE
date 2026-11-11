@@ -4,6 +4,8 @@ import { db } from '@/lib/db'
 import { ReceiptDocumentService } from '@/lib/services/receipt-document'
 import { RateLimitService } from '@/lib/services/rate-limit'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -29,13 +31,18 @@ export async function GET(
 
     const receipt = await db.receipt.findUnique({
       where: { id },
+      select: {
+        id: true,
+        userId: true,
+        receiptNumber: true,
+      },
     })
 
     if (!receipt) {
       return new NextResponse('Not Found', { status: 404 })
     }
 
-    // Strict ownership & administrative authorization check
+    // Strict ownership & administrative financial permission check (IDOR mitigation)
     if (receipt.userId !== session.user.id) {
       const { AuthorizationService } = await import('@/lib/services/authorization')
       const canView = await AuthorizationService.can(session.user.id, 'PAYMENT_VIEW')
@@ -45,11 +52,14 @@ export async function GET(
     }
 
     const pdfBytes = await ReceiptDocumentService.generateReceiptPdf(receipt.id)
+    const sanitizedReceiptNumber = receipt.receiptNumber.replace(/[^A-Za-z0-9_-]/g, '_')
 
-    return new NextResponse(Buffer.from(pdfBytes), {
+    return new NextResponse(pdfBytes, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="receipt-${receipt.receiptNumber}.pdf"`,
+        'Content-Disposition': `attachment; filename="receipt-${sanitizedReceiptNumber}.pdf"`,
+        'Cache-Control': 'no-store, max-age=0',
+        'X-Content-Type-Options': 'nosniff',
       },
     })
   } catch (error) {

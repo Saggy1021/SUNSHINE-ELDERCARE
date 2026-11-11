@@ -2,10 +2,32 @@ import { getCarePlanCatalog } from "@/app/actions/care-plans"
 import { getActiveAddOns } from "@/app/actions/membership"
 import RenewalWorkflow from "@/components/yoga/member/renewal-workflow"
 
-export default async function RenewMembershipPage() {
+interface RenewMembershipPageProps {
+  searchParams?: Promise<{
+    plan?: string
+    variant?: string
+    duration?: string
+    addOns?: string
+  }>
+}
+
+export default async function RenewMembershipPage({ searchParams }: RenewMembershipPageProps) {
+  const params = (await searchParams) || {}
   const plansResult = await getCarePlanCatalog()
   const plans = plansResult.success && plansResult.data ? plansResult.data : []
   const addOns = await getActiveAddOns()
+
+  const requestedPlan = params.plan?.toLowerCase()
+  const matchedPlan = plans.find(
+    (p: any) => p.slug?.toLowerCase() === requestedPlan || p.id === params.plan
+  )
+
+  const initialPlanId = matchedPlan?.id || ""
+  const requestedVariant = params.variant?.toUpperCase()
+  const initialVariant = requestedVariant === "COUPLE" ? "COUPLE" : "SINGLE"
+  const parsedDuration = params.duration ? parseInt(params.duration, 10) : 1
+  const initialDuration = [1, 3, 6, 12].includes(parsedDuration) ? parsedDuration : 1
+  const initialAddOnIds = params.addOns ? params.addOns.split(',').map((s) => s.trim()).filter(Boolean) : []
 
   return (
     <div className="space-y-6">
@@ -21,7 +43,14 @@ export default async function RenewMembershipPage() {
         </div>
       </div>
 
-      <RenewalWorkflow plans={plans} addOns={addOns} />
+      <RenewalWorkflow
+        plans={plans}
+        addOns={addOns}
+        initialPlanId={initialPlanId}
+        initialVariantType={initialVariant}
+        initialDurationMonths={initialDuration}
+        initialAddOnIds={initialAddOnIds}
+      />
     </div>
   )
 }

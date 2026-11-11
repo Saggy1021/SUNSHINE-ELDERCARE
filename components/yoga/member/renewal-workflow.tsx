@@ -4,12 +4,41 @@ import { useState, useMemo } from "react"
 import { submitRenewalRequest } from "@/app/actions/membership"
 import { calculateEndDate } from "@/lib/services/dates"
 
-export default function RenewalWorkflow({ plans, addOns }: { plans: any[], addOns: any[] }) {
-  const [step, setStep] = useState(1)
-  const [carePlanId, setCarePlanId] = useState<string>("")
-  const [variantType, setVariantType] = useState<string>("SINGLE")
-  const [durationMonths, setDurationMonths] = useState<number>(1)
-  const [selectedAddOnIds, setSelectedAddOnIds] = useState<string[]>([])
+interface RenewalWorkflowProps {
+  plans: any[]
+  addOns: any[]
+  initialPlanId?: string
+  initialVariantType?: string
+  initialDurationMonths?: number
+  initialAddOnIds?: string[]
+}
+
+export default function RenewalWorkflow({
+  plans,
+  addOns,
+  initialPlanId = "",
+  initialVariantType = "SINGLE",
+  initialDurationMonths = 1,
+  initialAddOnIds = [],
+}: RenewalWorkflowProps) {
+  const validInitialPlan = plans.find((p) => p.id === initialPlanId)
+  const effectivePlanId = validInitialPlan ? initialPlanId : ""
+  const hasPreselectedPlan = Boolean(validInitialPlan)
+
+  // When arriving from the price calculator with a valid plan, variant, and duration,
+  // the member has already decided steps 1-3. We advance to Step 4 (Add-ons) or Step 5,
+  // with full backward navigation preserved.
+  const initialStep = hasPreselectedPlan ? 4 : 1
+
+  const [step, setStep] = useState(initialStep)
+  const [carePlanId, setCarePlanId] = useState<string>(effectivePlanId)
+  const [variantType, setVariantType] = useState<string>(
+    initialVariantType === "COUPLE" ? "COUPLE" : "SINGLE"
+  )
+  const [durationMonths, setDurationMonths] = useState<number>(
+    [1, 3, 6, 12].includes(initialDurationMonths) ? initialDurationMonths : 1
+  )
+  const [selectedAddOnIds, setSelectedAddOnIds] = useState<string[]>(initialAddOnIds)
   
   // Start date defaults to tomorrow
   const tomorrow = new Date()

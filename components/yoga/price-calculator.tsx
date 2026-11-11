@@ -51,9 +51,20 @@ export function PriceCalculator({ plan, isAuthenticated, addOns = [] }: PriceCal
     setLoading(false)
   }
 
+  const getRenewUrl = () => {
+    const params = new URLSearchParams()
+    params.set('plan', plan.slug)
+    params.set('variant', variantType)
+    params.set('duration', String(months))
+    if (selectedAddOns.length > 0) {
+      params.set('addOns', selectedAddOns.join(','))
+    }
+    return `/dashboard/renew?${params.toString()}`
+  }
+
   const handleSubscribe = async () => {
     if (!isAuthenticated) return
-    router.push('/dashboard')
+    router.push(getRenewUrl())
   }
 
   return (
@@ -231,7 +242,7 @@ export function PriceCalculator({ plan, isAuthenticated, addOns = [] }: PriceCal
             </button>
           ) : (
             <Link
-              href={`/login?callbackUrl=${encodeURIComponent(`/membership/${plan.slug}`)}`}
+              href={`/login?callbackUrl=${encodeURIComponent(getRenewUrl())}`}
               className="mt-6 block w-full rounded-xl bg-gold px-6 py-3 text-center text-sm font-semibold text-brown transition-opacity hover:opacity-90"
             >
               Subscribe Now
