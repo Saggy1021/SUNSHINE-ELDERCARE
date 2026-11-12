@@ -109,6 +109,7 @@ export async function GET(req: NextRequest) {
           memberId,
           name: memberName,
           email: user.email,
+          gender: profile?.gender || null,
           phone: profile?.mobileNumber || profile?.phone || null,
           bloodGroup: profile?.bloodGroup || 'O+ (Default on file)',
           emergencyContact: {
@@ -161,6 +162,7 @@ export async function GET(req: NextRequest) {
               ]
             : []),
         ],
+        events: [],
       },
       { status: 200, headers: corsHeaders }
     );

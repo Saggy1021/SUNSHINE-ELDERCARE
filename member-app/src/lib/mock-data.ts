@@ -236,7 +236,7 @@ export const MOCK_COMMUNITY_EVENTS: CommunityEvent[] = [
 export const ISSUE_CATEGORIES: { id: IssueCategory; label: string; description: string }[] = [
   {
     id: 'SERVICE_COMPLAINT',
-    label: 'Service Complaints',
+    label: 'Service-related Complaints',
     description: 'Concerns regarding quality or scope of eldercare support received.',
   },
   {

@@ -5,7 +5,9 @@ export const APP_CONFIG = {
   renewalUrl: 'https://www.sunshineeldercare.in/dashboard/renew',
   apiUrl: process.env.NEXT_PUBLIC_BACKEND_URL || 'https://www.sunshineeldercare.in',
   supportEmail: 'info.sunshineeldercare@gmail.com',
-  emergencyHelpline: '+91 90888 82222',
+  emergencyHelpline: '03340585515',
+  displayHelpline: '033-40585515',
+  tollFreeHelpline: '+91 90888 82222',
   nationalEmergency: '112',
 };
 

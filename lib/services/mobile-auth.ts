@@ -28,6 +28,7 @@ export interface MobileAuthResult {
     name: string;
     email: string;
     phone: string | null;
+    gender?: string | null;
     status: string;
   };
   subscription?: {
@@ -259,7 +260,8 @@ export class MobileAuthService {
         memberId,
         name: user.name || 'Sunshine Member',
         email: user.email,
-        phone: memberProfile?.phone || null,
+        phone: memberProfile?.mobileNumber || memberProfile?.phone || null,
+        gender: memberProfile?.gender || null,
         status: user.status,
       },
       subscription: currentSub

@@ -75,8 +75,8 @@ export function RaiseAnIssueSection() {
           Encountering an issue with our care staff, scheduled visit, or invoice? Submit a ticket below for priority resolution by the Sunshine Care Operations Desk.
         </p>
 
-        {/* Quick category triggers */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+        {/* Quick category triggers - Responsive, non-clipping senior-friendly cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
           {ISSUE_CATEGORIES.slice(0, 4).map((cat) => (
             <button
               key={cat.id}
@@ -85,9 +85,12 @@ export function RaiseAnIssueSection() {
                 setModalOpen(true);
                 setSubmittedMessage(null);
               }}
-              className="p-2.5 bg-[#FAF9F5] hover:bg-slate-100 border border-[#D8C08A]/40 rounded-xl text-[11px] font-semibold text-[#162850] text-left line-clamp-1 transition-colors"
+              className="p-3 bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D8C08A]/50 rounded-xl min-h-[50px] h-auto flex items-center gap-2.5 text-left transition-all active:scale-[0.98] group"
             >
-              • {cat.label}
+              <span className="w-2 h-2 rounded-full bg-[#B08A4A] shrink-0 group-hover:scale-125 transition-transform" />
+              <span className="text-xs font-semibold text-[#162850] leading-snug break-words whitespace-normal flex-1">
+                {cat.label}
+              </span>
             </button>
           ))}
         </div>

@@ -69,6 +69,7 @@ class ApiClient {
       membership: any;
       recentReceipts: any[];
       systemNotifications: any[];
+      events?: any[];
     }>('/api/mobile/dashboard');
   }
 

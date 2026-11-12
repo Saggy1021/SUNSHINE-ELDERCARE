@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CircularSosButton } from '@/components/sos/circular-sos-button';
+import { UpcomingEventsSection } from '@/components/home/upcoming-events-section';
 import { ServiceShortcuts } from '@/components/home/service-shortcuts';
 import { RaiseAnIssueSection } from '@/components/home/raise-an-issue-section';
 import { api } from '@/lib/api-client';
@@ -26,6 +27,18 @@ import {
 import { usePwa } from '@/lib/pwa';
 
 const WEBSITE_RENEWAL_URL = 'https://www.sunshineeldercare.in/dashboard/renew';
+
+function getPersonalizedGreeting(name?: string | null, gender?: string | null): string {
+  const memberName = name?.trim() || 'Member';
+  const g = (gender || '').trim().toLowerCase();
+  if (g === 'female' || g === 'f' || g === 'woman') {
+    return `Hello, ${memberName} Ma'am`;
+  }
+  if (g === 'male' || g === 'm' || g === 'man') {
+    return `Hello, ${memberName} Sir`;
+  }
+  return `Hello, ${memberName}`;
+}
 
 export default function DashboardPage() {
   const { isInstallable, triggerInstall } = usePwa();
@@ -139,7 +152,7 @@ export default function DashboardPage() {
             Member Overview
           </span>
           <h2 className="text-2xl font-bold tracking-tight text-[#162850]">
-            Hello, {member?.name || 'Member'}
+            {getPersonalizedGreeting(member?.name, member?.gender)}
           </h2>
         </div>
 
@@ -163,7 +176,10 @@ export default function DashboardPage() {
       {/* 1. Large Circular SOS Emergency Button */}
       <CircularSosButton />
 
-      {/* 2. Authoritative Membership & Care Plan Information (Standard Clean Layout) */}
+      {/* 2. Upcoming Events & Activities */}
+      <UpcomingEventsSection events={data?.events || []} />
+
+      {/* 3. Authoritative Membership & Care Plan Information (Standard Clean Layout) */}
       <section className="bg-white rounded-2xl border border-[#D8C08A]/50 shadow-xs overflow-hidden">
         {/* Section Header */}
         <div className="p-4 bg-gradient-to-r from-[#162850] to-[#091329] text-white flex items-center justify-between">
@@ -307,10 +323,10 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* 3. Service Shortcuts */}
+      {/* 4. Service Shortcuts */}
       <ServiceShortcuts />
 
-      {/* 4. Official Receipts & Documents from Backend */}
+      {/* 5. Official Receipts & Documents from Backend */}
       <section className="bg-white p-4 rounded-2xl border border-[#D8C08A]/40 shadow-xs space-y-3">
         <div className="flex items-center justify-between pb-2 border-b border-slate-100">
           <span className="text-xs font-bold text-[#162850] uppercase tracking-wider flex items-center gap-1.5">
@@ -362,7 +378,7 @@ export default function DashboardPage() {
         )}
       </section>
 
-      {/* 5. Raise an Issue / Complaint Section */}
+      {/* 6. Raise an Issue / Complaint Section */}
       <RaiseAnIssueSection />
 
       {/* Footer Branding */}
