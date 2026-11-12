@@ -147,12 +147,12 @@ export class RateLimitService {
    * Evaluates the rate limit for a specific action and category.
    * Throws RateLimitError if exceeded.
    */
-  static async checkLimit(category: RateLimitCategory): Promise<void> {
+  static async checkLimit(category: RateLimitCategory, customIdentifier?: string): Promise<void> {
     if (process.env.RATE_LIMIT_ENABLED === 'false') {
       return; 
     }
 
-    const identifier = await this.getIdentifier();
+    const identifier = customIdentifier || await this.getIdentifier();
     const key = `${category}:${identifier}`;
     const config = CATEGORY_CONFIG[category];
 
