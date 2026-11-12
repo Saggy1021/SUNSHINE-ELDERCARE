@@ -318,7 +318,12 @@ export class MobileAuthService {
       const user = await db.user.findUnique({
         where: { id: payload.sub },
         include: {
-          memberProfile: true,
+          memberProfile: {
+            include: {
+              sponsor: true,
+              medicalAuth: true,
+            },
+          },
         },
       });
 

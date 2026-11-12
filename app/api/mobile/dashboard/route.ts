@@ -109,14 +109,14 @@ export async function GET(req: NextRequest) {
           memberId,
           name: memberName,
           email: user.email,
-          phone: profile?.phone || null,
+          phone: profile?.mobileNumber || profile?.phone || null,
           bloodGroup: profile?.bloodGroup || 'O+ (Default on file)',
           emergencyContact: {
-            name: profile?.emergencyContactName || profile?.sponsorName || 'Primary Family Contact',
-            phone: profile?.emergencyContactPhone || profile?.sponsorPhone || '+91 90888 82222',
-            relation: profile?.emergencyContactRelation || 'Family',
+            name: profile?.sponsor?.fullName || profile?.emergencyContactName || profile?.sponsorName || 'Primary Family Contact',
+            phone: profile?.sponsor?.mobileNumber || profile?.emergencyContactPhone || profile?.sponsorPhone || '+91 90888 82222',
+            relation: profile?.sponsor?.relationship || profile?.emergencyContactRelation || 'Family',
           },
-          preferredHospital: profile?.hospitalPreference || 'Apollo Multispeciality / Nearest Critical Care',
+          preferredHospital: profile?.medicalAuth?.hospitalForSos || profile?.hospitalPreference || 'Apollo Multispeciality Hospital, Kolkata',
         },
         membership: subscription
           ? {

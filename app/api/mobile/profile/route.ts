@@ -44,18 +44,18 @@ export async function GET(req: NextRequest) {
           memberId: profile?.memberId || 'PENDING_ASSIGNMENT',
           name: user.name || 'Member',
           email: user.email,
-          phone: profile?.phone || '',
-          addressLine1: profile?.addressLine1 || profile?.address || '',
+          phone: profile?.mobileNumber || profile?.phone || '',
+          addressLine1: profile?.serviceAddress || profile?.addressLine1 || profile?.address || '',
           city: profile?.city || 'Kolkata',
           state: profile?.state || 'West Bengal',
-          pincode: profile?.pincode || '',
+          pincode: profile?.postalCode || profile?.pincode || '',
           bloodGroup: profile?.bloodGroup || '',
           medicalConditions: profile?.medicalConditions || 'None reported',
           allergies: profile?.allergies || 'No known allergies',
-          hospitalPreference: profile?.hospitalPreference || '',
-          emergencyContactName: profile?.emergencyContactName || profile?.sponsorName || '',
-          emergencyContactPhone: profile?.emergencyContactPhone || profile?.sponsorPhone || '',
-          emergencyContactRelation: profile?.emergencyContactRelation || 'Family',
+          hospitalPreference: profile?.medicalAuth?.hospitalForSos || profile?.hospitalPreference || '',
+          emergencyContactName: profile?.sponsor?.fullName || profile?.emergencyContactName || profile?.sponsorName || '',
+          emergencyContactPhone: profile?.sponsor?.mobileNumber || profile?.emergencyContactPhone || profile?.sponsorPhone || '',
+          emergencyContactRelation: profile?.sponsor?.relationship || profile?.emergencyContactRelation || 'Family',
         },
       },
       { status: 200, headers: corsHeaders }
@@ -85,29 +85,50 @@ export async function PUT(req: NextRequest) {
     const { user, profile } = session;
     const body = await req.json();
 
-    // Permitted editable fields only (prevent mutating email, role, memberId, status)
-    const updateData: any = {};
-    if (typeof body.phone === 'string') updateData.phone = body.phone.trim();
-    if (typeof body.addressLine1 === 'string') updateData.addressLine1 = body.addressLine1.trim();
-    if (typeof body.city === 'string') updateData.city = body.city.trim();
-    if (typeof body.state === 'string') updateData.state = body.state.trim();
-    if (typeof body.pincode === 'string') updateData.pincode = body.pincode.trim();
-    if (typeof body.bloodGroup === 'string') updateData.bloodGroup = body.bloodGroup.trim();
-    if (typeof body.hospitalPreference === 'string') updateData.hospitalPreference = body.hospitalPreference.trim();
-    if (typeof body.emergencyContactName === 'string') updateData.emergencyContactName = body.emergencyContactName.trim();
-    if (typeof body.emergencyContactPhone === 'string') updateData.emergencyContactPhone = body.emergencyContactPhone.trim();
-    if (typeof body.emergencyContactRelation === 'string') updateData.emergencyContactRelation = body.emergencyContactRelation.trim();
+    // Permitted editable fields mapped directly to MemberProfile and related models
+    const profileUpdate: any = {};
+    if (typeof body.phone === 'string') profileUpdate.mobileNumber = body.phone.trim();
+    if (typeof body.addressLine1 === 'string') profileUpdate.serviceAddress = body.addressLine1.trim();
+    if (typeof body.bloodGroup === 'string') profileUpdate.bloodGroup = body.bloodGroup.trim();
+    if (typeof body.medicalConditions === 'string') profileUpdate.medicalConditions = body.medicalConditions.trim();
 
     if (profile) {
       await db.memberProfile.update({
         where: { userId: user.id },
-        data: updateData,
-      });
-    } else {
-      await db.memberProfile.create({
         data: {
-          userId: user.id,
-          ...updateData,
+          ...profileUpdate,
+          ...(body.emergencyContactName || body.emergencyContactPhone
+            ? {
+                sponsor: {
+                  upsert: {
+                    create: {
+                      fullName: (body.emergencyContactName || 'Family Contact').trim(),
+                      mobileNumber: (body.emergencyContactPhone || '').trim(),
+                      relationship: (body.emergencyContactRelation || 'Family').trim(),
+                    },
+                    update: {
+                      ...(body.emergencyContactName ? { fullName: body.emergencyContactName.trim() } : {}),
+                      ...(body.emergencyContactPhone ? { mobileNumber: body.emergencyContactPhone.trim() } : {}),
+                      ...(body.emergencyContactRelation ? { relationship: body.emergencyContactRelation.trim() } : {}),
+                    },
+                  },
+                },
+              }
+            : {}),
+          ...(body.hospitalPreference
+            ? {
+                medicalAuth: {
+                  upsert: {
+                    create: {
+                      hospitalForSos: body.hospitalPreference.trim(),
+                    },
+                    update: {
+                      hospitalForSos: body.hospitalPreference.trim(),
+                    },
+                  },
+                },
+              }
+            : {}),
         },
       });
     }
