@@ -22,9 +22,20 @@ export async function GET(
   }
 
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
-      return new NextResponse('Unauthorized', { status: 401 })
+    let userId: string | null = null;
+    const session = await auth();
+    if (session?.user?.id) {
+      userId = session.user.id;
+    } else {
+      const { MobileAuthService } = await import('@/lib/services/mobile-auth');
+      const mobileSession = await MobileAuthService.verifySession(req.headers, req.cookies);
+      if (mobileSession?.user?.id) {
+        userId = mobileSession.user.id;
+      }
+    }
+
+    if (!userId) {
+      return new NextResponse('Unauthorized', { status: 401 });
     }
 
     const { id } = await params
@@ -43,9 +54,9 @@ export async function GET(
     }
 
     // Strict ownership & administrative financial permission check (IDOR mitigation)
-    if (receipt.userId !== session.user.id) {
+    if (receipt.userId !== userId) {
       const { AuthorizationService } = await import('@/lib/services/authorization')
-      const canView = await AuthorizationService.can(session.user.id, 'PAYMENT_VIEW')
+      const canView = await AuthorizationService.can(userId, 'PAYMENT_VIEW')
       if (!canView) {
         return new NextResponse('Forbidden', { status: 403 })
       }

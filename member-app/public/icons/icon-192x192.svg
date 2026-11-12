@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <rect width="192" height="192" rx="42" fill="#091329" />
+  <circle cx="96" cy="96" r="64" stroke="#B08A4A" stroke-width="4" fill="none" opacity="0.4" />
+  <circle cx="96" cy="96" r="52" stroke="#B08A4A" stroke-width="2" fill="none" stroke-dasharray="6 4" opacity="0.6" />
+  <path d="M96 44 L99 56 L111 59 L99 62 L96 74 L93 62 L81 59 L93 56 Z" fill="#B08A4A" />
+  <text x="96" y="118" font-family="Georgia, serif" font-size="62" font-weight="bold" fill="#B08A4A" text-anchor="middle">S</text>
+  <text x="96" y="145" font-family="-apple-system, sans-serif" font-size="11" font-weight="600" fill="#E2E8F0" letter-spacing="3" text-anchor="middle">SUNSHINE</text>
+</svg>
+

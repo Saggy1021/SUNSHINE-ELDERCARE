@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="112" fill="#091329" />
+  <circle cx="256" cy="256" r="180" stroke="#B08A4A" stroke-width="8" fill="none" opacity="0.4" />
+  <circle cx="256" cy="256" r="148" stroke="#B08A4A" stroke-width="4" fill="none" stroke-dasharray="14 10" opacity="0.6" />
+  <path d="M256 112 L264 148 L300 156 L264 164 L256 200 L248 164 L212 156 L248 148 Z" fill="#B08A4A" />
+  <text x="256" y="316" font-family="Georgia, serif" font-size="168" font-weight="bold" fill="#B08A4A" text-anchor="middle">S</text>
+  <text x="256" y="390" font-family="-apple-system, sans-serif" font-size="28" font-weight="600" fill="#E2E8F0" letter-spacing="8" text-anchor="middle">SUNSHINE CARE</text>
+</svg>
+

@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+:root {
+  /* Sunshine Eldercare Production Heritage Palette (exact match with website) */
+  --saffron: #29436F;
+  --terracotta: #0F2347;
+  --gold: #B08A4A;
+  --sandstone: #D8C08A;
+  --ivory: #FAF9F5;
+  --copper: #B08A4A;
+  --brown: #162850;
+  --maroon: #0F2347;
+
+  --background: #FAF9F5;
+  --foreground: #162850;
+  --card: #FFFFFF;
+  --card-border: #D8C08A;
+  --sos-crimson: #DC2626;
+
+  /* Safe Area insets for notch and bottom home indicator */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior-y: none;
+  font-size: 16px; /* Prevents auto-zoom in mobile Safari */
+}
+
+/* Minimum 48px tap targets for elder accessibility */
+.touch-target {
+  min-height: 48px;
+  min-width: 48px;
+}
+
+/* Card 3D Flip Styles */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.transform-style-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.rotate-y-180 {
+  transform: rotateY(180deg);
+}

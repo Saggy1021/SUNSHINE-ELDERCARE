@@ -1,0 +1,45 @@
+{
+  "name": "Sunshine Eldercare Member App",
+  "short_name": "Sunshine Care",
+  "description": "Official mobile membership portal for Sunshine Eldercare — digital membership card, care tracking, receipts, and emergency SOS.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAF9F5",
+  "theme_color": "#091329",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "en-IN",
+  "categories": ["medical", "health", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Membership Card",
+      "url": "/card",
+      "description": "View digital eldercare membership card"
+    },
+    {
+      "name": "Emergency SOS",
+      "url": "/dashboard?sos=true",
+      "description": "Direct emergency contact and ambulance dialer"
+    },
+    {
+      "name": "Receipts & Documents",
+      "url": "/documents",
+      "description": "Download payment receipts and care plans"
+    }
+  ]
+}
+
