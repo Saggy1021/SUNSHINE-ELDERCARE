@@ -1,1 +1,2 @@
 # SUNSHINE-ELDERCARE
+<!-- staging-sync: 2026-11-12T19:56:00Z -->
