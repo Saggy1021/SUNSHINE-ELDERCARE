@@ -131,6 +131,8 @@ export class MobileAuthService {
           statusCode: 429,
         };
       }
+      // Non-fatal fallback: log warning and proceed if rate limit service store (e.g. Upstash) is unreachable or not configured
+      console.warn('[MobileAuthService] RateLimitService non-fatal error:', e?.message || e);
     }
 
     // 2. Identify and retrieve User account
