@@ -135,15 +135,6 @@ export function MemberDrawer({ isOpen, onClose, session }: MemberDrawerProps) {
             </Link>
 
             <Link
-              href="/card"
-              onClick={onClose}
-              className="flex items-center gap-3 p-3 text-xs font-bold text-[#162850] hover:bg-white rounded-xl transition-colors"
-            >
-              <ShieldCheck className="w-4 h-4 text-[#B08A4A]" />
-              <span>Digital Membership Card</span>
-            </Link>
-
-            <Link
               href="/documents"
               onClick={onClose}
               className="flex items-center gap-3 p-3 text-xs font-bold text-[#162850] hover:bg-white rounded-xl transition-colors"
@@ -152,14 +143,19 @@ export function MemberDrawer({ isOpen, onClose, session }: MemberDrawerProps) {
               <span>Receipts & Documents</span>
             </Link>
 
-            <Link
-              href="/renew"
+            <a
+              href="https://www.sunshineeldercare.in/dashboard/renew"
+              target="_blank"
+              rel="noopener noreferrer"
               onClick={onClose}
-              className="flex items-center gap-3 p-3 text-xs font-bold text-[#162850] hover:bg-white rounded-xl transition-colors"
+              className="flex items-center justify-between p-3 text-xs font-bold text-[#162850] hover:bg-white rounded-xl transition-colors"
             >
-              <Settings className="w-4 h-4 text-[#B08A4A]" />
-              <span>Renew / Upgrade Care Plan</span>
-            </Link>
+              <div className="flex items-center gap-3">
+                <Settings className="w-4 h-4 text-[#B08A4A]" />
+                <span>Renew / Upgrade Care Plan</span>
+              </div>
+              <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+            </a>
 
             <Link
               href="/profile"

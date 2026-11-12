@@ -44,22 +44,23 @@ export async function POST(req: NextRequest) {
     const response = NextResponse.json(
       {
         success: true,
-        token: result.token,
         member: result.member,
         subscription: result.subscription,
       },
       { status: 200, headers: corsHeaders }
     );
 
-    // Set secure HttpOnly cookie for web PWA clients
+    // Set secure HttpOnly session cookie for web PWA clients
     if (result.token) {
-      response.cookies.set('sunshine_member_token', result.token, {
+      const cookieOptions = {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
+        sameSite: 'lax' as const,
         path: '/',
         maxAge: 30 * 24 * 60 * 60, // 30 days
-      });
+      };
+      response.cookies.set('sunshine_member_session', result.token, cookieOptions);
+      response.cookies.set('sunshine_member_token', result.token, cookieOptions);
     }
 
     return response;
@@ -71,3 +72,4 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+

@@ -81,7 +81,6 @@ export async function POST(req: NextRequest) {
           error:
             'Emergency Assistant is not active on your current membership tier. For immediate distress guidance, please call our 24/7 Care Helpline.',
           helpline: '+91 90888 82222',
-          nationalEmergency: '108',
           code: 'NON_QUALIFYING_MEMBERSHIP',
         },
         { status: 403, headers: corsHeaders }
@@ -131,7 +130,6 @@ export async function POST(req: NextRequest) {
         message:
           'Emergency SOS alert confirmed. Sunshine Care Desk has received your signal. An emergency coordinator is calling you immediately.',
         helpline: '+91 90888 82222',
-        nationalEmergency: '108',
         plan: qualifyingPlanName,
         timestamp: now.toISOString(),
       },

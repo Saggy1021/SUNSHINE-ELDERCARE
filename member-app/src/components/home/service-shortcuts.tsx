@@ -12,6 +12,8 @@ import {
   ChevronRight,
   Phone,
   X,
+  User,
+  ExternalLink,
 } from 'lucide-react';
 import { APP_CONFIG } from '@/lib/constants';
 
@@ -20,6 +22,7 @@ interface ShortcutItem {
   name: string;
   description: string;
   href?: string;
+  externalHref?: string;
   action?: () => void;
   icon: React.ComponentType<{ className?: string }>;
   badge?: string;
@@ -32,10 +35,10 @@ export function ServiceShortcuts() {
   const shortcuts: ShortcutItem[] = [
     {
       id: 'membership',
-      name: 'My Membership',
-      description: 'Digital card & tier perks',
-      href: '/card',
-      icon: ShieldCheck,
+      name: 'Member Profile',
+      description: 'Personal & emergency details',
+      href: '/profile',
+      icon: User,
       badge: 'Active',
     },
     {
@@ -61,9 +64,9 @@ export function ServiceShortcuts() {
     },
     {
       id: 'payments',
-      name: 'Payments & Renewal',
-      description: 'Care plan renewal & history',
-      href: '/renew',
+      name: 'Renew Membership',
+      description: 'Official website portal',
+      externalHref: 'https://www.sunshineeldercare.in/dashboard/renew',
       icon: CreditCard,
     },
     {
@@ -116,6 +119,20 @@ export function ServiceShortcuts() {
                 </div>
               </div>
             );
+
+            if (item.externalHref) {
+              return (
+                <a
+                  key={item.id}
+                  href={item.externalHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block"
+                >
+                  {content}
+                </a>
+              );
+            }
 
             if (item.href) {
               return (

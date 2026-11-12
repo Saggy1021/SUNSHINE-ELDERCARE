@@ -301,9 +301,11 @@ export class MobileAuthService {
       token = authHeader.substring(7).trim();
     }
 
-    // B. Check cookie
+    // B. Check cookie (sunshine_member_session or sunshine_member_token)
     if (!token && cookies) {
-      const cookieVal = cookies.get('sunshine_member_token')?.value;
+      const cookieVal =
+        cookies.get('sunshine_member_session')?.value ||
+        cookies.get('sunshine_member_token')?.value;
       if (cookieVal) token = cookieVal;
     }
 
@@ -356,3 +358,4 @@ export class MobileAuthService {
     return null;
   }
 }
+

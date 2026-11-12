@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, CreditCard, Activity, FileText, User } from 'lucide-react';
+import { LayoutDashboard, Activity, FileText, User } from 'lucide-react';
 
 interface TabItem {
   name: string;
@@ -13,7 +13,6 @@ interface TabItem {
 
 const TABS: TabItem[] = [
   { name: 'Home', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Card', href: '/card', icon: CreditCard },
   { name: 'Care', href: '/care', icon: Activity },
   { name: 'Docs', href: '/documents', icon: FileText },
   { name: 'Profile', href: '/profile', icon: User },

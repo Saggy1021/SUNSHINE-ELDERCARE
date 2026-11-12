@@ -264,8 +264,35 @@ async function runMemberAppAuthTests() {
   assert.strictEqual(tamperedResult, null, 'Tampered token signature must fail verification');
   console.log('  ✓ Test 8 passed: Tampered tokens rejected.');
 
+  // -------------------------------------------------------------------------
+  // TEST 9: Secure HttpOnly cookie verification (sunshine_member_session)
+  // -------------------------------------------------------------------------
+  console.log('Test 9: Secure HttpOnly cookie verification (sunshine_member_session)...');
+  const emptyHeaders = new Headers();
+  const mockCookies = {
+    get: (name: string) => {
+      if (name === 'sunshine_member_session') return { value: token };
+      return undefined;
+    },
+  };
+  const cookieVerified = await MobileAuthService.verifySession(emptyHeaders, mockCookies);
+  assert.ok(cookieVerified, 'Session must verify via sunshine_member_session cookie');
+  assert.strictEqual(cookieVerified.user.id, testUser.id);
+  assert.strictEqual(cookieVerified.memberId, 'SEC/S/1001/SAKR');
+  console.log('  ✓ Test 9 passed: HttpOnly cookie session authenticated without Authorization header.');
+
+  // -------------------------------------------------------------------------
+  // TEST 10: Cookie session invalidation when password changed (sessionVersion)
+  // -------------------------------------------------------------------------
+  console.log('Test 10: Cookie session invalidation on password change...');
+  testUser.sessionVersion = 3;
+  const cookieRevoked = await MobileAuthService.verifySession(emptyHeaders, mockCookies);
+  assert.strictEqual(cookieRevoked, null, 'Cookie session must immediately invalidate when sessionVersion changes');
+  testUser.sessionVersion = 1; // restore
+  console.log('  ✓ Test 10 passed: Cookie session invalidated immediately upon password change.');
+
   console.log('\n================================================================');
-  console.log('ALL MEMBER APP AUTHENTICATION TESTS PASSED (8/8)');
+  console.log('ALL MEMBER APP AUTHENTICATION TESTS PASSED (10/10)');
   console.log('================================================================\n');
 }
 
@@ -273,3 +300,4 @@ runMemberAppAuthTests().catch((e) => {
   console.error('Test execution failed:', e);
   process.exit(1);
 });
+

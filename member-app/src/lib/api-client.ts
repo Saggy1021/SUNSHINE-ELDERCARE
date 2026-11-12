@@ -1,6 +1,8 @@
 /**
  * Sunshine Eldercare Member App — Authoritative API Client
  * Connects directly to the existing Sunshine Eldercare backend.
+ * Uses secure HttpOnly session cookies for credential management.
+ * No bearer tokens or passwords are ever stored in client localStorage.
  */
 
 export interface ApiError {
@@ -10,42 +12,25 @@ export interface ApiError {
 }
 
 class ApiClient {
-  private getToken(): string | null {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem('sunshine_member_token');
-  }
-
-  private setToken(token: string | null) {
-    if (typeof window === 'undefined') return;
-    if (token) {
-      localStorage.setItem('sunshine_member_token', token);
-    } else {
-      localStorage.removeItem('sunshine_member_token');
-    }
-  }
-
   async request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const token = this.getToken();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string>),
     };
 
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
     const response = await fetch(endpoint, {
       ...options,
       headers,
-      credentials: 'include', // Support HttpOnly cookies alongside Bearer token
+      credentials: 'include', // Transmits secure HttpOnly cookie (sunshine_member_session)
     });
 
     if (response.status === 401 && !endpoint.includes('/auth/login')) {
-      // Invalidate session on 401
-      this.setToken(null);
-      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-        window.location.href = '/login?expired=1';
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('sunshine_member_display_profile');
+        localStorage.removeItem('sunshine_member_display_profile');
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login?expired=1';
+        }
       }
       throw new Error('Your session has expired. Please log in again.');
     }
@@ -63,20 +48,14 @@ class ApiClient {
   }
 
   async login(memberId: string, password: string) {
-    const res = await this.request<{
+    return this.request<{
       success: boolean;
-      token: string;
       member: any;
       subscription: any;
     }>('/api/mobile/auth/login', {
       method: 'POST',
       body: JSON.stringify({ memberId, password }),
     });
-
-    if (res.token) {
-      this.setToken(res.token);
-    }
-    return res;
   }
 
   async getMe() {
@@ -109,7 +88,6 @@ class ApiClient {
       success: boolean;
       currentMembership: any;
       history: any[];
-      availablePlans: any[];
     }>('/api/mobile/membership');
   }
 
@@ -123,7 +101,6 @@ class ApiClient {
       alertId: string;
       message: string;
       helpline: string;
-      nationalEmergency: string;
       plan: string;
       timestamp: string;
     }>('/api/mobile/sos', {
@@ -139,15 +116,11 @@ class ApiClient {
     try {
       await this.request('/api/mobile/auth/logout', { method: 'POST' });
     } finally {
-      this.setToken(null);
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('sunshine_member_app_session');
+        sessionStorage.removeItem('sunshine_member_display_profile');
+        localStorage.removeItem('sunshine_member_display_profile');
       }
     }
-  }
-
-  hasToken(): boolean {
-    return !!this.getToken();
   }
 }
 

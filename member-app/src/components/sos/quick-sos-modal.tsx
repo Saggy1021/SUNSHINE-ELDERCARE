@@ -161,23 +161,6 @@ export function QuickSosModal({ isOpen, onClose }: QuickSosModalProps) {
               </div>
               <span className="bg-[#162850] text-[#D8C08A] text-xs font-bold px-3 py-1 rounded-full uppercase">Call</span>
             </a>
-
-            {/* 3. National Emergency Ambulance: 108 */}
-            <a
-              href="tel:108"
-              className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-2xl active:scale-[0.98] transition-transform text-[#091329]"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-slate-700 text-white rounded-xl flex items-center justify-center">
-                  <Phone className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="font-bold text-xs text-slate-900">National Ambulance Service</p>
-                  <p className="text-xs text-slate-500 font-mono">Toll-free 108</p>
-                </div>
-              </div>
-              <span className="bg-slate-700 text-white text-xs font-bold px-3 py-1 rounded-full uppercase">Call</span>
-            </a>
           </div>
         )}
 

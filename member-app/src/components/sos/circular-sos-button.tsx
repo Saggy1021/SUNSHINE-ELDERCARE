@@ -44,7 +44,7 @@ export function CircularSosButton() {
             Tap for Immediate Support
           </p>
           <p className="text-xs text-slate-500 max-w-[260px] mt-0.5 leading-relaxed">
-            Directly connect to Sunshine Care Desk, family sponsor, or ambulance dispatch.
+            Directly connect to Sunshine Care Desk or designated family sponsor.
           </p>
         </div>
       </section>

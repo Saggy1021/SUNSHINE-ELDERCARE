@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { MobileAuthService } from '@/lib/services/mobile-auth';
 import { db } from '@/lib/db';
-import { carePricingService } from '@/lib/services/care-plans';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,7 +36,7 @@ export async function GET(req: NextRequest) {
 
     const { user } = session;
 
-    // 1. Fetch current subscription history
+    // 1. Fetch current subscription history directly from existing backend data
     const subscriptions = await db.subscription.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: 'desc' },
@@ -50,9 +49,6 @@ export async function GET(req: NextRequest) {
       (s) => s.status === 'ACTIVE' || s.status === 'EXPIRING'
     ) || subscriptions[0];
 
-    // 2. Fetch authoritative Care Plan Catalog (never trust client prices)
-    const catalog = await carePricingService.getCatalog();
-
     return NextResponse.json(
       {
         success: true,
@@ -61,6 +57,7 @@ export async function GET(req: NextRequest) {
               id: activeSub.id,
               planName: activeSub.carePlan?.name || 'Care Package',
               planSlug: activeSub.carePlan?.slug || 'care-package',
+              category: activeSub.variantType === 'COUPLE' ? 'Couple Care' : 'Single Elder Care',
               variantType: activeSub.variantType || 'SINGLE',
               durationMonths: activeSub.durationMonths || 1,
               status: activeSub.status,
@@ -77,7 +74,7 @@ export async function GET(req: NextRequest) {
           endDate: s.endDate ? s.endDate.toISOString() : null,
           createdAt: s.createdAt.toISOString(),
         })),
-        availablePlans: catalog,
+        renewalUrl: 'https://www.sunshineeldercare.in/dashboard/renew',
       },
       { status: 200, headers: corsHeaders }
     );

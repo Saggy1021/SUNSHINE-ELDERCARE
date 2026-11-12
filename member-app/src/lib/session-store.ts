@@ -2,38 +2,36 @@
 
 import { api } from './api-client';
 
-const SESSION_KEY = 'sunshine_member_app_session';
-const TOKEN_KEY = 'sunshine_member_token';
+const DISPLAY_PROFILE_KEY = 'sunshine_member_display_profile';
 
 export interface AppSession {
   isAuthenticated: boolean;
   memberId: string;
   name: string;
   email: string;
-  token?: string;
   profile?: any;
   subscription?: any;
 }
 
 export const SessionStore = {
-  getToken(): string | null {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem(TOKEN_KEY);
-  },
-
   getSession(): AppSession | null {
     if (typeof window === 'undefined') return null;
-    const token = localStorage.getItem(TOKEN_KEY);
-    const raw = localStorage.getItem(SESSION_KEY);
 
-    if (!token && !raw) {
-      return null;
-    }
+    // Check sessionStorage first, then localStorage as fallback for display profile
+    const raw = sessionStorage.getItem(DISPLAY_PROFILE_KEY) || localStorage.getItem(DISPLAY_PROFILE_KEY);
+    if (!raw) return null;
 
     try {
-      if (raw) {
-        const session = JSON.parse(raw);
-        return { ...session, isAuthenticated: !!token || session.isAuthenticated };
+      const data = JSON.parse(raw);
+      if (data && data.memberId) {
+        return {
+          isAuthenticated: true,
+          memberId: data.memberId,
+          name: data.name || 'Sunshine Member',
+          email: data.email || '',
+          profile: data.profile || null,
+          subscription: data.subscription || null,
+        };
       }
     } catch {
       return null;
@@ -44,10 +42,26 @@ export const SessionStore = {
 
   setSession(session: AppSession) {
     if (typeof window === 'undefined') return;
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-    if (session.token) {
-      localStorage.setItem(TOKEN_KEY, session.token);
-    }
+    // Store only non-sensitive display details (no tokens or passwords)
+    const sanitized = {
+      memberId: session.memberId,
+      name: session.name,
+      email: session.email,
+      profile: session.profile,
+      subscription: session.subscription,
+    };
+    const json = JSON.stringify(sanitized);
+    sessionStorage.setItem(DISPLAY_PROFILE_KEY, json);
+    localStorage.setItem(DISPLAY_PROFILE_KEY, json);
+  },
+
+  clearSession() {
+    if (typeof window === 'undefined') return;
+    sessionStorage.removeItem(DISPLAY_PROFILE_KEY);
+    localStorage.removeItem(DISPLAY_PROFILE_KEY);
+    // Also clean up any legacy keys
+    localStorage.removeItem('sunshine_member_token');
+    localStorage.removeItem('sunshine_member_app_session');
   },
 
   async login(identifier: string, password: string): Promise<{ success: boolean; error?: string }> {
@@ -59,7 +73,6 @@ export const SessionStore = {
           memberId: res.member.memberId,
           name: res.member.name,
           email: res.member.email,
-          token: res.token,
           profile: res.member,
           subscription: res.subscription,
         };
@@ -82,8 +95,7 @@ export const SessionStore = {
     } catch {
       // Ignore network errors during logout
     } finally {
-      localStorage.removeItem(SESSION_KEY);
-      localStorage.removeItem(TOKEN_KEY);
+      this.clearSession();
       window.location.href = '/login';
     }
   },

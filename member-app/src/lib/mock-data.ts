@@ -53,7 +53,7 @@ export const MOCK_ACTIVE_SUBSCRIPTION: Subscription = {
         services: [
           { id: 'srv_1', serviceName: 'Weekly Vital Health Monitoring', serviceNote: 'BP, Blood Sugar, SpO2 checks' },
           { id: 'srv_2', serviceName: 'Dedicated Care Manager', serviceNote: '24/7 telephonic care coordination' },
-          { id: 'srv_3', serviceName: 'Emergency SOS Hospital Escort', serviceNote: 'Priority ambulance assistance' },
+          { id: 'srv_3', serviceName: 'Emergency SOS Hospital Escort', serviceNote: 'Hospital escort and emergency guidance' },
           { id: 'srv_4', serviceName: 'Bi-monthly Doctor Home Visit', serviceNote: 'Comprehensive geriatric check-up' },
           { id: 'srv_5', serviceName: 'Prescription & Medicine Delivery', serviceNote: 'Doorstep monthly delivery' },
           { id: 'srv_6', serviceName: 'Accompanied Outings & Lab Visits', serviceNote: 'Caregiver companion support' },

@@ -5,11 +5,27 @@ import Link from 'next/link';
 import { CircularSosButton } from '@/components/sos/circular-sos-button';
 import { ServiceShortcuts } from '@/components/home/service-shortcuts';
 import { RaiseAnIssueSection } from '@/components/home/raise-an-issue-section';
-import { DigitalMembershipCard } from '@/components/membership-card/digital-membership-card';
 import { api } from '@/lib/api-client';
 import { SessionStore } from '@/lib/session-store';
-import { Clock, Phone, ShieldCheck, Sparkles, FileText, ChevronRight, AlertCircle, RefreshCw } from 'lucide-react';
+import {
+  Clock,
+  Phone,
+  ShieldCheck,
+  Sparkles,
+  FileText,
+  ChevronRight,
+  AlertCircle,
+  RefreshCw,
+  ExternalLink,
+  Calendar,
+  UserCheck,
+  CheckCircle2,
+  HeartHandshake,
+  Tag,
+} from 'lucide-react';
 import { usePwa } from '@/lib/pwa';
+
+const WEBSITE_RENEWAL_URL = 'https://www.sunshineeldercare.in/dashboard/renew';
 
 export default function DashboardPage() {
   const { isInstallable, triggerInstall } = usePwa();
@@ -58,6 +74,27 @@ export default function DashboardPage() {
   const notifications = data?.systemNotifications || [];
 
   const isActive = membership?.status === 'ACTIVE' || membership?.status === 'EXPIRING';
+  const category =
+    membership?.category ||
+    (membership?.variantType === 'COUPLE' ? 'Couple Care' : 'Single Elder Care');
+
+  const formattedStartDate = membership?.startDate
+    ? new Date(membership.startDate).toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      })
+    : 'Active / Activated on Sign-up';
+
+  const formattedEndDate = membership?.endDate
+    ? new Date(membership.endDate).toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      })
+    : 'Ongoing Coverage';
+
+  const services = membership?.services || [];
 
   return (
     <div className="p-4 space-y-6">
@@ -66,7 +103,7 @@ export default function DashboardPage() {
         <div className="bg-[#162850] text-white p-3.5 rounded-2xl flex items-center justify-between gap-3 shadow-md border border-[#D8C08A]/50 animate-in fade-in">
           <div>
             <p className="text-xs font-bold text-[#FAF9F5]">Install Sunshine Member App</p>
-            <p className="text-[10px] text-slate-300">Add to phone home screen for 1-tap card access</p>
+            <p className="text-[10px] text-slate-300">Add to phone home screen for fast 1-tap access</p>
           </div>
           <button
             onClick={triggerInstall}
@@ -126,76 +163,155 @@ export default function DashboardPage() {
       {/* 1. Large Circular SOS Emergency Button */}
       <CircularSosButton />
 
-      {/* 2. Interactive Digital Membership Card */}
-      <section className="space-y-2">
-        <div className="flex items-center justify-between px-1">
-          <h3 className="font-bold text-sm text-[#162850] uppercase tracking-wider">
-            Your Digital Membership Card
-          </h3>
-          <span className="text-xs text-slate-400">Tap to flip</span>
+      {/* 2. Authoritative Membership & Care Plan Information (Standard Clean Layout) */}
+      <section className="bg-white rounded-2xl border border-[#D8C08A]/50 shadow-xs overflow-hidden">
+        {/* Section Header */}
+        <div className="p-4 bg-gradient-to-r from-[#162850] to-[#091329] text-white flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-[#B08A4A] text-white">
+                {category}
+              </span>
+              <span className="text-xs text-slate-300">•</span>
+              <span className="text-xs font-semibold text-[#D8C08A]">
+                {membership?.status || 'ACTIVE'}
+              </span>
+            </div>
+            <h3 className="text-lg font-bold text-white mt-1">
+              {membership?.planName || 'Comprehensive Elder Care Package'}
+            </h3>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] uppercase text-slate-300 font-semibold tracking-wider">
+              Member ID
+            </p>
+            <p className="text-xs font-mono font-bold text-[#FAF9F5]">
+              {member?.memberId || 'SEC/MEMBER'}
+            </p>
+          </div>
         </div>
-        <DigitalMembershipCard
-          profile={member}
-          subscription={membership}
-          emergencyContact={member?.emergencyContact}
-        />
+
+        {/* Structured Member & Coverage Details */}
+        <div className="p-4 space-y-4">
+          <div className="grid grid-cols-2 gap-3 pb-3 border-b border-slate-100">
+            <div className="space-y-0.5">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                Member Name
+              </p>
+              <p className="text-xs font-bold text-[#162850]">
+                {member?.name || 'Sunshine Member'}
+              </p>
+            </div>
+            <div className="space-y-0.5">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                Care Category
+              </p>
+              <p className="text-xs font-bold text-[#162850]">
+                {category}
+              </p>
+            </div>
+            <div className="space-y-0.5">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                Start Date
+              </p>
+              <p className="text-xs font-bold text-[#162850] flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-[#B08A4A]" />
+                <span>{formattedStartDate}</span>
+              </p>
+            </div>
+            <div className="space-y-0.5">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                Expiry Date
+              </p>
+              <p className="text-xs font-bold text-[#162850] flex items-center gap-1">
+                <Clock className="w-3 h-3 text-[#B08A4A]" />
+                <span>{formattedEndDate}</span>
+              </p>
+            </div>
+          </div>
+
+          {/* Days remaining badge if expiring soon */}
+          {membership?.daysRemaining !== undefined && (
+            <div className="p-3 bg-[#FAF9F5] rounded-xl border border-[#D8C08A]/40 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold text-[#162850]">
+                  {membership.daysRemaining > 0
+                    ? `${membership.daysRemaining} Days of Active Coverage Remaining`
+                    : 'Coverage Renewal Due'}
+                </p>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  Continuous 24/7 care desk and emergency protocol coverage active
+                </p>
+              </div>
+              <span
+                className={`text-[10px] font-bold px-2 py-1 rounded-md ${
+                  membership.daysRemaining > 30
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'bg-amber-50 text-amber-800 border border-amber-200'
+                }`}
+              >
+                {membership.daysRemaining > 0 ? `${membership.daysRemaining}d` : 'Expired'}
+              </span>
+            </div>
+          )}
+
+          {/* Included Care Plan Services from Backend */}
+          <div className="space-y-2">
+            <p className="text-xs font-bold text-[#162850] uppercase tracking-wider flex items-center gap-1.5">
+              <HeartHandshake className="w-3.5 h-3.5 text-[#B08A4A]" />
+              <span>Included Services & Entitlements</span>
+            </p>
+            {services.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {services.map((svc: any, idx: number) => (
+                  <div
+                    key={idx}
+                    className="p-2.5 bg-slate-50/80 rounded-xl border border-slate-100 flex items-start gap-2"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-[#162850] truncate">
+                        {svc.serviceName}
+                      </p>
+                      {svc.serviceNote && (
+                        <p className="text-[10px] text-slate-500 line-clamp-1">
+                          {svc.serviceNote}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-3 bg-slate-50 rounded-xl text-[11px] text-slate-500">
+                Official care services and emergency coverage active on your profile.
+              </div>
+            )}
+          </div>
+
+          {/* Prominent Renew Membership Button */}
+          <div className="pt-2">
+            <a
+              href={WEBSITE_RENEWAL_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full p-3.5 bg-gradient-to-r from-[#B08A4A] to-[#8F6F3A] hover:from-[#9C793E] hover:to-[#7E6130] active:scale-[0.99] text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
+            >
+              <span>Renew Membership</span>
+              <ExternalLink className="w-4 h-4" />
+            </a>
+            <p className="text-[10px] text-slate-400 text-center mt-1.5">
+              Directs to official Sunshine Eldercare renewal and Razorpay payment portal
+            </p>
+          </div>
+        </div>
       </section>
 
       {/* 3. Service Shortcuts */}
       <ServiceShortcuts />
 
-      {/* 4. Active Membership Summary */}
-      <section className="bg-white p-4 rounded-[1.75rem] border border-[#D8C08A]/40 shadow-xs space-y-3">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-          <span className="text-xs font-bold text-[#162850] uppercase tracking-wider flex items-center gap-1.5">
-            <Clock className="w-4 h-4 text-[#B08A4A]" />
-            Active Care Package
-          </span>
-          <Link
-            href="/renew"
-            className="text-xs font-bold text-[#B08A4A] hover:underline flex items-center gap-1"
-          >
-            <span>Manage Plan</span>
-            <ChevronRight className="w-3 h-3" />
-          </Link>
-        </div>
-
-        <div>
-          <h4 className="font-bold text-base text-[#162850]">
-            {membership?.planName || 'Comprehensive Elder Care Package'}
-          </h4>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {membership?.category || 'Single Elder Care'} • Valid until{' '}
-            {membership?.endDate
-              ? new Date(membership.endDate).toLocaleDateString('en-IN', {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                })
-              : 'Ongoing'}
-          </p>
-        </div>
-
-        {membership?.daysRemaining !== undefined && (
-          <div className="p-3 bg-[#FAF9F5] rounded-xl border border-[#D8C08A]/30 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-bold text-[#162850]">
-                {membership.daysRemaining > 0 ? `${membership.daysRemaining} Days of Coverage Left` : 'Membership Expired'}
-              </p>
-              <p className="text-[10px] text-slate-500">24/7 Helpline & Rapid Response active</p>
-            </div>
-            <Link
-              href="/renew"
-              className="px-3 py-1.5 bg-[#B08A4A] text-white rounded-lg text-xs font-bold shrink-0 hover:bg-[#8F6F3A] transition-colors"
-            >
-              Renew
-            </Link>
-          </div>
-        )}
-      </section>
-
-      {/* 5. Recent Receipts from Database */}
-      <section className="bg-white p-4 rounded-[1.75rem] border border-[#D8C08A]/40 shadow-xs space-y-3">
+      {/* 4. Official Receipts & Documents from Backend */}
+      <section className="bg-white p-4 rounded-2xl border border-[#D8C08A]/40 shadow-xs space-y-3">
         <div className="flex items-center justify-between pb-2 border-b border-slate-100">
           <span className="text-xs font-bold text-[#162850] uppercase tracking-wider flex items-center gap-1.5">
             <FileText className="w-4 h-4 text-[#B08A4A]" />
@@ -246,7 +362,7 @@ export default function DashboardPage() {
         )}
       </section>
 
-      {/* 6. Raise an Issue / Complaint Section */}
+      {/* 5. Raise an Issue / Complaint Section */}
       <RaiseAnIssueSection />
 
       {/* Footer Branding */}

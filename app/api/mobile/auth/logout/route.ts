@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
   };
 
   const response = NextResponse.json({ success: true, message: 'Logged out successfully' }, { headers: corsHeaders });
+  response.cookies.delete('sunshine_member_session');
   response.cookies.delete('sunshine_member_token');
   return response;
 }
@@ -28,3 +29,4 @@ export async function OPTIONS(req: NextRequest) {
     },
   });
 }
+

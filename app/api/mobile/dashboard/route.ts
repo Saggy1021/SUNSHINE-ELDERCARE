@@ -145,7 +145,7 @@ export async function GET(req: NextRequest) {
           {
             id: 'notif_welcome',
             title: 'Welcome to Sunshine Member App',
-            message: `Hello ${memberName}! Your official digital membership card is active under Member ID: ${memberId}.`,
+            message: `Hello ${memberName}! Your official membership is active under Member ID: ${memberId}.`,
             date: new Date().toISOString(),
             read: false,
           },
