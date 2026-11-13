@@ -45,7 +45,11 @@ export interface MobileAuthResult {
 
 export class MobileAuthService {
   private static getSecret(): string {
-    return process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || 'sunshine-eldercare-secure-token-salt-key-2026';
+    const secret = process.env.AUTH_SECRET?.trim();
+    if (!secret) {
+      throw new Error('AUTH_SECRET environment variable is required for mobile authentication but is not configured.');
+    }
+    return secret;
   }
 
   /**

@@ -15,6 +15,7 @@ async function runMemberAppAuthTests() {
 
   // Disable rate limiting for isolated tests
   process.env.RATE_LIMIT_ENABLED = 'false';
+  process.env.AUTH_SECRET = 'test-secret-sunshine-member-app-2026';
   RateLimitService.checkLimit = async () => true as any;
 
   // In-memory data structures for testing
@@ -291,8 +292,59 @@ async function runMemberAppAuthTests() {
   testUser.sessionVersion = 1; // restore
   console.log('  ✓ Test 10 passed: Cookie session invalidated immediately upon password change.');
 
+  // -------------------------------------------------------------------------
+  // TEST 11: Secure failure when AUTH_SECRET is missing or empty
+  // -------------------------------------------------------------------------
+  console.log('Test 11: Secure failure when AUTH_SECRET is missing or empty...');
+  const originalSecret = process.env.AUTH_SECRET;
+  try {
+    delete process.env.AUTH_SECRET;
+    process.env.NEXTAUTH_SECRET = 'fallback-nextauth-secret'; // Must NOT fall back to NEXTAUTH_SECRET
+
+    assert.throws(
+      () => {
+        MobileAuthService.signToken({
+          sub: 'test',
+          memberId: 'SEC/S/TEST',
+          email: 'test@example.com',
+          name: 'Test',
+          role: 'MEMBER',
+          sessionVersion: 1,
+        });
+      },
+      /AUTH_SECRET environment variable is required/,
+      'signToken must throw when AUTH_SECRET is missing, without falling back to NEXTAUTH_SECRET'
+    );
+
+    // Empty/whitespace string must also throw
+    process.env.AUTH_SECRET = '   ';
+    assert.throws(
+      () => {
+        MobileAuthService.signToken({
+          sub: 'test',
+          memberId: 'SEC/S/TEST',
+          email: 'test@example.com',
+          name: 'Test',
+          role: 'MEMBER',
+          sessionVersion: 1,
+        });
+      },
+      /AUTH_SECRET environment variable is required/,
+      'signToken must throw when AUTH_SECRET is empty whitespace'
+    );
+
+    // verifyToken must fail securely returning null
+    const verifyNull = MobileAuthService.verifyToken(token);
+    assert.strictEqual(verifyNull, null, 'verifyToken must return null when AUTH_SECRET is invalid');
+
+    console.log('  ✓ Test 11 passed: Fails securely when AUTH_SECRET is missing/empty, zero fallback to NEXTAUTH_SECRET.');
+  } finally {
+    process.env.AUTH_SECRET = originalSecret;
+    delete process.env.NEXTAUTH_SECRET;
+  }
+
   console.log('\n================================================================');
-  console.log('ALL MEMBER APP AUTHENTICATION TESTS PASSED (10/10)');
+  console.log('ALL MEMBER APP AUTHENTICATION TESTS PASSED (11/11)');
   console.log('================================================================\n');
 }
 
