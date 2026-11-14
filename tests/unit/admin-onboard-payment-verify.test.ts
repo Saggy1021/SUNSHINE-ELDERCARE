@@ -130,7 +130,7 @@ function makeHarness(options: {
   return { events, writes, dependencies, committed: () => committed };
 }
 
-async function rejectsWith(promise: Promise<unknown>, message: string) {
+async function rejectsWith(promise: Promise<unknown>, message: RegExp) {
   await assert.rejects(promise, (error: any) => {
     assert.match(String(error?.message), message);
     return true;
