@@ -231,7 +231,7 @@ export async function adminVerifyPayment(
 
   // 2. Perform Transactional settlement with Canonical Lock Ordering:
   // Invoice (FOR UPDATE) -> Payment -> remaining settlement records
-  await database.$transaction(async (tx) => {
+  await database.$transaction(async (tx: any) => {
     // A. Shared Invoice Locking via SELECT ... FOR UPDATE
     let lockedInvoice: {
       id: string;
