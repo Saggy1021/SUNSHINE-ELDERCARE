@@ -1,5 +1,7 @@
 import { db } from '@/lib/db'
 import { DocumentSequenceService } from '@/lib/services/document-sequence'
+import { MemberIdentityService } from '@/lib/services/member-identity'
+import { calculateEndDate } from '@/lib/services/dates'
 import { notificationService } from '@/lib/services/notification'
 
 export interface PaymentCheckoutRequest {
@@ -193,7 +195,7 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
   const payment = await db.payment.findUnique({ 
     where: { id: paymentId },
     include: { 
-      invoice: true, 
+      invoice: { include: { lineItems: true } }, 
       renewalRequest: { include: { addOns: true, carePlan: true } },
       user: { include: { memberProfile: true } }
     }
@@ -201,9 +203,11 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
   
   if (!payment) throw new Error("Payment not found")
   if (payment.status === "VERIFIED") throw new Error("Payment is already verified")
-  if (!payment.invoice || !payment.renewalRequest) throw new Error("Incomplete payment references")
+  if (!payment.invoice) throw new Error("Incomplete payment references: invoice is missing")
 
   const { invoice, renewalRequest } = payment
+
+  let createdSubscriptionId: string | undefined;
 
   // 2. Perform Transactional settlement with Canonical Lock Ordering:
   // Invoice (FOR UPDATE) -> Payment -> remaining settlement records
@@ -219,6 +223,7 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
       customerAddress: string | null;
       customerPhone: string | null;
       issueDate: Date;
+      planId: string | null;
     } | null = null;
 
     if (typeof (tx as any).$queryRaw === 'function') {
@@ -232,7 +237,8 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
           "customerEmail",
           "customerAddress",
           "customerPhone",
-          "issueDate"
+          "issueDate",
+          "planId"
         FROM "Invoice"
         WHERE id = ${invoice.id}
         FOR UPDATE
@@ -255,6 +261,13 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
     if (lockedInvoice.paymentStatus === 'PAID') {
       throw new Error("Invoice is already paid");
     }
+
+    // Ensure member identity (e.g. SEC/MEM/...) is generated and assigned
+    await MemberIdentityService.ensureMemberIdForUser(
+      payment.userId,
+      invoice.lineItems?.[0]?.variantType || renewalRequest?.variantType || 'SINGLE',
+      tx
+    );
 
     // B. Mark Payment Verified (Atomic concurrency check on Payment row)
     const updateResult = await tx.payment.updateMany({
@@ -298,7 +311,17 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
       }
     });
 
-    // D. Create Receipt
+    // D. Determine relatedPlanName for receipt
+    let relatedPlanName = "Membership Plan";
+    if (renewalRequest?.carePlan?.name) {
+      relatedPlanName = renewalRequest.carePlan.name;
+    } else if (invoice.lineItems?.[0]?.planName) {
+      relatedPlanName = invoice.lineItems[0].planName;
+    } else if (lockedInvoice.planId) {
+      relatedPlanName = lockedInvoice.planId;
+    }
+
+    // Create Receipt
     const receiptNumber = await DocumentSequenceService.generateReceiptNumber(now, tx);
     await tx.receipt.create({
       data: {
@@ -314,51 +337,105 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
         paymentMethod: payment.paymentMethod,
         paymentReference: payment.reference,
         paymentDate: now,
-        relatedPlanName: renewalRequest.carePlan?.name || "Membership Plan"
+        relatedPlanName
       }
     });
 
     // E. Handle Subscription Lifecycle Transition
-    const isFuture = renewalRequest.requestedStartDate > now;
-    
-    // We create a new Subscription record to cleanly separate historical from new memberships
-    const newSubscription = await tx.subscription.create({
-      data: {
-        userId: renewalRequest.userId,
-        carePlanId: renewalRequest.carePlanId,
-        variantType: renewalRequest.variantType,
-        durationMonths: renewalRequest.durationMonths,
-        startDate: renewalRequest.requestedStartDate,
-        endDate: renewalRequest.calculatedEndDate,
-        status: isFuture ? "SCHEDULED" : "ACTIVE",
-      }
-    });
-
-    if (renewalRequest.addOns.length > 0) {
-      await tx.subscriptionAddOn.createMany({
-        data: renewalRequest.addOns.map((addon: any) => ({
-          subscriptionId: newSubscription.id,
-          addOnId: addon.addOnId
-        }))
+    if (renewalRequest) {
+      // Flow 1: Renewal Request
+      const isFuture = renewalRequest.requestedStartDate > now;
+      
+      const newSubscription = await tx.subscription.create({
+        data: {
+          userId: renewalRequest.userId,
+          carePlanId: renewalRequest.carePlanId,
+          variantType: renewalRequest.variantType,
+          durationMonths: renewalRequest.durationMonths,
+          startDate: renewalRequest.requestedStartDate,
+          endDate: renewalRequest.calculatedEndDate,
+          status: isFuture ? "SCHEDULED" : "ACTIVE",
+        }
       });
-    }
+      createdSubscriptionId = newSubscription.id;
 
-    // E2. Expire old subscription to prevent overlapping active memberships
-    if (renewalRequest.currentSubscriptionId && !isFuture) {
-      await tx.subscription.update({
-        where: { id: renewalRequest.currentSubscriptionId },
+      if (renewalRequest.addOns.length > 0) {
+        await tx.subscriptionAddOn.createMany({
+          data: renewalRequest.addOns.map((addon: any) => ({
+            subscriptionId: newSubscription.id,
+            addOnId: addon.addOnId
+          }))
+        });
+      }
+
+      // Expire old subscription to prevent overlapping active memberships
+      if (renewalRequest.currentSubscriptionId && !isFuture) {
+        await tx.subscription.update({
+          where: { id: renewalRequest.currentSubscriptionId },
+          data: {
+            status: "EXPIRED",
+            endDate: now
+          }
+        });
+      }
+
+      // Finalize Renewal Request
+      await tx.renewalRequest.update({
+        where: { id: renewalRequest.id },
+        data: { status: "COMPLETED" } 
+      });
+    } else if (lockedInvoice.planId || invoice.lineItems?.[0]) {
+      // Flow 2: Admin Onboarding / Direct Plan Purchase (No Renewal Request)
+      const lineItem = invoice.lineItems?.[0];
+      const durationMonths = lineItem?.durationMonths || 1;
+      const purchaseVariantType = lineItem?.variantType || "SINGLE";
+      const calculatedEndDate = calculateEndDate(now, durationMonths);
+      const planReference = lockedInvoice.planId || lineItem?.planName || "";
+
+      // Lookup CarePlan by ID or slug
+      const carePlan = await tx.carePlan.findFirst({
+        where: {
+          OR: [
+            { id: planReference },
+            { slug: planReference }
+          ]
+        }
+      });
+
+      let legacyPlanId: string | null = null;
+      if (!carePlan && planReference) {
+        const legacyPlan = await tx.plan.findUnique({
+          where: { id: planReference }
+        });
+        legacyPlanId = legacyPlan?.id || null;
+      }
+
+      // Expire prior active subscription to prevent overlapping active memberships
+      await tx.subscription.updateMany({
+        where: {
+          userId: payment.userId,
+          status: "ACTIVE"
+        },
         data: {
           status: "EXPIRED",
           endDate: now
         }
       });
-    }
 
-    // F. Finalize Renewal Request
-    await tx.renewalRequest.update({
-      where: { id: renewalRequest.id },
-      data: { status: "COMPLETED" } 
-    });
+      const newSubscription = await tx.subscription.create({
+        data: {
+          userId: payment.userId,
+          carePlanId: carePlan?.id || null,
+          planId: legacyPlanId,
+          variantType: purchaseVariantType,
+          durationMonths,
+          startDate: now,
+          endDate: calculatedEndDate,
+          status: "ACTIVE"
+        }
+      });
+      createdSubscriptionId = newSubscription.id;
+    }
 
     // G. Create Audit Log
     await tx.auditLog.create({
@@ -367,15 +444,19 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
         action: "PAYMENT_VERIFIED",
         entityType: "Payment",
         entityId: paymentId,
-        metadata: { invoiceId: lockedInvoice.id, subscriptionId: newSubscription.id }
+        metadata: {
+          invoiceId: lockedInvoice.id,
+          subscriptionId: createdSubscriptionId,
+          actor: "ADMIN",
+          settlementRole: "MANUAL_VERIFICATION"
+        }
       }
     });
   })
 
   // Fire notifications AFTER successful transaction — never inside $transaction
-  // Re-fetch the created subscription for notification context
   const newSub = await db.subscription.findFirst({
-    where: { userId: renewalRequest.userId },
+    where: { userId: payment.userId },
     include: { addOns: { include: { addOn: true } } },
     orderBy: { createdAt: 'desc' }
   })
