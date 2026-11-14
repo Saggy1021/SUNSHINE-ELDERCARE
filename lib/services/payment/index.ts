@@ -190,9 +190,29 @@ export async function submitOfflinePayment(
   return payment
 }
 
-export async function adminVerifyPayment(paymentId: string, adminUserId: string) {
+export interface AdminVerifyPaymentTestDependencies {
+  dbClient?: any;
+  documentSequences?: typeof DocumentSequenceService;
+  memberIdentity?: typeof MemberIdentityService;
+  notifications?: typeof notificationService;
+  calculateEndDateFn?: typeof calculateEndDate;
+  now?: () => Date;
+}
+
+export async function adminVerifyPayment(
+  paymentId: string,
+  adminUserId: string,
+  dependencies: AdminVerifyPaymentTestDependencies = {}
+) {
+  // Dependency overrides keep production defaults intact while allowing the actual
+  // settlement orchestration to be exercised with an isolated transactional client.
+  const database = dependencies.dbClient || db;
+  const documentSequences = dependencies.documentSequences || DocumentSequenceService;
+  const memberIdentity = dependencies.memberIdentity || MemberIdentityService;
+  const notifications = dependencies.notifications || notificationService;
+  const getNow = dependencies.now || (() => new Date());
   // 1. Fetch payment and relations
-  const payment = await db.payment.findUnique({ 
+  const payment = await database.payment.findUnique({ 
     where: { id: paymentId },
     include: { 
       invoice: { include: { lineItems: true } }, 
@@ -211,7 +231,7 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
 
   // 2. Perform Transactional settlement with Canonical Lock Ordering:
   // Invoice (FOR UPDATE) -> Payment -> remaining settlement records
-  await db.$transaction(async (tx) => {
+  await database.$transaction(async (tx) => {
     // A. Shared Invoice Locking via SELECT ... FOR UPDATE
     let lockedInvoice: {
       id: string;
@@ -263,7 +283,7 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
     }
 
     // Ensure member identity (e.g. SEC/MEM/...) is generated and assigned
-    await MemberIdentityService.ensureMemberIdForUser(
+    await memberIdentity.ensureMemberIdForUser(
       payment.userId,
       invoice.lineItems?.[0]?.variantType || renewalRequest?.variantType || 'SINGLE',
       tx
@@ -284,11 +304,11 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
     }
 
     // C. Finalize Invoice (Snapshot and Numbering)
-    const now = new Date();
+    const now = getNow();
     
     let officialInvoiceNumber = lockedInvoice.invoiceNumber;
     if (!officialInvoiceNumber) {
-      officialInvoiceNumber = await DocumentSequenceService.generateInvoiceNumber(now, tx);
+      officialInvoiceNumber = await documentSequences.generateInvoiceNumber(now, tx);
     }
 
     const customerName = lockedInvoice.customerName || payment.user?.name || "Member";
@@ -322,7 +342,7 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
     }
 
     // Create Receipt
-    const receiptNumber = await DocumentSequenceService.generateReceiptNumber(now, tx);
+    const receiptNumber = await documentSequences.generateReceiptNumber(now, tx);
     await tx.receipt.create({
       data: {
         receiptNumber,
@@ -389,7 +409,7 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
       const lineItem = invoice.lineItems?.[0];
       const durationMonths = lineItem?.durationMonths || 1;
       const purchaseVariantType = lineItem?.variantType || "SINGLE";
-      const calculatedEndDate = calculateEndDate(now, durationMonths);
+      const calculatedEndDate = dependencies.calculateEndDateFn ? dependencies.calculateEndDateFn(now, durationMonths) : calculateEndDate(now, durationMonths);
       const planReference = lockedInvoice.planId || lineItem?.planName || "";
 
       // Lookup CarePlan by ID or slug
@@ -472,13 +492,13 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
   // Notify about the exact subscription created by this settlement, not merely the
   // most recently created subscription for the user (which may belong to another flow).
   if (createdSubscriptionId) {
-    const newSub = await db.subscription.findUnique({
+    const newSub = await database.subscription.findUnique({
       where: { id: createdSubscriptionId },
       include: { addOns: { include: { addOn: true } } },
     });
 
     if (newSub) {
-      notificationService.onPaymentVerified(payment, {
+      notifications.onPaymentVerified(payment, {
       status: newSub.status,
       startDate: newSub.startDate,
       endDate: newSub.endDate,
