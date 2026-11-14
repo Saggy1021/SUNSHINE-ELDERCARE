@@ -410,6 +410,15 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
         legacyPlanId = legacyPlan?.id || null;
       }
 
+      // Never settle a payment unless the purchased plan resolves to a real catalog record.
+      if (!carePlan && !legacyPlanId) {
+        throw new Error("Cannot activate membership: the invoice does not reference a valid care plan.");
+      }
+
+      if (!Number.isInteger(durationMonths) || durationMonths < 1) {
+        throw new Error("Cannot activate membership: the invoice contains an invalid subscription duration.");
+      }
+
       // Expire prior active subscription to prevent overlapping active memberships
       await tx.subscription.updateMany({
         where: {
@@ -437,6 +446,12 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
       createdSubscriptionId = newSubscription.id;
     }
 
+    // A verified payment must always produce exactly one subscription lifecycle transition.
+    // Throwing here rolls back payment, invoice, receipt, and identity changes together.
+    if (!createdSubscriptionId) {
+      throw new Error("Payment cannot be verified without creating a membership subscription.");
+    }
+
     // G. Create Audit Log
     await tx.auditLog.create({
       data: {
@@ -454,23 +469,25 @@ export async function adminVerifyPayment(paymentId: string, adminUserId: string)
     });
   })
 
-  // Fire notifications AFTER successful transaction — never inside $transaction
-  const newSub = await db.subscription.findFirst({
-    where: { userId: payment.userId },
-    include: { addOns: { include: { addOn: true } } },
-    orderBy: { createdAt: 'desc' }
-  })
+  // Notify about the exact subscription created by this settlement, not merely the
+  // most recently created subscription for the user (which may belong to another flow).
+  if (createdSubscriptionId) {
+    const newSub = await db.subscription.findUnique({
+      where: { id: createdSubscriptionId },
+      include: { addOns: { include: { addOn: true } } },
+    });
 
-  if (newSub) {
-    notificationService.onPaymentVerified(payment, {
+    if (newSub) {
+      notificationService.onPaymentVerified(payment, {
       status: newSub.status,
       startDate: newSub.startDate,
       endDate: newSub.endDate,
       carePlanId: newSub.carePlanId,
       variantType: newSub.variantType,
       durationMonths: newSub.durationMonths,
-      addOns: newSub.addOns,
-    }).catch(() => {})
+        addOns: newSub.addOns,
+      }).catch(() => {});
+    }
   }
 }
 
