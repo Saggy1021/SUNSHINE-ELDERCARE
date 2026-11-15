@@ -141,7 +141,7 @@ export default function TestimonialsClient({ initialTestimonials, canManage }: {
                   </td>
                   <td className="px-5 py-3.5 text-xs text-slate-600 max-w-sm truncate italic">“{t.quote}”</td>
                   <td className="px-5 py-3.5 whitespace-nowrap text-xs text-[#B08A4A] font-semibold">
-                    {'★'.repeat(t.rating || 5)}
+                    {'★'.repeat(Math.max(0, Math.min(5, Math.floor(t.rating ?? 5))))}
                   </td>
                   <td className="px-5 py-3.5 whitespace-nowrap text-xs">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
