@@ -112,7 +112,9 @@ export const documentService = {
     } catch (error) {
       // Rollback: DB insert failed, clean up the orphaned object
       await storageService.delete(key).catch(e => {
-        console.error(`Failed to cleanup orphaned storage object: ${key}`, e);
+        console.error("Failed to cleanup orphaned storage object after database insert error", {
+          error: e instanceof Error ? e.message : "Unknown error",
+        });
       });
       throw error;
     }

@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
 
     // Exclude sensitive fields if not self and no sensitive view
     if (targetUserId !== session.user.id && !hasSensitiveView) {
-        const { idProofNumber, ...safeProfile } = profile;
+        const { idProofNumber, spouseIdProofNumber, ...safeProfile } = profile;
         return NextResponse.json(safeProfile);
     }
 

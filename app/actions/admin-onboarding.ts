@@ -1,215 +1,39 @@
 'use server'
 
-import { db } from '@/lib/db'
 import { auth } from '@/auth'
-import { memberRegistrationSchema } from '@/lib/validations/member'
-import { ROLES } from '@/lib/auth/roles'
-import bcrypt from 'bcryptjs'
-import { carePricingService } from '@/lib/services/care-plans'
-import { taxService } from '@/lib/services/tax'
-import { invoiceService } from '@/lib/services/invoice'
-import { Prisma } from '@prisma/client'
 import { redirect } from 'next/navigation'
-
 import { AuthorizationService } from '@/lib/services/authorization'
 import { RateLimitService } from '@/lib/services/rate-limit'
+import { executeAdminOnboardMember } from '@/lib/services/admin-onboarding'
 
-async function requirePermission(permission: string) {
+/**
+ * Public Next.js Server Action for Admin Member Onboarding.
+ *
+ * Security Contract:
+ * 1. Takes ONLY formData from the browser/client.
+ * 2. Strictly obtains the authenticated session server-side from cookies/JWT via auth().
+ * 3. Enforces rate limiting on administrative actions.
+ * 4. Enforces MEMBER_MANAGE permission check on the authenticated session user.
+ * 5. If custom pricing is requested, independently enforces FINANCIAL_OVERRIDE permission.
+ * 6. Never accepts arbitrary auth context, client-supplied user IDs, database clients, or mocks.
+ */
+export async function adminOnboardMember(formData: FormData) {
   const session = await auth()
   if (!session?.user?.id) {
     redirect('/login')
   }
-  
-  await RateLimitService.checkLimit('ADMINISTRATIVE');
-  await AuthorizationService.require(session.user.id, permission)
-  
-  return session.user.id
-}
 
-export async function adminOnboardMember(formData: FormData) {
-  const adminId = await requirePermission('MEMBER_MANAGE')
+  await RateLimitService.checkLimit('ADMINISTRATIVE')
+  await AuthorizationService.require(session.user.id, 'MEMBER_MANAGE')
 
-  // 1. Extract and validate Member Data
-  const memberDataStr = formData.get('memberData') as string
-  if (!memberDataStr) return { success: false, error: 'Missing member data' }
-  const memberData = JSON.parse(memberDataStr)
-
-  const validationResult = memberRegistrationSchema.safeParse(memberData)
-  if (!validationResult.success) {
-    return { success: false, error: validationResult.error.issues[0].message }
-  }
-  const validatedData = validationResult.data
-  const normalizedEmail = validatedData.email.toLowerCase()
-
-  const existingUser = await db.user.findUnique({ where: { email: normalizedEmail } })
-  if (existingUser) return { success: false, error: 'User with this email already exists' }
-
-  // 2. Extract Plan/Pricing Data
-  const planId = formData.get('planId') as string
-  const addOnIdsStr = formData.get('addOnIds') as string
-  const addOnIds = addOnIdsStr ? JSON.parse(addOnIdsStr) : []
   const customPriceStr = formData.get('customPrice') as string
-  const customPriceReason = formData.get('customPriceReason') as string
-  const isCustomPrice = !!customPriceStr
-
-  if (!planId) return { success: false, error: 'Membership plan must be selected' }
-
-  // Permissions for Custom Pricing
-  if (isCustomPrice) {
-    await requirePermission('FINANCIAL_OVERRIDE')
-    if (!customPriceReason) return { success: false, error: 'Reason required for custom pricing' }
-  }
-
-  // 3. Extract Payment Details
-  const paymentMethod = formData.get('paymentMethod') as string
-  const paymentReference = formData.get('paymentReference') as string
-  if (!paymentMethod) return { success: false, error: 'Payment method is required' }
-
-  // Document Upload (if OFFLINE)
-  let documentUrl = null
-  const documentFile = formData.get('paymentDocument') as File
-  // In a real app, we'd use storage adapter to save it securely, e.g., to R2
-  // if (documentFile && documentFile.size > 0) { ... }
-
-  // 4. Calculate Authoritative Prices
-  const [planSlug, variantType, monthsStr] = planId.split('|')
-  const months = parseInt(monthsStr, 10)
-
-  let carePlanResult
-  try {
-    carePlanResult = await carePricingService.lookupPrice({
-      planSlug,
-      variantType: variantType as 'SINGLE' | 'COUPLE',
-      months
-    })
-  } catch (error) {
-    return { success: false, error: 'The selected plan configuration is not available' }
-  }
-
-  // 5. Execute Atomic Transaction
-  const passwordHash = await bcrypt.hash(validatedData.password, 10)
-  
-  try {
-    const result = await db.$transaction(async (tx) => {
-      // Create User
-      const newUser = await tx.user.create({
-        data: {
-          name: `${validatedData.firstName} ${validatedData.lastName}`,
-          email: normalizedEmail,
-          passwordHash,
-          role: ROLES.MEMBER,
-          emailVerified: new Date(),
-        }
-      })
-
-      // Create Member Profile
-      const profile = await tx.memberProfile.create({
-        data: {
-          userId: newUser.id,
-          firstName: validatedData.firstName,
-          lastName: validatedData.lastName,
-          idProofType: validatedData.idProofType || null,
-          idProofNumber: validatedData.idProofNumber || null,
-          dateOfBirth: new Date(validatedData.dateOfBirth),
-          gender: validatedData.gender,
-          serviceAddress: validatedData.serviceAddress,
-          nearestLandmark: validatedData.nearestLandmark || null,
-          mobileNumber: validatedData.mobileNumber,
-          alternateNumber: validatedData.alternateNumber || null,
-          email: normalizedEmail,
-        }
-      })
-      
-      // Emergency Contact
-      await tx.emergencyContact.create({
-        data: { userId: newUser.id, fullName: validatedData.emergencyContactName, relationship: validatedData.emergencyContactRelationship, phone: validatedData.emergencyContactMobile, alternatePhone: validatedData.emergencyContactOther || null, email: validatedData.emergencyContactEmail || null }
-      })
-
-      // Sponsor
-      await tx.sponsor.create({
-        data: { memberProfileId: profile.id, fullName: validatedData.sponsorName, relationship: validatedData.sponsorRelationship, mobileNumber: validatedData.sponsorMobile, alternateNumber: validatedData.sponsorOther || null, email: validatedData.sponsorEmail || null }
-      })
-
-      return { userId: newUser.id }
-    })
-
-    // Create Invoice (Immutable)
-    let invoice
-    let taxResultTotal = 0
-    if (isCustomPrice) {
-      const customAmt = parseFloat(customPriceStr)
-      if (isNaN(customAmt) || customAmt < 0) throw new Error('Invalid custom price')
-
-      const customPricingResult = {
-        basePrice: customAmt,
-        addOnsTotal: 0,
-        discount: 0,
-        subtotal: customAmt,
-        currency: 'INR',
-        lineItems: [{
-          description: `Custom Pricing: ${carePlanResult.planName} - ${carePlanResult.variantType}`,
-          quantity: 1,
-          unitPrice: customAmt,
-          total: customAmt,
-          type: 'PLAN' as const,
-          referenceId: planSlug,
-          taxClassification: 'CARE_PLAN_GST'
-        }]
-      }
-      const customTaxResult = await taxService.calculateTax(customPricingResult)
-      taxResultTotal = customTaxResult.total
-
-      invoice = await invoiceService.createInvoice(
-        result.userId,
-        customPricingResult,
-        customTaxResult,
-        planSlug
-      )
-    } else {
-      const carePlanTaxResult = await taxService.calculateCarePlanTax(carePlanResult)
-      taxResultTotal = carePlanTaxResult.total
-
-      invoice = await invoiceService.createCarePlanInvoice(
-        result.userId,
-        carePlanResult,
-        carePlanTaxResult
-      )
+  if (customPriceStr) {
+    const customPriceReason = formData.get('customPriceReason') as string
+    if (!customPriceReason) {
+      return { success: false, error: 'Reason required for custom pricing' }
     }
-
-    // Create pending payment for OFFLINE
-    if (paymentMethod === 'OFFLINE') {
-      await db.payment.create({
-        data: {
-          userId: result.userId,
-          invoiceId: invoice.id,
-          amount: new Prisma.Decimal(taxResultTotal),
-          currency: 'INR',
-          paymentMethod: 'OFFLINE',
-          status: 'VERIFICATION_PENDING',
-          reference: paymentReference,
-          notes: documentUrl ? `Document uploaded: ${documentUrl}` : (isCustomPrice ? `Custom Price Reason: ${customPriceReason}` : undefined),
-        }
-      })
-    }
-
-    // Audit Event
-    await db.auditLog.create({
-      data: {
-        action: 'MEMBER_ONBOARDED',
-        entityId: result.userId,
-        entityType: 'USER',
-        actorUserId: adminId,
-        metadata: {
-          planId,
-          isCustomPrice,
-          paymentMethod,
-          customPriceReason
-        }
-      }
-    })
-
-    return { success: true, userId: result.userId, invoiceId: invoice.id }
-  } catch (error: any) {
-    return { success: false, error: error.message || 'Onboarding failed' }
+    await AuthorizationService.require(session.user.id, 'FINANCIAL_OVERRIDE')
   }
+
+  return executeAdminOnboardMember(formData, session.user.id)
 }
