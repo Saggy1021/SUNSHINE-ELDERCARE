@@ -10,16 +10,44 @@ export const memberRegistrationSchema = z.object({
   lastName: z.string().min(1, "Surname / Last Name is required"),
   idProofType: z.enum(["Voter ID", "Passport", "PAN", "Driving Licence", "Other"], {
     message: "Invalid ID Proof Type"
-  }).optional(),
-  idProofNumber: z.string().min(1, "ID Proof Number is required").optional(),
+  }).optional().or(z.literal('')),
+  idProofNumber: z.string().min(1, "ID Proof Number is required").optional().or(z.literal('')),
   dateOfBirth: z.string().min(1, "Date of Birth is required"),
   gender: z.enum(["Male", "Female", "Other"], {
     error: "Please select a valid gender"
   }),
   serviceAddress: z.string().min(1, "Service Address is required"),
-  nearestLandmark: z.string().optional(),
+  nearestLandmark: z.string().optional().or(z.literal('')),
   mobileNumber: z.string().min(1, "Primary mobile number is required"),
-  alternateNumber: z.string().optional(),
+  alternateNumber: z.string().optional().or(z.literal('')),
+
+  // SPOUSE / SECOND MEMBER DETAILS (Optional for Couple memberships)
+  spouseFirstName: z.string().optional().or(z.literal('')),
+  spouseLastName: z.string().optional().or(z.literal('')),
+  spouseDateOfBirth: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .refine(
+      (val) => {
+        if (!val) return true;
+        const d = new Date(val);
+        if (isNaN(d.getTime())) return false;
+        const now = new Date();
+        if (d > now) return false;
+        if (d.getFullYear() < 1900) return false;
+        return true;
+      },
+      {
+        message: "Spouse Date of Birth must be a valid past date",
+      }
+    ),
+  spouseGender: z.enum(["Male", "Female", "Other"]).optional().or(z.literal('')),
+  spouseMobileNumber: z.string().optional().or(z.literal('')),
+  spouseIdProofType: z.enum(["Voter ID", "Passport", "PAN", "Driving Licence", "Other"], {
+    message: "Invalid Spouse ID Proof Type"
+  }).optional().or(z.literal('')),
+  spouseIdProofNumber: z.string().optional().or(z.literal('')),
   
   // SECTION B: EMERGENCY CONTACT
   emergencyContactName: z.string().min(1, "Emergency Contact Name is required"),

@@ -39,17 +39,22 @@ export function AdminMemberForm() {
         </div>
       )}
 
-      {/* Account Info */}
+      {/* Member Portal Login Credentials */}
       <div className="space-y-4">
-        <h3 className="font-serif text-xl border-b border-border pb-2">Account Login</h3>
+        <div className="border-b border-border pb-2">
+          <h3 className="font-serif text-xl">Member Portal Login Credentials</h3>
+          <p className="text-xs text-slate-500 mt-1">
+            Create the login credentials the member will use to access their Sunshine Eldercare Member Portal. These are not administrator credentials.
+          </p>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Email Address *</label>
-            <input name="email" type="email" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Member Email Address *</label>
+            <input name="email" type="email" required placeholder="e.g. member@example.com" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
           </div>
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Password *</label>
-            <input name="password" type="password" required minLength={8} className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Initial Password *</label>
+            <input name="password" type="password" required minLength={8} placeholder="Minimum 8 characters" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
           </div>
         </div>
       </div>

@@ -57,8 +57,95 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
                 <p className="text-sm font-medium text-slate-500">Joined</p>
                 <p className="font-semibold text-slate-900">{member.createdAt.toLocaleDateString('en-GB')}</p>
               </div>
+              {profile?.idProofType && (
+                <div>
+                  <p className="text-sm font-medium text-slate-500">ID Proof Type</p>
+                  <p className="font-semibold text-slate-900">{profile.idProofType}</p>
+                </div>
+              )}
+              {profile?.idProofType && (
+                <div>
+                  <p className="text-sm font-medium text-slate-500">ID Proof Number</p>
+                  <p className="font-semibold text-slate-900">
+                    {profile.idProofNumber || <span className="text-slate-400 font-normal italic">Restricted / Masked</span>}
+                  </p>
+                </div>
+              )}
+              {profile?.idProofDocument && (
+                <div>
+                  <p className="text-sm font-medium text-slate-500">ID Document</p>
+                  <a
+                    href={`/api/documents/download?docId=${profile.idProofDocument.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-600 hover:underline flex items-center gap-1 mt-1 font-medium"
+                  >
+                    <FileText className="h-3.5 w-3.5" /> Download ID ({profile.idProofDocument.displayName})
+                  </a>
+                </div>
+              )}
             </div>
           </div>
+
+          {/* Spouse / Second Member */}
+          {(profile?.spouseFirstName || profile?.spouseLastName || profile?.spouseMobileNumber) && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+              <h2 className="text-lg font-semibold text-slate-900 mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                <UserSquare2 className="h-5 w-5 text-amber-600" /> Spouse / Second Member
+              </h2>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm font-medium text-slate-500">Name</p>
+                  <p className="font-semibold text-slate-900">{profile.spouseFirstName || ''} {profile.spouseLastName || ''}</p>
+                </div>
+                {profile.spouseDateOfBirth && (
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">Date of Birth</p>
+                    <p className="font-semibold text-slate-900">{new Date(profile.spouseDateOfBirth).toLocaleDateString('en-GB')}</p>
+                  </div>
+                )}
+                {profile.spouseGender && (
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">Gender</p>
+                    <p className="font-semibold text-slate-900">{profile.spouseGender}</p>
+                  </div>
+                )}
+                {profile.spouseMobileNumber && (
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">Mobile Number</p>
+                    <p className="font-semibold text-slate-900">{profile.spouseMobileNumber}</p>
+                  </div>
+                )}
+                {profile.spouseIdProofType && (
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">ID Proof Type</p>
+                    <p className="font-semibold text-slate-900">{profile.spouseIdProofType}</p>
+                  </div>
+                )}
+                {profile.spouseIdProofType && (
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">ID Proof Number</p>
+                    <p className="font-semibold text-slate-900">
+                      {profile.spouseIdProofNumber || <span className="text-slate-400 font-normal italic">Restricted / Masked</span>}
+                    </p>
+                  </div>
+                )}
+                {profile.spouseIdProofDocument && (
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">Spouse ID Document</p>
+                    <a
+                      href={`/api/documents/download?docId=${profile.spouseIdProofDocument.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:underline flex items-center gap-1 mt-1 font-medium"
+                    >
+                      <FileText className="h-3.5 w-3.5" /> Download ID ({profile.spouseIdProofDocument.displayName})
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Contact */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">

@@ -562,6 +562,17 @@ model MemberProfile {
   idProofDocumentId String?         @unique
   idProofDocument   MemberDocument? @relation("MemberIdProof", fields: [idProofDocumentId], references: [id], onDelete: SetNull)
 
+  // Spouse / Second Member Details (Optional for Couple memberships)
+  spouseFirstName         String?
+  spouseLastName          String?
+  spouseDateOfBirth       DateTime?
+  spouseGender            String?
+  spouseMobileNumber      String?
+  spouseIdProofType       String?
+  spouseIdProofNumber     String?
+  spouseIdProofDocumentId String?         @unique
+  spouseIdProofDocument   MemberDocument? @relation("MemberSpouseIdProof", fields: [spouseIdProofDocumentId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -1007,7 +1018,8 @@ model MemberDocument {
   receipt      Receipt?       @relation(fields: [receiptId], references: [id], onDelete: SetNull)
   subscription Subscription?  @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
   createdBy    User?          @relation("DocumentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  idProofFor   MemberProfile? @relation("MemberIdProof")
+  idProofFor             MemberProfile? @relation("MemberIdProof")
+  spouseIdProofFor       MemberProfile? @relation("MemberSpouseIdProof")
 }
 
 model VisitAssignment {

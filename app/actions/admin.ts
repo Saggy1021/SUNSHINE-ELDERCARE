@@ -148,6 +148,8 @@ export async function getMemberDetails(userId: string) {
           sponsor: true,
           insuranceDetails: true,
           medicalAuth: true,
+          idProofDocument: true,
+          spouseIdProofDocument: true,
         }
       },
       subscriptions: {
@@ -198,6 +200,12 @@ export async function getMemberDetails(userId: string) {
   if (!hasSensitiveView) {
     if (user.memberProfile) {
       user.memberProfile.idProofNumber = null as any;
+      user.memberProfile.spouseIdProofNumber = null as any;
+      user.memberProfile.idProofDocument = null as any;
+      user.memberProfile.spouseIdProofDocument = null as any;
+    }
+    if (user.ownedDocuments) {
+      user.ownedDocuments = user.ownedDocuments.filter((d: any) => d.documentType !== 'ID_PROOF');
     }
     if (user.memberProfile?.insuranceDetails) {
       user.memberProfile.insuranceDetails.policyNumber = "HIDDEN";

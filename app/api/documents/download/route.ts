@@ -23,7 +23,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const key = searchParams.get("key");
-  const docId = searchParams.get("docId");
+  const docId = searchParams.get("docId") || searchParams.get("id");
 
   try {
     let document;
@@ -40,10 +40,18 @@ export async function GET(request: Request) {
 
     // Authorization: User must be the owner, or an admin with DOCUMENT_VIEW
     const isOwner = document.userId === session.user.id;
-    const isAdmin = await AuthorizationService.can(session.user.id, PERMISSIONS.DOCUMENT_VIEW);
+    const hasDocView = await AuthorizationService.can(session.user.id, PERMISSIONS.DOCUMENT_VIEW);
 
-    if (!isOwner && !isAdmin) {
+    if (!isOwner && !hasDocView) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    // Sensitive documents (ID_PROOF) additionally require MEMBER_SENSITIVE_VIEW for non-owners
+    if (document.documentType === 'ID_PROOF' && !isOwner) {
+      const hasSensitiveView = await AuthorizationService.can(session.user.id, PERMISSIONS.MEMBER_SENSITIVE_VIEW);
+      if (!hasSensitiveView) {
+        return NextResponse.json({ error: "Forbidden: Sensitive document access denied" }, { status: 403 });
+      }
     }
 
     if (document.storageKey) {

@@ -107,8 +107,17 @@ export class LocalStorageAdapter implements StorageProvider {
       fs.mkdirSync(dir, { recursive: true });
     }
 
-    fs.writeFileSync(fullPath, file);
-    return key;
+    try {
+      fs.writeFileSync(fullPath, file);
+      return key;
+    } catch (writeErr) {
+      if (fs.existsSync(fullPath)) {
+        try {
+          fs.unlinkSync(fullPath);
+        } catch {}
+      }
+      throw writeErr;
+    }
   }
 
   /**

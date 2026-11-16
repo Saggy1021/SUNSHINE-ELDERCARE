@@ -57,8 +57,23 @@ export class R2StorageProvider implements StorageProvider {
       },
     });
 
-    await this.client.send(command);
-    return objectKey;
+    try {
+      await this.client.send(command);
+      return objectKey;
+    } catch (uploadError) {
+      // Partial failure protection: if client.send failed after creating or partially transmitting
+      // the object, attempt an immediate cleanup to ensure no orphaned R2 objects remain without
+      // their key being returned.
+      await this.client
+        .send(
+          new DeleteObjectCommand({
+            Bucket: this.bucketName,
+            Key: objectKey,
+          })
+        )
+        .catch(() => {});
+      throw uploadError;
+    }
   }
 
   async getSignedUrl(key: string, requestedExpiresInSeconds?: number): Promise<string> {
