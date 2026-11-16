@@ -2,7 +2,7 @@
 
 import { auth } from "@/auth"
 import { db } from "@/lib/db"
-import { revalidatePath, revalidateTag, unstable_cache } from "next/cache"
+import { revalidatePath, revalidateTag } from "next/cache"
 import { redirect } from "next/navigation"
 import { notificationService } from "@/lib/services/notification"
 import { AuthorizationService } from "@/lib/services/authorization"
@@ -230,20 +230,9 @@ export async function getAdminDashboardMetricsCore(database: any = db, now: Date
   };
 }
 
-const getCachedAdminDashboardMetrics = unstable_cache(
-  async () => {
-    return getAdminDashboardMetricsCore(db);
-  },
-  ["admin-dashboard-metrics"],
-  {
-    revalidate: 15,
-    tags: ["admin-dashboard-metrics"],
-  }
-);
-
 export async function getAdminDashboardMetrics() {
   await requirePermission("MEMBER_VIEW");
-  return getCachedAdminDashboardMetrics();
+  return getAdminDashboardMetricsCore(db);
 }
 
 export async function getNeedsAttentionQueueCore(database: any = db) {
@@ -302,26 +291,6 @@ export async function getNeedsAttentionQueue() {
   await requirePermission("MEMBER_VIEW")
   return getNeedsAttentionQueueCore(db)
 }
-
-const getCachedGenuineMembers = unstable_cache(
-  async () => {
-    return db.user.findMany({
-      where: {
-        email: { notIn: [...EXCLUDED_MEMBER_EMAILS, ...ADMIN_DISPLAY_EMAILS] },
-        status: { not: "ARCHIVED" },
-        OR: [
-          { role: "MEMBER" },
-          { memberProfile: { memberId: { not: null } } },
-          { subscriptions: { some: {} } },
-        ],
-      },
-      select: { id: true, createdAt: true },
-      orderBy: { createdAt: 'asc' },
-    });
-  },
-  ["genuine-member-serials"],
-  { revalidate: 60, tags: ["genuine-member-serials"] }
-);
 
 // --- Members Core Query ---
 export async function getMembersCore(
@@ -384,22 +353,6 @@ export async function getMembersCore(
       ]
     };
   }
-
-  const fetchGenuineMembers = database === db
-    ? getCachedGenuineMembers()
-    : database.user.findMany({
-        where: {
-          email: { notIn: [...EXCLUDED_MEMBER_EMAILS, ...ADMIN_DISPLAY_EMAILS] },
-          status: { not: "ARCHIVED" },
-          OR: [
-            { role: "MEMBER" },
-            { memberProfile: { memberId: { not: null } } },
-            { subscriptions: { some: {} } },
-          ],
-        },
-        select: { id: true, createdAt: true },
-        orderBy: { createdAt: 'asc' },
-      });
 
   const [members, total, genuineMembers, archivedCount] = await Promise.all([
     database.user.findMany({
@@ -489,7 +442,19 @@ export async function getMembersCore(
       take: limit
     }),
     database.user.count({ where }),
-    fetchGenuineMembers,
+    database.user.findMany({
+      where: {
+        email: { notIn: [...EXCLUDED_MEMBER_EMAILS, ...ADMIN_DISPLAY_EMAILS] },
+        status: { not: "ARCHIVED" },
+        OR: [
+          { role: "MEMBER" },
+          { memberProfile: { memberId: { not: null } } },
+          { subscriptions: { some: {} } },
+        ],
+      },
+      select: { id: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    }),
     database.user.count({
       where: {
         email: { notIn: EXCLUDED_MEMBER_EMAILS },
