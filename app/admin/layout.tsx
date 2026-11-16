@@ -13,6 +13,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     redirect("/login?callbackUrl=/admin")
   }
   
+  const isOwner = session.user.email === 'info.sunshineeldercare@gmail.com';
   const [
     hasAdminAccess,
     hasContentView,
@@ -20,14 +21,16 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     hasDocumentView,
     hasAdminUserManage,
     hasRoleManage,
-  ] = await Promise.all([
-    AuthorizationService.hasAdminPortalAccess(session.user.id),
-    AuthorizationService.can(session.user.id, 'CONTENT_VIEW'),
-    AuthorizationService.can(session.user.id, 'COMMUNICATION_VIEW'),
-    AuthorizationService.can(session.user.id, 'DOCUMENT_VIEW'),
-    AuthorizationService.can(session.user.id, 'ADMIN_USER_MANAGE'),
-    AuthorizationService.can(session.user.id, 'ROLE_MANAGE'),
-  ]);
+  ] = isOwner
+    ? [true, true, true, true, true, true]
+    : await Promise.all([
+        AuthorizationService.hasAdminPortalAccess(session.user.id),
+        AuthorizationService.can(session.user.id, 'CONTENT_VIEW'),
+        AuthorizationService.can(session.user.id, 'COMMUNICATION_VIEW'),
+        AuthorizationService.can(session.user.id, 'DOCUMENT_VIEW'),
+        AuthorizationService.can(session.user.id, 'ADMIN_USER_MANAGE'),
+        AuthorizationService.can(session.user.id, 'ROLE_MANAGE'),
+      ]);
 
   if (!hasAdminAccess) {
     // If they don't have admin access, check if they are an employee (for the operational portal)
