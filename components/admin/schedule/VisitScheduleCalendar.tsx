@@ -191,25 +191,31 @@ export function VisitScheduleCalendar({
     }
   }, [showScheduleModal, scheduleModalDefaultDate]);
 
-  // Dynamic Availability query for Schedule Modal
+  // Dynamic Availability query for Schedule Modal (debounced with validation guard)
   useEffect(() => {
     if (!showScheduleModal || !scheduleDate || !scheduleStartTime || !scheduleEndTime) return;
+    if (scheduleEndTime <= scheduleStartTime) return;
+
     let active = true;
-    setScheduleAvailLoading(true);
-    getEmployeeAvailability({
-      date: scheduleDate,
-      startTime: scheduleStartTime,
-      endTime: scheduleEndTime,
-    })
-      .then((res) => {
-        if (active) setScheduleEmpAvailability(res);
+    const timer = setTimeout(() => {
+      setScheduleAvailLoading(true);
+      getEmployeeAvailability({
+        date: scheduleDate,
+        startTime: scheduleStartTime,
+        endTime: scheduleEndTime,
       })
-      .catch((err) => console.error("Availability query error:", err))
-      .finally(() => {
-        if (active) setScheduleAvailLoading(false);
-      });
+        .then((res) => {
+          if (active) setScheduleEmpAvailability(res);
+        })
+        .catch((err) => console.error("Availability query error:", err))
+        .finally(() => {
+          if (active) setScheduleAvailLoading(false);
+        });
+    }, 200);
+
     return () => {
       active = false;
+      clearTimeout(timer);
     };
   }, [showScheduleModal, scheduleDate, scheduleStartTime, scheduleEndTime]);
 
@@ -224,26 +230,32 @@ export function VisitScheduleCalendar({
     }
   }, [showEditModal, selectedVisit]);
 
-  // Dynamic Availability query for Edit Modal
+  // Dynamic Availability query for Edit Modal (debounced with validation guard)
   useEffect(() => {
     if (!showEditModal || !selectedVisit || !editDate || !editStartTime || !editEndTime) return;
+    if (editEndTime <= editStartTime) return;
+
     let active = true;
-    setEditAvailLoading(true);
-    getEmployeeAvailability({
-      date: editDate,
-      startTime: editStartTime,
-      endTime: editEndTime,
-      excludeVisitId: selectedVisit.id,
-    })
-      .then((res) => {
-        if (active) setEditEmpAvailability(res);
+    const timer = setTimeout(() => {
+      setEditAvailLoading(true);
+      getEmployeeAvailability({
+        date: editDate,
+        startTime: editStartTime,
+        endTime: editEndTime,
+        excludeVisitId: selectedVisit.id,
       })
-      .catch((err) => console.error("Availability query error:", err))
-      .finally(() => {
-        if (active) setEditAvailLoading(false);
-      });
+        .then((res) => {
+          if (active) setEditEmpAvailability(res);
+        })
+        .catch((err) => console.error("Availability query error:", err))
+        .finally(() => {
+          if (active) setEditAvailLoading(false);
+        });
+    }, 200);
+
     return () => {
       active = false;
+      clearTimeout(timer);
     };
   }, [showEditModal, selectedVisit, editDate, editStartTime, editEndTime]);
 
@@ -258,26 +270,32 @@ export function VisitScheduleCalendar({
     }
   }, [showRescheduleModal, selectedVisit]);
 
-  // Dynamic Availability query for Reschedule Modal
+  // Dynamic Availability query for Reschedule Modal (debounced with validation guard)
   useEffect(() => {
     if (!showRescheduleModal || !selectedVisit || !rescheduleDate || !rescheduleStartTime || !rescheduleEndTime) return;
+    if (rescheduleEndTime <= rescheduleStartTime) return;
+
     let active = true;
-    setRescheduleAvailLoading(true);
-    getEmployeeAvailability({
-      date: rescheduleDate,
-      startTime: rescheduleStartTime,
-      endTime: rescheduleEndTime,
-      excludeVisitId: selectedVisit.id,
-    })
-      .then((res) => {
-        if (active) setRescheduleEmpAvailability(res);
+    const timer = setTimeout(() => {
+      setRescheduleAvailLoading(true);
+      getEmployeeAvailability({
+        date: rescheduleDate,
+        startTime: rescheduleStartTime,
+        endTime: rescheduleEndTime,
+        excludeVisitId: selectedVisit.id,
       })
-      .catch((err) => console.error("Availability query error:", err))
-      .finally(() => {
-        if (active) setRescheduleAvailLoading(false);
-      });
+        .then((res) => {
+          if (active) setRescheduleEmpAvailability(res);
+        })
+        .catch((err) => console.error("Availability query error:", err))
+        .finally(() => {
+          if (active) setRescheduleAvailLoading(false);
+        });
+    }, 200);
+
     return () => {
       active = false;
+      clearTimeout(timer);
     };
   }, [showRescheduleModal, selectedVisit, rescheduleDate, rescheduleStartTime, rescheduleEndTime]);
 
@@ -498,31 +516,28 @@ export function VisitScheduleCalendar({
         <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 self-start md:self-auto">
           <button
             onClick={() => setView("day")}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-              view === "day"
-                ? "bg-white text-[#091329] shadow-2xs border border-slate-200/60"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${view === "day"
+              ? "bg-white text-[#091329] shadow-2xs border border-slate-200/60"
+              : "text-slate-600 hover:text-slate-900"
+              }`}
           >
             Day
           </button>
           <button
             onClick={() => setView("week")}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-              view === "week"
-                ? "bg-white text-[#091329] shadow-2xs border border-slate-200/60"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${view === "week"
+              ? "bg-white text-[#091329] shadow-2xs border border-slate-200/60"
+              : "text-slate-600 hover:text-slate-900"
+              }`}
           >
             Week
           </button>
           <button
             onClick={() => setView("month")}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-              view === "month"
-                ? "bg-white text-[#091329] shadow-2xs border border-slate-200/60"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${view === "month"
+              ? "bg-white text-[#091329] shadow-2xs border border-slate-200/60"
+              : "text-slate-600 hover:text-slate-900"
+              }`}
           >
             Month
           </button>
@@ -649,20 +664,18 @@ export function VisitScheduleCalendar({
                 return (
                   <div
                     key={dayKey}
-                    className={`p-3 text-center transition-colors ${
-                      isToday ? "bg-amber-50/40" : "bg-slate-50/60"
-                    }`}
+                    className={`p-3 text-center transition-colors ${isToday ? "bg-amber-50/40" : "bg-slate-50/60"
+                      }`}
                   >
                     <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
                       {formatDayOfWeek(dayDate)}
                     </div>
                     <div className="flex items-center justify-center gap-1.5 mt-1">
                       <span
-                        className={`text-sm font-bold ${
-                          isToday
-                            ? "h-6 w-6 rounded-full bg-[#091329] text-white flex items-center justify-center text-xs"
-                            : "text-slate-900"
-                        }`}
+                        className={`text-sm font-bold ${isToday
+                          ? "h-6 w-6 rounded-full bg-[#091329] text-white flex items-center justify-center text-xs"
+                          : "text-slate-900"
+                          }`}
                       >
                         {getKolkataDateParts(dayDate).day}
                       </span>
@@ -672,11 +685,10 @@ export function VisitScheduleCalendar({
                     </div>
                     <div className="mt-1">
                       <span
-                        className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                          dayVisits.length > 0
-                            ? "bg-slate-200/80 text-slate-800"
-                            : "bg-transparent text-slate-400"
-                        }`}
+                        className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full ${dayVisits.length > 0
+                          ? "bg-slate-200/80 text-slate-800"
+                          : "bg-transparent text-slate-400"
+                          }`}
                       >
                         {dayVisits.length} {dayVisits.length === 1 ? "visit" : "visits"}
                       </span>
@@ -696,9 +708,8 @@ export function VisitScheduleCalendar({
                 return (
                   <div
                     key={`col-${dayKey}`}
-                    className={`p-3 space-y-3 flex flex-col ${
-                      isToday ? "bg-amber-50/15" : ""
-                    }`}
+                    className={`p-3 space-y-3 flex flex-col ${isToday ? "bg-amber-50/15" : ""
+                      }`}
                   >
                     {dayVisits.length === 0 ? (
                       <div className="flex-1 flex flex-col items-center justify-center p-4 border border-dashed border-slate-200 rounded-lg text-center text-slate-400">
@@ -940,19 +951,17 @@ export function VisitScheduleCalendar({
                       setCurrentDate(cellDate);
                       setView("day");
                     }}
-                    className={`min-h-[100px] p-2 rounded-lg border text-left flex flex-col justify-between transition-all cursor-pointer ${
-                      isToday
-                        ? "border-[#091329] bg-amber-50/20"
-                        : "border-slate-200/80 bg-white hover:border-slate-300 hover:shadow-2xs"
-                    }`}
+                    className={`min-h-[100px] p-2 rounded-lg border text-left flex flex-col justify-between transition-all cursor-pointer ${isToday
+                      ? "border-[#091329] bg-amber-50/20"
+                      : "border-slate-200/80 bg-white hover:border-slate-300 hover:shadow-2xs"
+                      }`}
                   >
                     <div className="flex items-center justify-between">
                       <span
-                        className={`text-xs font-bold ${
-                          isToday
-                            ? "h-5 w-5 rounded-full bg-[#091329] text-white flex items-center justify-center text-[10px]"
-                            : "text-slate-700"
-                        }`}
+                        className={`text-xs font-bold ${isToday
+                          ? "h-5 w-5 rounded-full bg-[#091329] text-white flex items-center justify-center text-[10px]"
+                          : "text-slate-700"
+                          }`}
                       >
                         {d}
                       </span>
@@ -1345,7 +1354,7 @@ export function VisitScheduleCalendar({
                     actionLoading ||
                     Boolean(
                       scheduleAssignedEmp &&
-                        scheduleEmpAvailability.find((a) => a.employeeId === scheduleAssignedEmp)?.available === false
+                      scheduleEmpAvailability.find((a) => a.employeeId === scheduleAssignedEmp)?.available === false
                     )
                   }
                   className="px-5 py-2 bg-[#091329] text-white font-semibold rounded-lg hover:bg-[#162850] disabled:opacity-50"
@@ -1477,9 +1486,8 @@ export function VisitScheduleCalendar({
                       name="assignedEmpId"
                       value={rescheduleAssignedEmp}
                       onChange={(e) => setRescheduleAssignedEmp(e.target.value)}
-                      className={`w-full px-3 py-2 border rounded-lg text-xs ${
-                        isConflict ? "border-amber-400 bg-amber-50/40" : "border-slate-300"
-                      }`}
+                      className={`w-full px-3 py-2 border rounded-lg text-xs ${isConflict ? "border-amber-400 bg-amber-50/40" : "border-slate-300"
+                        }`}
                     >
                       <option value="">-- Leave Unassigned --</option>
                       {initialFormData.employees.map((emp) => {
@@ -1525,7 +1533,7 @@ export function VisitScheduleCalendar({
                     actionLoading ||
                     Boolean(
                       rescheduleAssignedEmp &&
-                        rescheduleEmpAvailability.find((a) => a.employeeId === rescheduleAssignedEmp)?.available === false
+                      rescheduleEmpAvailability.find((a) => a.employeeId === rescheduleAssignedEmp)?.available === false
                     )
                   }
                   className="px-5 py-2 bg-[#091329] text-white font-semibold rounded-lg hover:bg-[#162850] disabled:opacity-50"
@@ -1785,7 +1793,7 @@ export function VisitScheduleCalendar({
                     actionLoading ||
                     Boolean(
                       editAssignedEmp &&
-                        editEmpAvailability.find((a) => a.employeeId === editAssignedEmp)?.available === false
+                      editEmpAvailability.find((a) => a.employeeId === editAssignedEmp)?.available === false
                     )
                   }
                   className="px-5 py-2 bg-[#091329] text-white font-semibold rounded-lg hover:bg-[#162850] disabled:opacity-50"
