@@ -489,3 +489,32 @@ export function passwordResetEmail(data: {
   const text = `Dear ${data.memberName},\n\nReset your password by visiting this link: ${data.resetUrl}\n\nThis link will expire in 1 hour.`
   return { subject, html, text }
 }
+
+export function memberDeletionOtpEmail(data: {
+  adminName: string
+  memberName: string
+  memberId: string
+  otp: string
+  reason: string
+}): { subject: string; html: string; text: string } {
+  const subject = `CRITICAL: Verification Code for Permanent Member Deletion (${data.memberId})`
+  const html = baseLayout(`
+    ${heading('Member Deletion Authorization')}
+    ${paragraph(`Dear ${data.adminName},`)}
+    ${paragraph('A request has been initiated to permanently delete a member record from Sunshine Eldercare:')}
+    <div style="background-color:#fff1f2;border:1px solid #fecdd3;padding:16px;border-radius:12px;margin:20px 0;">
+      <p style="margin:0 0 8px 0;color:#9f1239;font-weight:700;font-size:14px;letter-spacing:0.5px;">⚠️ PERMANENT DELETION WARNING</p>
+      <p style="margin:0 0 6px 0;color:#881337;font-size:13px;"><strong>Member Name:</strong> ${data.memberName}</p>
+      <p style="margin:0 0 6px 0;color:#881337;font-size:13px;"><strong>Member ID:</strong> ${data.memberId}</p>
+      <p style="margin:0;color:#881337;font-size:13px;"><strong>Reason:</strong> ${data.reason}</p>
+    </div>
+    ${paragraph('Enter the 6-digit one-time verification code below to authorize this deletion request:')}
+    <div style="margin:24px 0;text-align:center;">
+      <span style="display:inline-block;padding:16px 32px;background-color:#f8fafc;color:#091329;font-size:32px;font-weight:700;letter-spacing:8px;border:1px solid #e2e8f0;border-radius:12px;">${data.otp}</span>
+    </div>
+    ${securityNotice('This code expires in 5 minutes and is single-use. Final execution strictly requires separate Primary Owner approval. Do not share this OTP.')}
+    ${paragraph('If you did not initiate this deletion request, please alert the Primary Owner immediately.')}
+  `)
+  const text = `CRITICAL: Member Deletion Verification Code\n\nMember: ${data.memberName} (${data.memberId})\nReason: ${data.reason}\n\nYour 6-digit OTP is: ${data.otp}\n\nExpires in 5 minutes. Single-use only.`
+  return { subject, html, text }
+}

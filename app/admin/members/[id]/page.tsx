@@ -3,9 +3,16 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, UserSquare2, Shield, ShieldAlert, CheckCircle2, Clock, CalendarDays, Receipt, FileText, ClipboardList, Activity, Edit } from "lucide-react"
 import { MembershipDateEditor } from "@/components/admin/membership-date-editor"
+import { auth } from "@/auth"
+import { AuthorizationService } from "@/lib/services/authorization"
+import { MemberLifecycleActions } from "@/components/admin/member-lifecycle-actions"
 
 export default async function MemberDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const session = await auth();
+  const currentUserId = session?.user?.id;
+  const isOwner = currentUserId ? await AuthorizationService.isOwner(currentUserId) : false;
+
   const memberResult = await getMemberDetails(id)
   
   if (!memberResult) notFound()
@@ -26,19 +33,35 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-[#091329] flex items-center gap-2">
-              <UserSquare2 className="h-6 w-6 text-[#091329]" /> Member Details
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight text-[#091329] flex items-center gap-2">
+                <UserSquare2 className="h-6 w-6 text-[#091329]" /> Member Details
+              </h1>
+              {member.status === "ARCHIVED" && (
+                <span className="bg-amber-100 text-amber-800 text-xs px-2.5 py-0.5 rounded-full font-semibold border border-amber-200">
+                  Archived
+                </span>
+              )}
+            </div>
             <p className="text-xs text-slate-500 font-mono mt-0.5">System ID: {member.id}</p>
           </div>
         </div>
-        <Link
-          href={`/admin/members/${member.id}/edit`}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#091329] text-white text-sm font-semibold rounded-lg hover:bg-[#162850] shadow-sm transition-colors self-start sm:self-auto"
-          title="Edit Member Information"
-        >
-          <Edit className="h-4 w-4" /> Edit Member
-        </Link>
+        <div className="flex flex-wrap items-center gap-3 self-start sm:self-auto">
+          <Link
+            href={`/admin/members/${member.id}/edit`}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[#091329] text-white text-sm font-semibold rounded-lg hover:bg-[#162850] shadow-sm transition-colors"
+            title="Edit Member Information"
+          >
+            <Edit className="h-4 w-4" /> Edit Member
+          </Link>
+          <MemberLifecycleActions
+            memberUserId={member.id}
+            memberName={member.name || member.email}
+            memberId={profile?.memberId || null}
+            status={member.status}
+            isOwner={isOwner}
+          />
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">

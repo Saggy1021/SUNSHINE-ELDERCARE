@@ -48,10 +48,11 @@ export async function getAdminDashboardMetricsCore(database: any = db, now: Date
     pendingPayments
   ] = await Promise.all([
     // Total Members: Count eligible members (role MEMBER, has memberProfile, or has subscriptions)
-    // excluding administrative accounts (Owner, Tanish, Sagnik, and care coordinator accounts).
+    // excluding administrative accounts (Owner, Tanish, Sagnik, and care coordinator accounts) and archived accounts.
     database.user.count({
       where: {
         email: { notIn: DASHBOARD_EXCLUDED_EMAILS },
+        status: { not: "ARCHIVED" },
         role: { not: "ADMIN" },
         userRoles: { none: { role: { name: { in: ["Owner", "Admin"] } } } },
         OR: [
@@ -63,7 +64,7 @@ export async function getAdminDashboardMetricsCore(database: any = db, now: Date
     }),
     // Active Memberships: Count only currently active memberships belonging to eligible members
     // where subscription status is ACTIVE and within validity dates (startDate <= now <= endDate).
-    // Exclude demo/test accounts without genuine active membership.
+    // Exclude demo/test accounts without genuine active membership and archived members.
     // Avoid counting multiple subscriptions for one member more than once (counts distinct users).
     database.user.count({
       where: {
@@ -71,6 +72,7 @@ export async function getAdminDashboardMetricsCore(database: any = db, now: Date
           notIn: DASHBOARD_EXCLUDED_EMAILS,
           not: { endsWith: "@example.com" },
         },
+        status: { not: "ARCHIVED" },
         role: { not: "ADMIN" },
         userRoles: { none: { role: { name: { in: ["Owner", "Admin"] } } } },
         memberProfile: { isNot: null },
@@ -193,12 +195,14 @@ export async function getMembersCore(
   database: any = db,
   hasSensitiveView: boolean = true,
   sortField?: string,
-  sortDirection?: "asc" | "desc"
+  sortDirection?: "asc" | "desc",
+  onlyArchived: boolean = false
 ) {
   const baseWhere = {
     email: {
       notIn: EXCLUDED_MEMBER_EMAILS,
     },
+    status: onlyArchived ? "ARCHIVED" : { not: "ARCHIVED" },
   };
 
   let where: any = baseWhere;
@@ -245,7 +249,7 @@ export async function getMembersCore(
     };
   }
 
-  const [members, total, genuineMembers] = await Promise.all([
+  const [members, total, genuineMembers, archivedCount] = await Promise.all([
     database.user.findMany({
       where,
       select: {
@@ -253,6 +257,7 @@ export async function getMembersCore(
         name: true,
         email: true,
         role: true,
+        status: true,
         createdAt: true,
         memberProfile: {
           select: {
@@ -338,6 +343,7 @@ export async function getMembersCore(
     database.user.findMany({
       where: {
         email: { notIn: [...EXCLUDED_MEMBER_EMAILS, ...ADMIN_DISPLAY_EMAILS] },
+        status: { not: "ARCHIVED" },
         OR: [
           { role: "MEMBER" },
           { memberProfile: { memberId: { not: null } } },
@@ -346,6 +352,12 @@ export async function getMembersCore(
       },
       select: { id: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
+    }),
+    database.user.count({
+      where: {
+        email: { notIn: EXCLUDED_MEMBER_EMAILS },
+        status: "ARCHIVED",
+      },
     }),
   ]);
 
@@ -426,7 +438,7 @@ export async function getMembersCore(
     });
   }
 
-  return { members: enrichedMembers, total, pages: Math.ceil(total / limit) };
+  return { members: enrichedMembers, total, pages: Math.ceil(total / limit), archivedCount };
 }
 
 // --- Members Server Action ---
@@ -435,11 +447,12 @@ export async function getMembers(
   page: number = 1,
   limit: number = 50,
   sortField?: string,
-  sortDirection?: "asc" | "desc"
+  sortDirection?: "asc" | "desc",
+  onlyArchived: boolean = false
 ) {
   const sessionUser = await requirePermission("MEMBER_VIEW");
   const hasSensitiveView = await AuthorizationService.can(sessionUser, "MEMBER_SENSITIVE_VIEW");
-  return getMembersCore(query, page, limit, db, hasSensitiveView, sortField, sortDirection);
+  return getMembersCore(query, page, limit, db, hasSensitiveView, sortField, sortDirection, onlyArchived);
 }
 
 // --- Membership Date Modification Core Logic ---

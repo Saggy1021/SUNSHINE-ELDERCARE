@@ -23,7 +23,7 @@ export default async function AdminMembersPage({
   const page = p ? parseInt(p, 10) : 1;
   const limit = 50;
   const sortDirection = dir === "desc" ? "desc" : "asc";
-  const { members, total, pages } = await getMembers(q, page, limit, sort, sortDirection);
+  const { members, total, pages, archivedCount } = await getMembers(q, page, limit, sort, sortDirection);
 
   const baseParams = new URLSearchParams();
   if (q) baseParams.set("q", q);
@@ -51,6 +51,34 @@ export default async function AdminMembersPage({
           className="inline-flex items-center gap-2 px-4 py-2 bg-[#091329] text-white text-sm font-medium rounded-lg hover:bg-[#162850] shadow-sm transition-colors self-start sm:self-auto"
         >
           + Create Member
+        </Link>
+      </div>
+
+      {/* Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-200">
+        <Link
+          href="/admin/members"
+          className="px-4 py-2 text-sm font-semibold border-b-2 border-[#091329] text-[#091329] -mb-px flex items-center gap-2"
+        >
+          <span>Active Members</span>
+          <span className="px-2 py-0.5 text-xs rounded-full bg-slate-100 text-slate-700 font-mono">
+            {total}
+          </span>
+        </Link>
+        <Link
+          href="/admin/members/archived"
+          className="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 -mb-px flex items-center gap-2 transition-colors"
+        >
+          <span>Archived Members</span>
+          {archivedCount && archivedCount > 0 ? (
+            <span className="px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-800 font-semibold font-mono">
+              {archivedCount}
+            </span>
+          ) : (
+            <span className="px-2 py-0.5 text-xs rounded-full bg-slate-100 text-slate-500 font-mono">
+              0
+            </span>
+          )}
         </Link>
       </div>
 
