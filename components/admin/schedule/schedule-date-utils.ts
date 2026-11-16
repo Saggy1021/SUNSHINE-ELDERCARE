@@ -1,6 +1,10 @@
 /**
  * Timezone-aware date utilities for Sunshine Eldercare Visit Schedule
- * Pinned to Asia/Kolkata (IST) to ensure deterministic rendering and no hydration mismatch.
+ * Strictly pinned to Asia/Kolkata (IST, UTC+05:30) with no Daylight Saving Time (DST).
+ *
+ * Ensures deterministic rendering, eliminates hydration mismatches, and guarantees
+ * that user-entered IST dates/times are accurately converted to UTC for database storage
+ * and formatted back to IST for all views and inputs.
  */
 
 export function getKolkataDateParts(dateInput: Date | string) {
@@ -31,11 +35,17 @@ export function getKolkataDateParts(dateInput: Date | string) {
   };
 }
 
+/**
+ * Returns YYYY-MM-DD in Asia/Kolkata timezone
+ */
 export function formatDateKey(dateInput: Date | string): string {
   const { year, month, day } = getKolkataDateParts(dateInput);
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+/**
+ * Formats a Date/ISO string to human-readable IST time, e.g. "1:00 pm", "11:30 am"
+ */
 export function formatTimeIST(dateInput: Date | string): string {
   try {
     const d = typeof dateInput === "string" ? new Date(dateInput) : dateInput;
@@ -45,10 +55,89 @@ export function formatTimeIST(dateInput: Date | string): string {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
-    }).format(d);
+    }).format(d).toLowerCase();
   } catch {
     return "—";
   }
+}
+
+/**
+ * Formats a Date/ISO string to 24-hour HH:mm in Asia/Kolkata for HTML5 <input type="time">
+ * e.g. "13:00", "09:30"
+ */
+export function formatTimeInputIST(dateInput: Date | string): string {
+  try {
+    const d = typeof dateInput === "string" ? new Date(dateInput) : dateInput;
+    if (isNaN(d.getTime())) return "10:00";
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(d);
+    const hour = parts.find((p) => p.type === "hour")?.value || "00";
+    const minute = parts.find((p) => p.type === "minute")?.value || "00";
+    const hNum = parseInt(hour, 10) % 24;
+    return `${String(hNum).padStart(2, "0")}:${minute}`;
+  } catch {
+    return "10:00";
+  }
+}
+
+/**
+ * Parses user input date (YYYY-MM-DD) and time (HH:mm in 24h or 12h) entered as IST,
+ * returning the corresponding UTC Date object for database storage.
+ *
+ * Example:
+ *   parseISTDateTimeToUTC("2026-11-17", "13:00") -> 2026-11-17T07:30:00.000Z
+ *   parseISTDateTimeToUTC("2026-11-17", "1:00 PM") -> 2026-11-17T07:30:00.000Z
+ */
+export function parseISTDateTimeToUTC(dateInput: string, timeInput?: string): Date {
+  if (!dateInput) return new Date(NaN);
+
+  // If already a full ISO string with timezone offset (Z or +), parse directly
+  if (dateInput.includes("T") && (dateInput.includes("Z") || dateInput.includes("+"))) {
+    return new Date(dateInput);
+  }
+
+  let cleanTime = (timeInput || "00:00").trim();
+  // Check for 12-hour AM/PM format
+  const match12 = cleanTime.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)$/i);
+  if (match12) {
+    let hours = parseInt(match12[1], 10);
+    const minutes = match12[2];
+    const isPm = match12[4].toLowerCase() === "pm";
+    if (isPm && hours < 12) hours += 12;
+    if (!isPm && hours === 12) hours = 0;
+    cleanTime = `${String(hours).padStart(2, "0")}:${minutes}:00`;
+  } else {
+    // 24-hour format
+    const parts = cleanTime.split(":");
+    const h = String(parseInt(parts[0] || "0", 10)).padStart(2, "0");
+    const m = String(parseInt(parts[1] || "0", 10)).padStart(2, "0");
+    cleanTime = `${h}:${m}:00`;
+  }
+
+  const cleanDate = dateInput.trim().split("T")[0];
+  // Strictly append Asia/Kolkata offset (+05:30)
+  return new Date(`${cleanDate}T${cleanTime}+05:30`);
+}
+
+/**
+ * Checks if two time intervals [startA, endA) and [startB, endB) overlap.
+ * Returns true if: startA < endB AND endA > startB
+ */
+export function checkIntervalOverlap(
+  startA: Date | string,
+  endA: Date | string,
+  startB: Date | string,
+  endB: Date | string
+): boolean {
+  const sA = (typeof startA === "string" ? new Date(startA) : startA).getTime();
+  const eA = (typeof endA === "string" ? new Date(endA) : endA).getTime();
+  const sB = (typeof startB === "string" ? new Date(startB) : startB).getTime();
+  const eB = (typeof endB === "string" ? new Date(endB) : endB).getTime();
+  return sA < eB && eA > sB;
 }
 
 export function formatDateIST(dateInput: Date | string): string {
@@ -99,7 +188,7 @@ export function getWeekDays(baseDate: Date): Date[] {
 }
 
 /**
- * Returns the month range display string
+ * Returns the month range display string in Asia/Kolkata
  */
 export function formatMonthRangeDisplay(baseDate: Date): string {
   return new Intl.DateTimeFormat("en-IN", {

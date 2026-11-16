@@ -35,10 +35,12 @@ import {
   rescheduleCareVisit,
   updateCareVisitStatus,
   cancelCareVisit,
+  getEmployeeAvailability,
 } from "@/app/actions/care-schedule";
 import {
   formatDateKey,
   formatTimeIST,
+  formatTimeInputIST,
   formatDateIST,
   formatDayOfWeek,
   getWeekDays,
@@ -55,6 +57,13 @@ interface VisitScheduleCalendarProps {
 
 type CalendarView = "day" | "week" | "month";
 
+interface EmployeeAvailabilityItem {
+  employeeId: string;
+  available: boolean;
+  conflictTime?: string;
+  conflictReason?: string;
+}
+
 export function VisitScheduleCalendar({
   initialVisits,
   initialFormData,
@@ -68,7 +77,7 @@ export function VisitScheduleCalendar({
 
   // Filters
   const [memberSearch, setMemberSearch] = useState("");
-  const [selectedCaregiver, setSelectedCaregiver] = useState("ALL");
+  const [selectedEmployeeFilter, setSelectedEmployeeFilter] = useState("ALL");
   const [selectedStatus, setSelectedStatus] = useState("ALL");
   const [selectedCategory, setSelectedCategory] = useState("ALL");
   const [selectedLocation, setSelectedLocation] = useState("");
@@ -85,6 +94,30 @@ export function VisitScheduleCalendar({
   // Form states for mutations
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Schedule Modal Form & Availability State
+  const [scheduleDate, setScheduleDate] = useState<string>("");
+  const [scheduleStartTime, setScheduleStartTime] = useState<string>("10:00");
+  const [scheduleEndTime, setScheduleEndTime] = useState<string>("12:00");
+  const [scheduleAssignedEmp, setScheduleAssignedEmp] = useState<string>("");
+  const [scheduleEmpAvailability, setScheduleEmpAvailability] = useState<EmployeeAvailabilityItem[]>([]);
+  const [scheduleAvailLoading, setScheduleAvailLoading] = useState(false);
+
+  // Edit Modal Form & Availability State
+  const [editDate, setEditDate] = useState<string>("");
+  const [editStartTime, setEditStartTime] = useState<string>("10:00");
+  const [editEndTime, setEditEndTime] = useState<string>("12:00");
+  const [editAssignedEmp, setEditAssignedEmp] = useState<string>("");
+  const [editEmpAvailability, setEditEmpAvailability] = useState<EmployeeAvailabilityItem[]>([]);
+  const [editAvailLoading, setEditAvailLoading] = useState(false);
+
+  // Reschedule Modal Form & Availability State
+  const [rescheduleDate, setRescheduleDate] = useState<string>("");
+  const [rescheduleStartTime, setRescheduleStartTime] = useState<string>("10:00");
+  const [rescheduleEndTime, setRescheduleEndTime] = useState<string>("12:00");
+  const [rescheduleAssignedEmp, setRescheduleAssignedEmp] = useState<string>("");
+  const [rescheduleEmpAvailability, setRescheduleEmpAvailability] = useState<EmployeeAvailabilityItem[]>([]);
+  const [rescheduleAvailLoading, setRescheduleAvailLoading] = useState(false);
 
   // Determine current active date range based on view
   const { dateRangeStart, dateRangeEnd, weekDays } = useMemo(() => {
@@ -120,7 +153,7 @@ export function VisitScheduleCalendar({
         startDate: dateRangeStart.toISOString(),
         endDate: dateRangeEnd.toISOString(),
         memberSearch: memberSearch || undefined,
-        caregiverId: selectedCaregiver !== "ALL" ? selectedCaregiver : undefined,
+        caregiverId: selectedEmployeeFilter !== "ALL" ? selectedEmployeeFilter : undefined,
         status: selectedStatus !== "ALL" ? selectedStatus : undefined,
         category: selectedCategory !== "ALL" ? selectedCategory : undefined,
         location: selectedLocation || undefined,
@@ -141,11 +174,112 @@ export function VisitScheduleCalendar({
     dateRangeStart.toISOString(),
     dateRangeEnd.toISOString(),
     memberSearch,
-    selectedCaregiver,
+    selectedEmployeeFilter,
     selectedStatus,
     selectedCategory,
     selectedLocation,
   ]);
+
+  // Sync Schedule Modal initial state
+  useEffect(() => {
+    if (showScheduleModal) {
+      setScheduleDate(scheduleModalDefaultDate || formatDateKey(new Date()));
+      setScheduleStartTime("10:00");
+      setScheduleEndTime("12:00");
+      setScheduleAssignedEmp("");
+      setActionError(null);
+    }
+  }, [showScheduleModal, scheduleModalDefaultDate]);
+
+  // Dynamic Availability query for Schedule Modal
+  useEffect(() => {
+    if (!showScheduleModal || !scheduleDate || !scheduleStartTime || !scheduleEndTime) return;
+    let active = true;
+    setScheduleAvailLoading(true);
+    getEmployeeAvailability({
+      date: scheduleDate,
+      startTime: scheduleStartTime,
+      endTime: scheduleEndTime,
+    })
+      .then((res) => {
+        if (active) setScheduleEmpAvailability(res);
+      })
+      .catch((err) => console.error("Availability query error:", err))
+      .finally(() => {
+        if (active) setScheduleAvailLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [showScheduleModal, scheduleDate, scheduleStartTime, scheduleEndTime]);
+
+  // Sync Edit Modal initial state
+  useEffect(() => {
+    if (showEditModal && selectedVisit) {
+      setEditDate(formatDateKey(selectedVisit.scheduledStart));
+      setEditStartTime(formatTimeInputIST(selectedVisit.scheduledStart));
+      setEditEndTime(formatTimeInputIST(selectedVisit.scheduledEnd));
+      setEditAssignedEmp(selectedVisit.assignedEmployee?.id || selectedVisit.assignedCaregiver?.id || "");
+      setActionError(null);
+    }
+  }, [showEditModal, selectedVisit]);
+
+  // Dynamic Availability query for Edit Modal
+  useEffect(() => {
+    if (!showEditModal || !selectedVisit || !editDate || !editStartTime || !editEndTime) return;
+    let active = true;
+    setEditAvailLoading(true);
+    getEmployeeAvailability({
+      date: editDate,
+      startTime: editStartTime,
+      endTime: editEndTime,
+      excludeVisitId: selectedVisit.id,
+    })
+      .then((res) => {
+        if (active) setEditEmpAvailability(res);
+      })
+      .catch((err) => console.error("Availability query error:", err))
+      .finally(() => {
+        if (active) setEditAvailLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [showEditModal, selectedVisit, editDate, editStartTime, editEndTime]);
+
+  // Sync Reschedule Modal initial state
+  useEffect(() => {
+    if (showRescheduleModal && selectedVisit) {
+      setRescheduleDate(formatDateKey(selectedVisit.scheduledStart));
+      setRescheduleStartTime(formatTimeInputIST(selectedVisit.scheduledStart));
+      setRescheduleEndTime(formatTimeInputIST(selectedVisit.scheduledEnd));
+      setRescheduleAssignedEmp(selectedVisit.assignedEmployee?.id || selectedVisit.assignedCaregiver?.id || "");
+      setActionError(null);
+    }
+  }, [showRescheduleModal, selectedVisit]);
+
+  // Dynamic Availability query for Reschedule Modal
+  useEffect(() => {
+    if (!showRescheduleModal || !selectedVisit || !rescheduleDate || !rescheduleStartTime || !rescheduleEndTime) return;
+    let active = true;
+    setRescheduleAvailLoading(true);
+    getEmployeeAvailability({
+      date: rescheduleDate,
+      startTime: rescheduleStartTime,
+      endTime: rescheduleEndTime,
+      excludeVisitId: selectedVisit.id,
+    })
+      .then((res) => {
+        if (active) setRescheduleEmpAvailability(res);
+      })
+      .catch((err) => console.error("Availability query error:", err))
+      .finally(() => {
+        if (active) setRescheduleAvailLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [showRescheduleModal, selectedVisit, rescheduleDate, rescheduleStartTime, rescheduleEndTime]);
 
   // Date Navigation Handlers
   const handlePrev = () => {
@@ -188,148 +322,133 @@ export function VisitScheduleCalendar({
   }, [visits]);
 
   // Filter Active Indicators
-  const isFiltered =
-    !!memberSearch ||
-    selectedCaregiver !== "ALL" ||
-    selectedStatus !== "ALL" ||
-    selectedCategory !== "ALL" ||
-    !!selectedLocation;
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (memberSearch.trim()) count++;
+    if (selectedEmployeeFilter !== "ALL") count++;
+    if (selectedStatus !== "ALL") count++;
+    if (selectedCategory !== "ALL") count++;
+    if (selectedLocation.trim()) count++;
+    return count;
+  }, [memberSearch, selectedEmployeeFilter, selectedStatus, selectedCategory, selectedLocation]);
 
-  const resetFilters = () => {
+  const clearFilters = () => {
     setMemberSearch("");
-    setSelectedCaregiver("ALL");
+    setSelectedEmployeeFilter("ALL");
     setSelectedStatus("ALL");
     setSelectedCategory("ALL");
     setSelectedLocation("");
   };
 
-  const todayKey = formatDateKey(new Date());
-
-  // Status Badge Helper
+  // Status Badge UI Helper
   const renderStatusBadge = (status: string) => {
     switch (status) {
       case "CONFIRMED":
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Confirmed
           </span>
         );
       case "SCHEDULED":
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200/80">
-            <span className="h-1.5 w-1.5 rounded-full bg-sky-500" /> Scheduled
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+            <span className="h-1.5 w-1.5 rounded-full bg-blue-500" /> Scheduled
           </span>
         );
       case "WAITLISTED":
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200/80">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> Waitlisted
           </span>
         );
       case "IN_PROGRESS":
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200/80 animate-pulse">
-            <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" /> In Progress
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+            <span className="h-1.5 w-1.5 rounded-full bg-purple-500 animate-pulse" /> In Progress
           </span>
         );
       case "COMPLETED":
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-            <span className="h-1.5 w-1.5 rounded-full bg-slate-500" /> Completed
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+            <span className="h-1.5 w-1.5 rounded-full bg-slate-400" /> Completed
           </span>
         );
       case "CANCELLED":
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
             <span className="h-1.5 w-1.5 rounded-full bg-rose-500" /> Cancelled
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600">
             {status}
           </span>
         );
     }
   };
 
-  // Category Badge Helper
-  const renderCategoryBadge = (category: string) => {
+  // Category Badge UI Helper
+  const renderCategoryBadge = (category: "Scheduled" | "Ad-hoc") => {
     if (category === "Ad-hoc") {
       return (
-        <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200">
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
           Ad-hoc
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
         Scheduled
       </span>
     );
   };
 
-  // Range Display Title
+  // Header Title based on active view
   const rangeDisplayTitle = useMemo(() => {
     if (view === "day") {
       return formatDateIST(currentDate);
-    } else if (view === "month") {
-      return formatMonthRangeDisplay(currentDate);
-    } else {
+    } else if (view === "week") {
       return formatWeekRangeDisplay(weekDays);
+    } else {
+      return formatMonthRangeDisplay(currentDate);
     }
   }, [view, currentDate, weekDays]);
+
+  const todayKey = formatDateKey(new Date());
 
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[#091329] flex items-center gap-2.5">
-            <CalendarDays className="h-7 w-7 text-[#091329]" /> Visit Schedule
+          <h1 className="text-2xl font-bold tracking-tight text-[#091329] flex items-center gap-2">
+            <CalendarDays className="h-6 w-6 text-[#091329]" /> Visit Schedule
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Care visit scheduling, caregiver allocations, and multi-day dispatch calendar.
+            Care visit scheduling, employee allocations, and multi-day dispatch calendar.
           </p>
         </div>
 
-        {/* Top Actions */}
-        <div className="flex flex-wrap items-center gap-3">
-          {/* View Toggles */}
-          <div className="inline-flex bg-slate-100 p-1 rounded-lg border border-slate-200/90 shadow-2xs">
-            {(["day", "week", "month"] as CalendarView[]).map((v) => (
-              <button
-                key={v}
-                onClick={() => setView(v)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md capitalize transition-colors ${
-                  view === v
-                    ? "bg-white text-[#091329] shadow-xs font-bold"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                {v}
-              </button>
-            ))}
-          </div>
-
-          {/* Quick Refresh */}
+        {/* Top Action Buttons */}
+        <div className="flex items-center gap-2.5">
           <button
             onClick={() => refreshVisits()}
             disabled={loading}
-            title="Refresh Visits"
-            className="p-2 border border-slate-200 bg-white rounded-lg text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-2xs"
+            title="Refresh Schedule"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh
           </button>
 
-          {/* Schedule Visit Button */}
           {canManage && (
             <button
               onClick={() => {
-                setScheduleModalDefaultDate(formatDateKey(currentDate));
+                setScheduleModalDefaultDate(formatDateKey(new Date()));
                 setShowScheduleModal(true);
               }}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[#091329] text-white text-sm font-semibold rounded-lg hover:bg-[#162850] shadow-sm transition-colors"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#091329] rounded-lg hover:bg-[#162850] transition-colors shadow-2xs"
             >
               <Plus className="h-4 w-4" /> Schedule Visit
             </button>
@@ -337,10 +456,11 @@ export function VisitScheduleCalendar({
         </div>
       </div>
 
-      {/* Date Navigation Bar */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      {/* Control Bar: Date Navigation + View Switcher */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        {/* Navigation & Date Display */}
         <div className="flex items-center gap-3">
-          <div className="inline-flex items-center rounded-lg border border-slate-200 overflow-hidden shadow-2xs">
+          <div className="inline-flex items-center rounded-lg border border-slate-200 bg-white overflow-hidden shadow-2xs">
             <button
               onClick={handlePrev}
               aria-label="Previous date range"
@@ -368,13 +488,44 @@ export function VisitScheduleCalendar({
           </span>
 
           {loading && (
-            <span className="text-xs text-slate-400 animate-pulse font-medium">Updating...</span>
+            <span className="text-xs text-slate-400 flex items-center gap-1">
+              <RefreshCw className="h-3 w-3 animate-spin" /> Updating...
+            </span>
           )}
         </div>
 
-        <div className="text-xs text-slate-500 font-medium">
-          Showing <span className="font-bold text-slate-900">{visits.length}</span> care visit
-          {visits.length === 1 ? "" : "s"}
+        {/* View Switcher: Day, Week, Month */}
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 self-start md:self-auto">
+          <button
+            onClick={() => setView("day")}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+              view === "day"
+                ? "bg-white text-[#091329] shadow-2xs border border-slate-200/60"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            Day
+          </button>
+          <button
+            onClick={() => setView("week")}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+              view === "week"
+                ? "bg-white text-[#091329] shadow-2xs border border-slate-200/60"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            Week
+          </button>
+          <button
+            onClick={() => setView("month")}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+              view === "month"
+                ? "bg-white text-[#091329] shadow-2xs border border-slate-200/60"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            Month
+          </button>
         </div>
       </div>
 
@@ -393,17 +544,17 @@ export function VisitScheduleCalendar({
             />
           </div>
 
-          {/* Caregiver Filter */}
+          {/* Employee Filter */}
           <div>
             <select
-              value={selectedCaregiver}
-              onChange={(e) => setSelectedCaregiver(e.target.value)}
+              value={selectedEmployeeFilter}
+              onChange={(e) => setSelectedEmployeeFilter(e.target.value)}
               className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#091329]/15 focus:border-[#091329]"
             >
-              <option value="ALL">All Caregivers</option>
+              <option value="ALL">All Employees</option>
               {initialFormData.employees.map((emp) => (
                 <option key={emp.id} value={emp.id}>
-                  {emp.firstName} {emp.lastName} ({emp.designation})
+                  {emp.displayName || `${emp.firstName} ${emp.lastName} (${emp.designation})`}
                 </option>
               ))}
             </select>
@@ -440,42 +591,53 @@ export function VisitScheduleCalendar({
           </div>
 
           {/* Location Filter */}
-          <div>
+          <div className="relative">
+            <MapPin className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Filter by city / area..."
+              placeholder="Filter location / address..."
               value={selectedLocation}
               onChange={(e) => setSelectedLocation(e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#091329]/15 focus:border-[#091329]"
+              className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#091329]/15 focus:border-[#091329]"
             />
           </div>
         </div>
 
-        {isFiltered && (
-          <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-xs text-slate-500">
-            <span>Filtered results active</span>
+        {/* Active Filters Row */}
+        {activeFiltersCount > 0 && (
+          <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+            <span className="text-slate-500">
+              Filtering by {activeFiltersCount} active criteria · {visits.length} visit{visits.length === 1 ? "" : "s"} found
+            </span>
             <button
-              onClick={resetFilters}
-              className="text-[#B08A4A] font-semibold hover:underline inline-flex items-center gap-1"
+              onClick={clearFilters}
+              className="text-[#091329] hover:underline font-semibold inline-flex items-center gap-1"
             >
-              <X className="h-3 w-3" /> Reset all filters
+              <X className="h-3 w-3" /> Clear all filters
             </button>
           </div>
         )}
       </div>
 
+      {/* Action Error Banner */}
       {actionError && (
-        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-center justify-between">
-          <span>{actionError}</span>
-          <button onClick={() => setActionError(null)}>
-            <X className="h-4 w-4 text-rose-400 hover:text-rose-600" />
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-3 text-rose-800 text-xs animate-in fade-in duration-200">
+          <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-semibold">Operation failed</p>
+            <p className="mt-0.5">{actionError}</p>
+          </div>
+          <button onClick={() => setActionError(null)} className="text-rose-400 hover:text-rose-600">
+            <X className="h-4 w-4" />
           </button>
         </div>
       )}
 
-      {/* Main Calendar View Area */}
+      {/* ========================================================================= */}
+      {/* 1. WEEKLY MULTI-DAY VIEW (PRIMARY / REFERENCE INSPIRED)                   */}
+      {/* ========================================================================= */}
       {view === "week" && (
-        <div className="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
           {/* Horizontal scroll container for full multi-day view */}
           <div className="overflow-x-auto">
             <div className="grid grid-cols-7 min-w-[1100px] divide-x divide-slate-200 border-b border-slate-200">
@@ -555,67 +717,70 @@ export function VisitScheduleCalendar({
                       </div>
                     ) : (
                       <>
-                        {dayVisits.map((visit) => (
-                          <div
-                            key={visit.id}
-                            onClick={() => setSelectedVisit(visit)}
-                            className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs hover:border-[#091329]/60 hover:shadow-sm transition-all cursor-pointer space-y-2.5 text-left group"
-                          >
-                            {/* Badges row */}
-                            <div className="flex items-center justify-between gap-1 flex-wrap">
-                              {renderCategoryBadge(visit.category)}
-                              {renderStatusBadge(visit.status)}
-                            </div>
+                        {dayVisits.map((visit) => {
+                          const assignedPerson = visit.assignedEmployee || visit.assignedCaregiver;
+                          return (
+                            <div
+                              key={visit.id}
+                              onClick={() => setSelectedVisit(visit)}
+                              className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs hover:border-[#091329]/60 hover:shadow-sm transition-all cursor-pointer space-y-2.5 text-left group"
+                            >
+                              {/* Badges row */}
+                              <div className="flex items-center justify-between gap-1 flex-wrap">
+                                {renderCategoryBadge(visit.category)}
+                                {renderStatusBadge(visit.status)}
+                              </div>
 
-                            {/* Recipient & Member */}
-                            <div>
-                              <p className="text-xs font-bold text-slate-900 group-hover:text-[#091329] line-clamp-1">
-                                {visit.elder.firstName} {visit.elder.lastName}
-                              </p>
-                              <div className="flex items-center gap-1.5 mt-0.5">
-                                {visit.member.memberId ? (
-                                  <span className="font-mono text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-1 rounded">
-                                    {visit.member.memberId}
+                              {/* Recipient & Member */}
+                              <div>
+                                <p className="text-xs font-bold text-slate-900 group-hover:text-[#091329] line-clamp-1">
+                                  {visit.elder.firstName} {visit.elder.lastName}
+                                </p>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  {visit.member.memberId ? (
+                                    <span className="font-mono text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-1 rounded">
+                                      {visit.member.memberId}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-400 truncate max-w-[120px]">
+                                      {visit.member.name}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Time & Duration */}
+                              <div className="flex items-center gap-1.5 text-[11px] text-slate-600 font-medium">
+                                <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                <span>
+                                  {formatTimeIST(visit.scheduledStart)} – {formatTimeIST(visit.scheduledEnd)}
+                                </span>
+                              </div>
+
+                              {/* Assigned Employee */}
+                              <div className="flex items-center gap-1.5 text-[11px] text-slate-700">
+                                <User className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                {assignedPerson ? (
+                                  <span className="font-medium truncate">
+                                    {assignedPerson.firstName} {assignedPerson.lastName}
                                   </span>
                                 ) : (
-                                  <span className="text-[10px] text-slate-400 truncate max-w-[120px]">
-                                    {visit.member.name}
+                                  <span className="text-amber-700 font-medium text-[10px] bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60">
+                                    Unassigned
                                   </span>
                                 )}
                               </div>
-                            </div>
 
-                            {/* Time & Duration */}
-                            <div className="flex items-center gap-1.5 text-[11px] text-slate-600 font-medium">
-                              <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                              <span>
-                                {formatTimeIST(visit.scheduledStart)} – {formatTimeIST(visit.scheduledEnd)}
-                              </span>
-                            </div>
-
-                            {/* Assigned Caregiver */}
-                            <div className="flex items-center gap-1.5 text-[11px] text-slate-700">
-                              <User className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                              {visit.assignedCaregiver ? (
-                                <span className="font-medium truncate">
-                                  {visit.assignedCaregiver.firstName} {visit.assignedCaregiver.lastName}
-                                </span>
-                              ) : (
-                                <span className="text-amber-700 font-medium text-[10px] bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60">
-                                  Unassigned
-                                </span>
+                              {/* Address Snippet */}
+                              {visit.member.serviceAddress && (
+                                <div className="flex items-start gap-1 text-[10px] text-slate-500 pt-1 border-t border-slate-100">
+                                  <MapPin className="h-3 w-3 text-slate-400 shrink-0 mt-0.5" />
+                                  <span className="line-clamp-1">{visit.member.serviceAddress}</span>
+                                </div>
                               )}
                             </div>
-
-                            {/* Address Snippet */}
-                            {visit.member.serviceAddress && (
-                              <div className="flex items-start gap-1 text-[10px] text-slate-500 pt-1 border-t border-slate-100">
-                                <MapPin className="h-3 w-3 text-slate-400 shrink-0 mt-0.5" />
-                                <span className="line-clamp-1">{visit.member.serviceAddress}</span>
-                              </div>
-                            )}
-                          </div>
-                        ))}
+                          );
+                        })}
 
                         {canManage && (
                           <button
@@ -623,9 +788,9 @@ export function VisitScheduleCalendar({
                               setScheduleModalDefaultDate(dayKey);
                               setShowScheduleModal(true);
                             }}
-                            className="w-full py-1.5 text-[11px] font-medium text-slate-500 hover:text-slate-900 border border-dashed border-slate-200 hover:border-slate-300 rounded-lg transition-colors flex items-center justify-center gap-1"
+                            className="w-full py-1.5 text-center text-[11px] font-medium text-slate-500 hover:text-[#091329] border border-dashed border-slate-200 hover:border-slate-300 rounded-lg transition-colors"
                           >
-                            <Plus className="h-3 w-3" /> Add Visit
+                            + Add Visit
                           </button>
                         )}
                       </>
@@ -638,122 +803,128 @@ export function VisitScheduleCalendar({
         </div>
       )}
 
-      {/* Daily View */}
+      {/* ========================================================================= */}
+      {/* 2. DAILY VIEW (CHRONOLOGICAL TIMELINE)                                    */}
+      {/* ========================================================================= */}
       {view === "day" && (
-        <div className="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-4">
-          <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-            <div>
-              <h2 className="text-base font-bold text-[#091329]">{formatDateIST(currentDate)}</h2>
-              <p className="text-xs text-slate-500">{formatDayOfWeek(currentDate)} schedule timeline</p>
-            </div>
-            {canManage && (
-              <button
-                onClick={() => {
-                  setScheduleModalDefaultDate(formatDateKey(currentDate));
-                  setShowScheduleModal(true);
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#091329] text-white text-xs font-semibold rounded-lg hover:bg-[#162850] shadow-sm transition-colors"
-              >
-                <Plus className="h-3.5 w-3.5" /> Add Visit
-              </button>
-            )}
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <h2 className="text-base font-bold text-[#091329]">
+              Schedule for {formatDateIST(currentDate)}
+            </h2>
+            <span className="text-xs text-slate-500">
+              {(visitsByDate.get(formatDateKey(currentDate)) || []).length} visits scheduled
+            </span>
           </div>
 
-          {visits.length === 0 ? (
-            <div className="py-16 text-center text-slate-400 border border-dashed border-slate-200 rounded-xl space-y-2">
-              <CalendarIcon className="h-8 w-8 mx-auto text-slate-300" />
-              <p className="text-sm font-medium text-slate-700">No visits scheduled for this day</p>
-              <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                No care appointments are planned for {formatDateIST(currentDate)}.
-              </p>
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {visits.map((visit) => (
-                <div
-                  key={visit.id}
-                  onClick={() => setSelectedVisit(visit)}
-                  className="py-4 hover:bg-slate-50/60 transition-colors rounded-lg px-3 cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4"
-                >
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-slate-900">
-                        {visit.elder.firstName} {visit.elder.lastName}
-                      </span>
-                      {visit.member.memberId && (
-                        <span className="font-mono text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-1.5 py-0.5 rounded">
-                          {visit.member.memberId}
-                        </span>
-                      )}
-                      {renderCategoryBadge(visit.category)}
-                      {renderStatusBadge(visit.status)}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-3.5 w-3.5 text-slate-400" />
-                        {formatTimeIST(visit.scheduledStart)} – {formatTimeIST(visit.scheduledEnd)}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <User className="h-3.5 w-3.5 text-slate-400" />
-                        Caregiver: {visit.assignedCaregiver ? `${visit.assignedCaregiver.firstName} ${visit.assignedCaregiver.lastName}` : "Unassigned"}
-                      </span>
-                      {visit.member.serviceAddress && (
-                        <span className="flex items-center gap-1 truncate max-w-xs">
-                          <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                          {visit.member.serviceAddress}
-                        </span>
-                      )}
-                    </div>
-                    {visit.operationalNotes && (
-                      <p className="text-xs text-slate-500 italic line-clamp-1">{visit.operationalNotes}</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 self-end md:self-auto shrink-0">
+          {(() => {
+            const dayKey = formatDateKey(currentDate);
+            const dayVisits = visitsByDate.get(dayKey) || [];
+
+            if (dayVisits.length === 0) {
+              return (
+                <div className="py-12 text-center text-slate-400 space-y-2">
+                  <CalendarDays className="h-10 w-10 mx-auto text-slate-300" />
+                  <p className="text-sm">No care visits scheduled for this date.</p>
+                  {canManage && (
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedVisit(visit);
+                      onClick={() => {
+                        setScheduleModalDefaultDate(dayKey);
+                        setShowScheduleModal(true);
                       }}
-                      className="text-xs font-semibold text-[#091329] hover:underline inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors"
+                      className="mt-2 px-3 py-1.5 text-xs font-semibold bg-[#091329] text-white rounded-lg hover:bg-[#162850]"
                     >
-                      View Details <ArrowRight className="h-3 w-3" />
+                      Schedule Visit
                     </button>
-                  </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          )}
+              );
+            }
+
+            return (
+              <div className="space-y-3">
+                {dayVisits.map((visit) => {
+                  const assignedPerson = visit.assignedEmployee || visit.assignedCaregiver;
+                  return (
+                    <div
+                      key={visit.id}
+                      onClick={() => setSelectedVisit(visit)}
+                      className="p-4 rounded-xl border border-slate-200 hover:border-[#091329]/50 transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sm text-[#091329]">
+                            {visit.elder.firstName} {visit.elder.lastName}
+                          </span>
+                          {visit.member.memberId && (
+                            <span className="font-mono text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded">
+                              {visit.member.memberId}
+                            </span>
+                          )}
+                          {renderCategoryBadge(visit.category)}
+                          {renderStatusBadge(visit.status)}
+                        </div>
+                        <div className="flex items-center gap-4 text-xs text-slate-500">
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3.5 w-3.5 text-slate-400" />
+                            {formatTimeIST(visit.scheduledStart)} – {formatTimeIST(visit.scheduledEnd)}
+                          </span>
+                          <span>·</span>
+                          <span className="flex items-center gap-1">
+                            <User className="h-3.5 w-3.5 text-slate-400" />
+                            Employee: {assignedPerson ? `${assignedPerson.firstName} ${assignedPerson.lastName}` : "Unassigned"}
+                          </span>
+                        </div>
+                        {visit.member.serviceAddress && (
+                          <p className="text-xs text-slate-500 flex items-center gap-1">
+                            <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                            {visit.member.serviceAddress}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 self-end sm:self-auto text-xs text-slate-400 font-medium">
+                        Click for details <ArrowRight className="h-3.5 w-3.5" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
 
-      {/* Monthly View */}
+      {/* ========================================================================= */}
+      {/* 3. MONTHLY VIEW (CALENDAR GRID)                                           */}
+      {/* ========================================================================= */}
       {view === "month" && (
-        <div className="bg-white rounded-xl border border-slate-200/90 shadow-sm p-5 space-y-4">
-          <div className="grid grid-cols-7 gap-2 text-center text-xs font-bold text-slate-500 uppercase tracking-wider pb-2 border-b border-slate-100">
-            <div>Mon</div>
-            <div>Tue</div>
-            <div>Wed</div>
-            <div>Thu</div>
-            <div>Fri</div>
-            <div>Sat</div>
-            <div>Sun</div>
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 space-y-4">
+          <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold text-slate-500 pb-2 border-b border-slate-100">
+            <span>Mon</span>
+            <span>Tue</span>
+            <span>Wed</span>
+            <span>Thu</span>
+            <span>Fri</span>
+            <span>Sat</span>
+            <span>Sun</span>
           </div>
 
           <div className="grid grid-cols-7 gap-2">
-            {/* Generate calendar matrix */}
             {(() => {
               const year = currentDate.getFullYear();
               const month = currentDate.getMonth();
+
               const firstDayOfMonth = new Date(year, month, 1);
               const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-              // 0 is Sunday, convert so Monday is 0
-              let startOffset = firstDayOfMonth.getDay() - 1;
-              if (startOffset === -1) startOffset = 6;
+              let startingDay = firstDayOfMonth.getDay(); // 0 is Sunday
+              startingDay = startingDay === 0 ? 6 : startingDay - 1; // Align to Monday = 0
 
               const cells = [];
-              for (let i = 0; i < startOffset; i++) {
-                cells.push(<div key={`blank-${i}`} className="min-h-[90px] bg-slate-50/40 rounded-lg border border-transparent" />);
+              for (let i = 0; i < startingDay; i++) {
+                cells.push(
+                  <div key={`empty-${i}`} className="min-h-[100px] p-2 bg-slate-50/40 rounded-lg border border-transparent" />
+                );
               }
 
               for (let d = 1; d <= daysInMonth; d++) {
@@ -796,17 +967,13 @@ export function VisitScheduleCalendar({
                       {cellVisits.slice(0, 2).map((v) => (
                         <div
                           key={v.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedVisit(v);
-                          }}
-                          className="text-[10px] truncate px-1.5 py-0.5 rounded bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-800 font-medium"
+                          className="text-[10px] truncate px-1.5 py-0.5 rounded bg-slate-100 font-medium text-slate-800"
                         >
-                          {v.elder.firstName}: {formatTimeIST(v.scheduledStart)}
+                          {formatTimeIST(v.scheduledStart)} · {v.elder.firstName}
                         </div>
                       ))}
                       {cellVisits.length > 2 && (
-                        <p className="text-[9px] text-slate-400 font-semibold pl-1">
+                        <p className="text-[9px] text-slate-400 font-medium pl-1">
                           +{cellVisits.length - 2} more
                         </p>
                       )}
@@ -822,11 +989,11 @@ export function VisitScheduleCalendar({
       )}
 
       {/* ========================================================================= */}
-      {/* 1. VISIT DETAILS MODAL                                                    */}
+      {/* MODAL 1: CARE VISIT DETAILS MODAL                                         */}
       {/* ========================================================================= */}
       {selectedVisit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-xl w-full border border-slate-200 shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden">
             {/* Modal Header */}
             <div className="px-6 py-4 bg-[#091329] text-white flex items-center justify-between">
               <div>
@@ -873,51 +1040,60 @@ export function VisitScheduleCalendar({
                       {selectedVisit.member.memberId}
                     </span>
                   ) : (
-                    <span className="text-xs text-slate-400">UNASSIGNED MID</span>
+                    <p className="text-xs text-slate-400">{selectedVisit.member.email}</p>
                   )}
                 </div>
               </div>
 
-              {/* Schedule & Timing */}
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Schedule & Duration</p>
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div className="p-3 bg-white border border-slate-200 rounded-lg">
-                    <span className="text-slate-400 block mb-0.5">Scheduled Date</span>
-                    <span className="font-semibold text-slate-900 text-sm">{formatDateIST(selectedVisit.scheduledStart)}</span>
+              {/* Timing */}
+              <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-2">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Schedule & Timing (IST)</p>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-slate-800 font-bold">
+                    <CalendarIcon className="h-4 w-4 text-[#B08A4A]" />
+                    {formatDateIST(selectedVisit.scheduledStart)}
                   </div>
-                  <div className="p-3 bg-white border border-slate-200 rounded-lg">
-                    <span className="text-slate-400 block mb-0.5">Scheduled Time (IST)</span>
-                    <span className="font-semibold text-slate-900 text-sm">
-                      {formatTimeIST(selectedVisit.scheduledStart)} – {formatTimeIST(selectedVisit.scheduledEnd)}
-                    </span>
+                  <div className="flex items-center gap-1.5 text-slate-700 font-semibold text-xs">
+                    <Clock className="h-4 w-4 text-slate-400" />
+                    {formatTimeIST(selectedVisit.scheduledStart)} – {formatTimeIST(selectedVisit.scheduledEnd)}
                   </div>
                 </div>
-              </div>
-
-              {/* Assigned Caregiver */}
-              <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-1">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Assigned Caregiver</p>
-                {selectedVisit.assignedCaregiver ? (
-                  <div className="flex items-center justify-between pt-1">
-                    <div>
-                      <p className="font-bold text-slate-900 text-sm">
-                        {selectedVisit.assignedCaregiver.firstName} {selectedVisit.assignedCaregiver.lastName}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {selectedVisit.assignedCaregiver.designation} · ID: {selectedVisit.assignedCaregiver.employeeId}
-                      </p>
-                    </div>
-                    {selectedVisit.assignedCaregiver.contactNumber && (
-                      <span className="text-xs font-mono text-slate-600 bg-slate-100 px-2 py-1 rounded">
-                        {selectedVisit.assignedCaregiver.contactNumber}
-                      </span>
-                    )}
+                {(selectedVisit.actualStart || selectedVisit.actualEnd) && (
+                  <div className="pt-2 border-t border-slate-100 text-xs text-slate-500 flex items-center justify-between">
+                    <span>Actual Start: {selectedVisit.actualStart ? formatTimeIST(selectedVisit.actualStart) : "—"}</span>
+                    <span>Actual End: {selectedVisit.actualEnd ? formatTimeIST(selectedVisit.actualEnd) : "—"}</span>
                   </div>
-                ) : (
-                  <p className="text-xs text-amber-700 font-semibold pt-1">No caregiver currently assigned.</p>
                 )}
               </div>
+
+              {/* Assigned Employee */}
+              {(() => {
+                const assignedPerson = selectedVisit.assignedEmployee || selectedVisit.assignedCaregiver;
+                return (
+                  <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-1">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Assigned Employee</p>
+                    {assignedPerson ? (
+                      <div className="flex items-center justify-between pt-1">
+                        <div>
+                          <p className="font-bold text-slate-900 text-sm">
+                            {assignedPerson.firstName} {assignedPerson.lastName}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {assignedPerson.designation} · ID: {assignedPerson.employeeId}
+                          </p>
+                        </div>
+                        {assignedPerson.contactNumber && (
+                          <span className="text-xs font-mono text-slate-600 bg-slate-100 px-2 py-1 rounded">
+                            {assignedPerson.contactNumber}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-amber-700 font-semibold pt-1">No employee currently assigned.</p>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Address */}
               <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-1">
@@ -981,11 +1157,11 @@ export function VisitScheduleCalendar({
       )}
 
       {/* ========================================================================= */}
-      {/* 2. SCHEDULE NEW VISIT MODAL                                               */}
+      {/* MODAL 2: SCHEDULE NEW VISIT MODAL                                         */}
       {/* ========================================================================= */}
       {showScheduleModal && canManage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-xl overflow-hidden">
             <div className="px-6 py-4 bg-[#091329] text-white flex items-center justify-between">
               <h3 className="font-bold text-base text-white flex items-center gap-2">
                 <Plus className="h-5 w-5 text-[#B08A4A]" /> Schedule Care Visit
@@ -1003,9 +1179,9 @@ export function VisitScheduleCalendar({
                 const fd = new FormData(e.currentTarget);
                 const res = await createScheduleVisit({
                   caseSelectionId: fd.get("caseSelectionId") as string,
-                  date: fd.get("date") as string,
-                  startTime: fd.get("startTime") as string,
-                  endTime: fd.get("endTime") as string,
+                  date: scheduleDate,
+                  startTime: scheduleStartTime,
+                  endTime: scheduleEndTime,
                   assignedEmpId: (fd.get("assignedEmpId") as string) || undefined,
                   category: (fd.get("category") as any) || "Scheduled",
                   status: (fd.get("status") as string) || "SCHEDULED",
@@ -1035,22 +1211,37 @@ export function VisitScheduleCalendar({
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Date *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Date (IST) *</label>
                   <input
                     type="date"
                     name="date"
-                    defaultValue={scheduleModalDefaultDate || formatDateKey(new Date())}
+                    value={scheduleDate}
+                    onChange={(e) => setScheduleDate(e.target.value)}
                     required
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Start Time *</label>
-                  <input type="time" name="startTime" defaultValue="10:00" required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs" />
+                  <label className="block font-semibold text-slate-700 mb-1">Start Time (IST) *</label>
+                  <input
+                    type="time"
+                    name="startTime"
+                    value={scheduleStartTime}
+                    onChange={(e) => setScheduleStartTime(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
+                  />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">End Time *</label>
-                  <input type="time" name="endTime" defaultValue="12:00" required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs" />
+                  <label className="block font-semibold text-slate-700 mb-1">End Time (IST) *</label>
+                  <input
+                    type="time"
+                    name="endTime"
+                    value={scheduleEndTime}
+                    onChange={(e) => setScheduleEndTime(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
+                  />
                 </div>
               </div>
 
@@ -1073,15 +1264,47 @@ export function VisitScheduleCalendar({
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Assign Caregiver</label>
-                <select name="assignedEmpId" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-slate-700">Assign Employee</label>
+                  {scheduleAvailLoading && (
+                    <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                      <RefreshCw className="h-2.5 w-2.5 animate-spin" /> Checking availability...
+                    </span>
+                  )}
+                </div>
+                <select
+                  name="assignedEmpId"
+                  value={scheduleAssignedEmp}
+                  onChange={(e) => setScheduleAssignedEmp(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
+                >
                   <option value="">-- Leave Unassigned --</option>
-                  {initialFormData.employees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.firstName} {emp.lastName} ({emp.designation})
-                    </option>
-                  ))}
+                  {initialFormData.employees.map((emp) => {
+                    const avail = scheduleEmpAvailability.find((a) => a.employeeId === emp.id);
+                    const isOccupied = avail && !avail.available;
+                    return (
+                      <option
+                        key={emp.id}
+                        value={emp.id}
+                        disabled={isOccupied}
+                        className={isOccupied ? "text-slate-400 bg-slate-100 italic" : "text-slate-900"}
+                      >
+                        {emp.displayName || `${emp.firstName} ${emp.lastName}`} — {isOccupied ? `Occupied (${avail?.conflictTime || "Overlapping Visit"})` : "Available"}
+                      </option>
+                    );
+                  })}
                 </select>
+                {(() => {
+                  const selectedAvail = scheduleEmpAvailability.find((a) => a.employeeId === scheduleAssignedEmp);
+                  if (scheduleAssignedEmp && selectedAvail && !selectedAvail.available) {
+                    return (
+                      <p className="text-rose-600 text-[11px] font-medium mt-1">
+                        ⚠️ The selected employee is occupied during this time window. Please choose an available employee.
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               <div>
@@ -1104,7 +1327,13 @@ export function VisitScheduleCalendar({
                 </button>
                 <button
                   type="submit"
-                  disabled={actionLoading}
+                  disabled={
+                    actionLoading ||
+                    Boolean(
+                      scheduleAssignedEmp &&
+                        scheduleEmpAvailability.find((a) => a.employeeId === scheduleAssignedEmp)?.available === false
+                    )
+                  }
                   className="px-5 py-2 bg-[#091329] text-white font-semibold rounded-lg hover:bg-[#162850] disabled:opacity-50"
                 >
                   {actionLoading ? "Scheduling..." : "Confirm Schedule"}
@@ -1116,11 +1345,11 @@ export function VisitScheduleCalendar({
       )}
 
       {/* ========================================================================= */}
-      {/* 3. RESCHEDULE VISIT MODAL                                                 */}
+      {/* MODAL 3: RESCHEDULE VISIT MODAL                                           */}
       {/* ========================================================================= */}
       {showRescheduleModal && selectedVisit && canManage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-xl overflow-hidden">
             <div className="px-6 py-4 bg-[#091329] text-white flex items-center justify-between">
               <h3 className="font-bold text-base text-white flex items-center gap-2">
                 <CalendarClock className="h-5 w-5 text-[#B08A4A]" /> Reschedule Visit
@@ -1136,15 +1365,18 @@ export function VisitScheduleCalendar({
                 setActionLoading(true);
                 setActionError(null);
                 const fd = new FormData(e.currentTarget);
-                const date = fd.get("date") as string;
-                const startTime = fd.get("startTime") as string;
-                const endTime = fd.get("endTime") as string;
                 const reason = fd.get("reason") as string;
 
-                const newStart = `${date}T${startTime}:00`;
-                const newEnd = `${date}T${endTime}:00`;
+                const newStart = `${rescheduleDate}T${rescheduleStartTime}:00`;
+                const newEnd = `${rescheduleDate}T${rescheduleEndTime}:00`;
 
-                const res = await rescheduleCareVisit(selectedVisit.id, newStart, newEnd, reason);
+                const res = await rescheduleCareVisit(
+                  selectedVisit.id,
+                  newStart,
+                  newEnd,
+                  reason,
+                  rescheduleAssignedEmp || null
+                );
                 setActionLoading(false);
                 if (res.success) {
                   setShowRescheduleModal(false);
@@ -1161,11 +1393,12 @@ export function VisitScheduleCalendar({
               </p>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">New Date *</label>
+                <label className="block font-semibold text-slate-700 mb-1">New Date (IST) *</label>
                 <input
                   type="date"
                   name="date"
-                  defaultValue={formatDateKey(selectedVisit.scheduledStart)}
+                  value={rescheduleDate}
+                  onChange={(e) => setRescheduleDate(e.target.value)}
                   required
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
                 />
@@ -1173,33 +1406,93 @@ export function VisitScheduleCalendar({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Start Time *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Start Time (IST) *</label>
                   <input
                     type="time"
                     name="startTime"
-                    defaultValue="10:00"
+                    value={rescheduleStartTime}
+                    onChange={(e) => setRescheduleStartTime(e.target.value)}
                     required
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">End Time *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">End Time (IST) *</label>
                   <input
                     type="time"
                     name="endTime"
-                    defaultValue="12:00"
+                    value={rescheduleEndTime}
+                    onChange={(e) => setRescheduleEndTime(e.target.value)}
                     required
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
                   />
                 </div>
               </div>
 
+              {/* Employee Availability & Conflict Banner */}
+              {(() => {
+                const assignedPerson = selectedVisit.assignedEmployee || selectedVisit.assignedCaregiver;
+                const activeEmpId = rescheduleAssignedEmp || assignedPerson?.id;
+                const empAvail = rescheduleEmpAvailability.find((a) => a.employeeId === activeEmpId);
+                const isConflict = Boolean(activeEmpId && empAvail && !empAvail.available);
+
+                return (
+                  <div className="space-y-2 pt-1 border-t border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <label className="block font-semibold text-slate-700">Assigned Employee</label>
+                      {rescheduleAvailLoading && (
+                        <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                          <RefreshCw className="h-2.5 w-2.5 animate-spin" /> Checking availability...
+                        </span>
+                      )}
+                    </div>
+
+                    {isConflict && (
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-[11px] space-y-1">
+                        <p className="font-semibold flex items-center gap-1">
+                          <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                          Employee Conflict Detected
+                        </p>
+                        <p>
+                          The assigned employee is occupied during this new time window ({empAvail?.conflictTime || "overlapping appointment"}). Please choose an available employee below or select another time slot.
+                        </p>
+                      </div>
+                    )}
+
+                    <select
+                      name="assignedEmpId"
+                      value={rescheduleAssignedEmp}
+                      onChange={(e) => setRescheduleAssignedEmp(e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg text-xs ${
+                        isConflict ? "border-amber-400 bg-amber-50/40" : "border-slate-300"
+                      }`}
+                    >
+                      <option value="">-- Leave Unassigned --</option>
+                      {initialFormData.employees.map((emp) => {
+                        const avail = rescheduleEmpAvailability.find((a) => a.employeeId === emp.id);
+                        const isOccupied = avail && !avail.available;
+                        return (
+                          <option
+                            key={emp.id}
+                            value={emp.id}
+                            disabled={isOccupied}
+                            className={isOccupied ? "text-slate-400 bg-slate-100 italic" : "text-slate-900"}
+                          >
+                            {emp.displayName || `${emp.firstName} ${emp.lastName}`} — {isOccupied ? `Occupied (${avail?.conflictTime || "Overlapping Visit"})` : "Available"}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                );
+              })()}
+
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Reason for Rescheduling</label>
                 <input
                   type="text"
                   name="reason"
-                  placeholder="e.g. Member requested morning slot, Caregiver unavailable..."
+                  placeholder="e.g. Member requested morning slot, Employee unavailable..."
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
                 />
               </div>
@@ -1214,7 +1507,13 @@ export function VisitScheduleCalendar({
                 </button>
                 <button
                   type="submit"
-                  disabled={actionLoading}
+                  disabled={
+                    actionLoading ||
+                    Boolean(
+                      rescheduleAssignedEmp &&
+                        rescheduleEmpAvailability.find((a) => a.employeeId === rescheduleAssignedEmp)?.available === false
+                    )
+                  }
                   className="px-5 py-2 bg-[#091329] text-white font-semibold rounded-lg hover:bg-[#162850] disabled:opacity-50"
                 >
                   {actionLoading ? "Saving..." : "Confirm Reschedule"}
@@ -1226,11 +1525,11 @@ export function VisitScheduleCalendar({
       )}
 
       {/* ========================================================================= */}
-      {/* 4. CHANGE STATUS MODAL                                                    */}
+      {/* MODAL 4: CHANGE STATUS MODAL                                              */}
       {/* ========================================================================= */}
       {showStatusModal && selectedVisit && canManage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-sm w-full border border-slate-200 shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-sm w-full border border-slate-200 shadow-xl overflow-hidden">
             <div className="px-5 py-3.5 bg-[#091329] text-white flex items-center justify-between">
               <h3 className="font-bold text-sm text-white flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-[#B08A4A]" /> Update Visit Status
@@ -1305,11 +1604,11 @@ export function VisitScheduleCalendar({
       )}
 
       {/* ========================================================================= */}
-      {/* 5. FULL EDIT VISIT MODAL                                                  */}
+      {/* MODAL 5: FULL EDIT VISIT MODAL                                            */}
       {/* ========================================================================= */}
       {showEditModal && selectedVisit && canManage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-xl overflow-hidden">
             <div className="px-6 py-4 bg-[#091329] text-white flex items-center justify-between">
               <h3 className="font-bold text-base text-white flex items-center gap-2">
                 <Edit2 className="h-5 w-5 text-[#B08A4A]" /> Edit Care Visit
@@ -1325,14 +1624,12 @@ export function VisitScheduleCalendar({
                 setActionLoading(true);
                 setActionError(null);
                 const fd = new FormData(e.currentTarget);
-                const date = fd.get("date") as string;
-                const startTime = fd.get("startTime") as string;
-                const endTime = fd.get("endTime") as string;
 
                 const res = await updateCareVisitDetails(selectedVisit.id, {
-                  scheduledStart: `${date}T${startTime}:00`,
-                  scheduledEnd: `${date}T${endTime}:00`,
-                  assignedEmpId: (fd.get("assignedEmpId") as string) || null,
+                  date: editDate,
+                  startTime: editStartTime,
+                  endTime: editEndTime,
+                  assignedEmpId: editAssignedEmp || null,
                   category: (fd.get("category") as any) || "Scheduled",
                   status: fd.get("status") as string,
                   operationalNotes: fd.get("notes") as string,
@@ -1351,31 +1648,34 @@ export function VisitScheduleCalendar({
             >
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Date</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Date (IST) *</label>
                   <input
                     type="date"
                     name="date"
-                    defaultValue={formatDateKey(selectedVisit.scheduledStart)}
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
                     required
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Start Time</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Start Time (IST) *</label>
                   <input
                     type="time"
                     name="startTime"
-                    defaultValue={formatTimeIST(selectedVisit.scheduledStart).includes(":") ? formatTimeIST(selectedVisit.scheduledStart) : "10:00"}
+                    value={editStartTime}
+                    onChange={(e) => setEditStartTime(e.target.value)}
                     required
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">End Time</label>
+                  <label className="block font-semibold text-slate-700 mb-1">End Time (IST) *</label>
                   <input
                     type="time"
                     name="endTime"
-                    defaultValue={formatTimeIST(selectedVisit.scheduledEnd).includes(":") ? formatTimeIST(selectedVisit.scheduledEnd) : "12:00"}
+                    value={editEndTime}
+                    onChange={(e) => setEditEndTime(e.target.value)}
                     required
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
                   />
@@ -1404,19 +1704,47 @@ export function VisitScheduleCalendar({
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Assigned Caregiver</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-slate-700">Assigned Employee</label>
+                  {editAvailLoading && (
+                    <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                      <RefreshCw className="h-2.5 w-2.5 animate-spin" /> Checking availability...
+                    </span>
+                  )}
+                </div>
                 <select
                   name="assignedEmpId"
-                  defaultValue={selectedVisit.assignedCaregiver?.id || ""}
+                  value={editAssignedEmp}
+                  onChange={(e) => setEditAssignedEmp(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
                 >
                   <option value="">-- Unassigned --</option>
-                  {initialFormData.employees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.firstName} {emp.lastName} ({emp.designation})
-                    </option>
-                  ))}
+                  {initialFormData.employees.map((emp) => {
+                    const avail = editEmpAvailability.find((a) => a.employeeId === emp.id);
+                    const isOccupied = avail && !avail.available;
+                    return (
+                      <option
+                        key={emp.id}
+                        value={emp.id}
+                        disabled={isOccupied}
+                        className={isOccupied ? "text-slate-400 bg-slate-100 italic" : "text-slate-900"}
+                      >
+                        {emp.displayName || `${emp.firstName} ${emp.lastName}`} — {isOccupied ? `Occupied (${avail?.conflictTime || "Overlapping Visit"})` : "Available"}
+                      </option>
+                    );
+                  })}
                 </select>
+                {(() => {
+                  const selectedAvail = editEmpAvailability.find((a) => a.employeeId === editAssignedEmp);
+                  if (editAssignedEmp && selectedAvail && !selectedAvail.available) {
+                    return (
+                      <p className="text-rose-600 text-[11px] font-medium mt-1">
+                        ⚠️ The selected employee is occupied during this time window. Please choose an available employee.
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               <div>
@@ -1439,7 +1767,13 @@ export function VisitScheduleCalendar({
                 </button>
                 <button
                   type="submit"
-                  disabled={actionLoading}
+                  disabled={
+                    actionLoading ||
+                    Boolean(
+                      editAssignedEmp &&
+                        editEmpAvailability.find((a) => a.employeeId === editAssignedEmp)?.available === false
+                    )
+                  }
                   className="px-5 py-2 bg-[#091329] text-white font-semibold rounded-lg hover:bg-[#162850] disabled:opacity-50"
                 >
                   {actionLoading ? "Saving..." : "Save Changes"}
@@ -1451,11 +1785,11 @@ export function VisitScheduleCalendar({
       )}
 
       {/* ========================================================================= */}
-      {/* 6. CANCEL VISIT CONFIRMATION MODAL                                        */}
+      {/* MODAL 6: CANCEL VISIT CONFIRMATION MODAL                                  */}
       {/* ========================================================================= */}
       {showCancelModal && selectedVisit && canManage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-sm w-full border border-slate-200 shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-sm w-full border border-slate-200 shadow-xl overflow-hidden">
             <div className="px-5 py-3.5 bg-rose-600 text-white flex items-center justify-between">
               <h3 className="font-bold text-sm text-white flex items-center gap-2">
                 <Ban className="h-4 w-4" /> Cancel Care Visit

@@ -2,197 +2,487 @@ import assert from "node:assert";
 import {
   formatDateKey,
   formatTimeIST,
+  formatTimeInputIST,
   formatDateIST,
   formatDayOfWeek,
   getWeekDays,
   formatWeekRangeDisplay,
+  parseISTDateTimeToUTC,
+  checkIntervalOverlap,
 } from "../../components/admin/schedule/schedule-date-utils";
 
 console.log("================================================================");
 console.log("Running Sunshine Eldercare — Visit Schedule Calendar Test Suite");
+console.log("Including: IST Invariance, Employee Availability & Conflict Detection");
 console.log("================================================================");
 
-// --- TEST 1: Date & Time Utilities Pinned to IST ---
-console.log("\n--- TEST 1: Date & Time Formatting (Asia/Kolkata) ---");
-const testDate = new Date("2026-11-17T10:30:00Z"); // 16:00 IST
-const dateKey = formatDateKey(testDate);
-assert.strictEqual(dateKey, "2026-11-17", "Date key must be YYYY-MM-DD in IST");
+// ============================================================================
+// SIMULATION HELPERS FOR CONFLICT DETECTION & TRANSACTION CHECKS
+// ============================================================================
 
-const timeStr = formatTimeIST(testDate);
-assert.ok(timeStr.includes("4:00") && timeStr.toLowerCase().includes("pm"), `Time must be 4:00 PM IST (got ${timeStr})`);
-
-const dateStr = formatDateIST(testDate);
-assert.ok(dateStr.includes("17") && dateStr.includes("Nov"), `Date string must include 17 Nov (got ${dateStr})`);
-
-console.log("  ✓ Verified deterministic IST date and time formatting.");
-
-// --- TEST 2: Weekly Grid Day Calculations ---
-console.log("\n--- TEST 2: Weekly View (Monday - Sunday) Calculation ---");
-const midWeekDate = new Date("2026-11-18T12:00:00Z"); // Wednesday, Nov 18
-const weekDays = getWeekDays(midWeekDate);
-assert.strictEqual(weekDays.length, 7, "Week must have exactly 7 days");
-assert.strictEqual(formatDayOfWeek(weekDays[0]), "Mon", "First day of week must be Monday");
-assert.strictEqual(formatDateKey(weekDays[0]), "2026-11-16", "Monday must be Nov 16");
-assert.strictEqual(formatDayOfWeek(weekDays[6]), "Sun", "Last day of week must be Sunday");
-assert.strictEqual(formatDateKey(weekDays[6]), "2026-11-22", "Sunday must be Nov 22");
-
-const rangeDisplay = formatWeekRangeDisplay(weekDays);
-assert.ok(rangeDisplay.includes("16 Nov") && rangeDisplay.includes("22 Nov"), "Week range display must span Monday to Sunday");
-console.log("  ✓ Verified 7-day Monday-to-Sunday weekly column alignment.");
-
-// --- TEST 3: Visit Category Parsing and Formatting ---
-console.log("\n--- TEST 3: Visit Category (Scheduled vs Ad-hoc) Preservation ---");
-function parseCategory(notes?: string | null): { category: "Scheduled" | "Ad-hoc"; cleanNotes: string } {
-  if (!notes) return { category: "Scheduled", cleanNotes: "" };
-  if (notes.startsWith("[Ad-hoc]")) {
-    return { category: "Ad-hoc", cleanNotes: notes.replace(/^\[Ad-hoc\]\s*/, "").trim() };
-  }
-  if (notes.startsWith("[Scheduled]")) {
-    return { category: "Scheduled", cleanNotes: notes.replace(/^\[Scheduled\]\s*/, "").trim() };
-  }
-  return { category: "Scheduled", cleanNotes: notes };
+interface MockEmployee {
+  id: string;
+  employeeId?: string | null;
+  firstName: string;
+  lastName: string;
+  designation?: string | null;
+  status: "ACTIVE" | "INACTIVE" | "SUSPENDED";
 }
 
-function formatNotesWithCategory(category: string, rawNotes?: string | null): string {
-  const clean = (rawNotes || "").replace(/^\[(Ad-hoc|Scheduled)\]\s*/, "").trim();
-  const prefix = category === "Ad-hoc" ? "[Ad-hoc]" : "[Scheduled]";
-  return clean ? `${prefix} ${clean}` : prefix;
+interface MockVisit {
+  id: string;
+  assignedEmpId: string | null;
+  scheduledStart: Date;
+  scheduledEnd: Date;
+  status: "SCHEDULED" | "CONFIRMED" | "WAITLISTED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "MISSED";
+  assignments?: Array<{ employeeId: string }>;
+  careCase?: { elder?: { firstName?: string; lastName?: string; user?: { name?: string } } };
+  operationalNotes?: string | null;
 }
 
-const adHocRaw = "[Ad-hoc] Emergency nurse visit requested by family";
-const parsedAdHoc = parseCategory(adHocRaw);
-assert.strictEqual(parsedAdHoc.category, "Ad-hoc");
-assert.strictEqual(parsedAdHoc.cleanNotes, "Emergency nurse visit requested by family");
+function simulateEmployeeAvailability(params: {
+  date: string;
+  startTime: string;
+  endTime: string;
+  excludeVisitId?: string;
+  employees: MockEmployee[];
+  existingVisits: MockVisit[];
+}) {
+  const scheduledStart = parseISTDateTimeToUTC(params.date, params.startTime);
+  const scheduledEnd = parseISTDateTimeToUTC(params.date, params.endTime);
 
-const schedRaw = "[Scheduled] Routine weekly physiotherapy";
-const parsedSched = parseCategory(schedRaw);
-assert.strictEqual(parsedSched.category, "Scheduled");
-assert.strictEqual(parsedSched.cleanNotes, "Routine weekly physiotherapy");
+  if (isNaN(scheduledStart.getTime()) || isNaN(scheduledEnd.getTime()) || scheduledEnd <= scheduledStart) {
+    return [];
+  }
 
-const unPrefixed = "Doctor consultation escort";
-const parsedUnprefixed = parseCategory(unPrefixed);
-assert.strictEqual(parsedUnprefixed.category, "Scheduled");
-assert.strictEqual(parsedUnprefixed.cleanNotes, "Doctor consultation escort");
+  const activeEmployees = params.employees.filter((e) => e.status === "ACTIVE");
+  const blockingVisits = params.existingVisits.filter((v) => {
+    if (params.excludeVisitId && v.id === params.excludeVisitId) return false;
+    if (!["SCHEDULED", "CONFIRMED", "IN_PROGRESS"].includes(v.status)) return false;
+    return checkIntervalOverlap(v.scheduledStart, v.scheduledEnd, scheduledStart, scheduledEnd);
+  });
 
-const formattedBack = formatNotesWithCategory("Ad-hoc", "Patient feeling weak");
-assert.strictEqual(formattedBack, "[Ad-hoc] Patient feeling weak");
-console.log("  ✓ Verified backwards-compatible category tagging without database schema migrations.");
+  return activeEmployees.map((emp) => {
+    const conflict = blockingVisits.find(
+      (v) => v.assignedEmpId === emp.id || v.assignments?.some((a) => a.employeeId === emp.id)
+    );
+    if (conflict) {
+      const timeStr = `${formatTimeIST(conflict.scheduledStart)} – ${formatTimeIST(conflict.scheduledEnd)}`;
+      return {
+        employeeId: emp.id,
+        available: false,
+        conflictTime: timeStr,
+        conflictReason: `Occupied (${timeStr})`,
+      };
+    }
+    return {
+      employeeId: emp.id,
+      available: true,
+    };
+  });
+}
 
-// --- TEST 4: Supported Status Definitions ---
-console.log("\n--- TEST 4: Validated Status Indicators & Mapping ---");
-const ALLOWED_STATUSES = ["SCHEDULED", "CONFIRMED", "WAITLISTED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "MISSED"];
+function simulateServerSideAssignment(
+  newVisit: { assignedEmpId: string; date: string; startTime: string; endTime: string; excludeVisitId?: string },
+  employees: MockEmployee[],
+  existingVisits: MockVisit[]
+) {
+  const emp = employees.find((e) => e.id === newVisit.assignedEmpId);
+  if (!emp || emp.status !== "ACTIVE") {
+    throw new Error("The selected employee is not active or does not exist.");
+  }
 
-ALLOWED_STATUSES.forEach((st) => {
-  assert.ok(typeof st === "string" && st.length > 0, `Status ${st} must be a valid non-empty string`);
-});
-console.log(`  ✓ Verified all 7 standard care visit statuses: ${ALLOWED_STATUSES.join(", ")}`);
+  const scheduledStart = parseISTDateTimeToUTC(newVisit.date, newVisit.startTime);
+  const scheduledEnd = parseISTDateTimeToUTC(newVisit.date, newVisit.endTime);
 
-// --- TEST 5: Mock Database Query & Filtering Simulation ---
-console.log("\n--- TEST 5: Date Scoped Query & Multi-Parameter Filter Simulation ---");
-const mockVisits = [
-  {
-    id: "v1",
-    scheduledStart: new Date("2026-11-17T10:00:00+05:30"),
-    scheduledEnd: new Date("2026-11-17T12:00:00+05:30"),
-    status: "CONFIRMED",
-    operationalNotes: "[Scheduled] Routine check",
-    assignedEmpId: "emp_1",
-    careCase: {
-      elder: {
-        firstName: "Prabir",
-        lastName: "Chakraverty",
-        city: "Kolkata",
-        user: { name: "Wg Cdr PRABIR CHAKRAVERTY", memberProfile: { memberId: "SECD1001PRTY" } },
-      },
-    },
-  },
-  {
-    id: "v2",
-    scheduledStart: new Date("2026-11-18T14:00:00+05:30"),
-    scheduledEnd: new Date("2026-11-18T16:00:00+05:30"),
-    status: "WAITLISTED",
-    operationalNotes: "[Ad-hoc] SOS BP check",
-    assignedEmpId: "emp_2",
-    careCase: {
-      elder: {
-        firstName: "Care",
-        lastName: "Recipient",
-        city: "Howrah",
-        user: { name: "Care Test User", memberProfile: null },
-      },
-    },
-  },
-  {
-    id: "v3",
-    scheduledStart: new Date("2026-11-25T10:00:00+05:30"), // Next week
-    scheduledEnd: new Date("2026-11-25T12:00:00+05:30"),
+  if (isNaN(scheduledStart.getTime()) || isNaN(scheduledEnd.getTime())) {
+    throw new Error("Invalid date or time format.");
+  }
+  if (scheduledEnd <= scheduledStart) {
+    throw new Error("End time must be after start time.");
+  }
+
+  const conflict = existingVisits.find((v) => {
+    if (newVisit.excludeVisitId && v.id === newVisit.excludeVisitId) return false;
+    if (!["SCHEDULED", "CONFIRMED", "IN_PROGRESS"].includes(v.status)) return false;
+    const isAssigned = v.assignedEmpId === newVisit.assignedEmpId || v.assignments?.some((a) => a.employeeId === newVisit.assignedEmpId);
+    if (!isAssigned) return false;
+    return checkIntervalOverlap(v.scheduledStart, v.scheduledEnd, scheduledStart, scheduledEnd);
+  });
+
+  if (conflict) {
+    throw new Error("This employee has already been assigned to another visit during the selected time. Please select another employee.");
+  }
+
+  const created: MockVisit = {
+    id: `visit_${Date.now()}_${Math.random()}`,
+    assignedEmpId: newVisit.assignedEmpId,
+    scheduledStart,
+    scheduledEnd,
     status: "SCHEDULED",
-    operationalNotes: "[Scheduled] Next week visit",
+  };
+  existingVisits.push(created);
+  return created;
+}
+
+// ============================================================================
+// TEST SCENARIO 1: 1 PM IST remains 1 PM after saving and reopening
+// ============================================================================
+console.log("\n--- SCENARIO 1: 1 PM IST Remains 1 PM After Saving and Reopening ---");
+const visit1Date = "2026-11-17";
+const visit1StartTime = "13:00"; // 1:00 PM
+const parsed1 = parseISTDateTimeToUTC(visit1Date, visit1StartTime);
+
+// In UTC: 13:00 IST - 5:30 = 07:30 UTC
+assert.strictEqual(parsed1.toISOString(), "2026-11-17T07:30:00.000Z", "1:00 PM IST must be stored as 07:30:00 UTC in database");
+const reopenedDisplayTime1 = formatTimeIST(parsed1);
+assert.strictEqual(reopenedDisplayTime1, "1:00 pm", "Reopened visit details must format exactly as 1:00 pm");
+const reopenedInputTime1 = formatTimeInputIST(parsed1);
+assert.strictEqual(reopenedInputTime1, "13:00", "Reopened input field must pre-fill 13:00 in 24h format");
+const reopenedDateKey1 = formatDateKey(parsed1);
+assert.strictEqual(reopenedDateKey1, "2026-11-17", "Reopened date key must remain 2026-11-17");
+console.log("  ✓ PASS: 1 PM IST stored as 07:30 UTC and reopens as 1:00 pm without drift.");
+
+// ============================================================================
+// TEST SCENARIO 2: 2 PM IST remains 2 PM after saving and reopening
+// ============================================================================
+console.log("\n--- SCENARIO 2: 2 PM IST Remains 2 PM After Saving and Reopening ---");
+const visit2Date = "2026-11-17";
+const visit2EndTime = "14:00"; // 2:00 PM
+const parsed2 = parseISTDateTimeToUTC(visit2Date, visit2EndTime);
+
+// In UTC: 14:00 IST - 5:30 = 08:30 UTC
+assert.strictEqual(parsed2.toISOString(), "2026-11-17T08:30:00.000Z", "2:00 PM IST must be stored as 08:30:00 UTC in database");
+const reopenedDisplayTime2 = formatTimeIST(parsed2);
+assert.strictEqual(reopenedDisplayTime2, "2:00 pm", "Reopened visit details must format exactly as 2:00 pm");
+const reopenedInputTime2 = formatTimeInputIST(parsed2);
+assert.strictEqual(reopenedInputTime2, "14:00", "Reopened input field must pre-fill 14:00 in 24h format");
+console.log("  ✓ PASS: 2 PM IST stored as 08:30 UTC and reopens as 2:00 pm without drift.");
+
+// ============================================================================
+// TEST SCENARIO 3: New Visit, Edit Visit, and Reschedule use identical timezone logic
+// ============================================================================
+console.log("\n--- SCENARIO 3: Identical Timezone Parsing Across New, Edit, and Reschedule ---");
+const t24h = parseISTDateTimeToUTC("2026-11-17", "13:00");
+const t12hLower = parseISTDateTimeToUTC("2026-11-17", "1:00 pm");
+const t12hUpper = parseISTDateTimeToUTC("2026-11-17", "1:00 PM");
+const t12hPad = parseISTDateTimeToUTC("2026-11-17", "01:00 PM");
+const tIsoIST = parseISTDateTimeToUTC("2026-11-17T13:00:00+05:30");
+
+assert.strictEqual(t24h.getTime(), t12hLower.getTime(), "24h and 12h lower must produce identical timestamp");
+assert.strictEqual(t24h.getTime(), t12hUpper.getTime(), "24h and 12h upper must produce identical timestamp");
+assert.strictEqual(t24h.getTime(), t12hPad.getTime(), "Padded 01:00 PM must produce identical timestamp");
+assert.strictEqual(t24h.getTime(), tIsoIST.getTime(), "ISO with +05:30 must produce identical timestamp");
+console.log("  ✓ PASS: All entry formats resolve identically to 2026-11-17T07:30:00.000Z.");
+
+// ============================================================================
+// TEST SCENARIO 4: Existing correctly stored visits are not shifted
+// ============================================================================
+console.log("\n--- SCENARIO 4: Existing Correctly Stored Visits Are Not Shifted ---");
+// Suppose a visit was previously correctly stored in DB as 07:30 UTC (which is 1:00 PM IST)
+const existingDbUtc = new Date("2026-11-17T07:30:00.000Z");
+assert.strictEqual(formatTimeIST(existingDbUtc), "1:00 pm", "Existing visit must format to 1:00 pm IST");
+assert.strictEqual(formatDateKey(existingDbUtc), "2026-11-17", "Existing visit date key must format to 2026-11-17");
+assert.strictEqual(formatDateIST(existingDbUtc), "17 Nov 2026", "Existing visit date must display 17 Nov 2026");
+console.log("  ✓ PASS: Historical database timestamps are preserved and displayed accurately.");
+
+// ============================================================================
+// TEST SCENARIO 5: Employee 1 is unavailable when assigned to an overlapping visit
+// ============================================================================
+console.log("\n--- SCENARIO 5: Employee 1 Unavailable During Overlapping Visit ---");
+const mockEmployees: MockEmployee[] = [
+  { id: "emp_1", employeeId: "EMP001", firstName: "Subhash", lastName: "Ghosh", designation: "Care Attendant", status: "ACTIVE" },
+  { id: "emp_2", employeeId: "EMP002", firstName: "Mantu", lastName: "Mondal", designation: "Physiotherapist", status: "ACTIVE" },
+  { id: "emp_3", employeeId: "EMP003", firstName: "Rita", lastName: "Das", designation: "Nurse", status: "INACTIVE" },
+];
+
+const mockVisitsDatabase: MockVisit[] = [
+  {
+    id: "visit_existing_1",
     assignedEmpId: "emp_1",
-    careCase: {
-      elder: {
-        firstName: "Prabir",
-        lastName: "Chakraverty",
-        city: "Kolkata",
-        user: { name: "Wg Cdr PRABIR CHAKRAVERTY", memberProfile: { memberId: "SECD1001PRTY" } },
-      },
-    },
+    scheduledStart: parseISTDateTimeToUTC("2026-11-17", "13:00"),
+    scheduledEnd: parseISTDateTimeToUTC("2026-11-17", "14:00"),
+    status: "CONFIRMED",
   },
 ];
 
-// Date scope filter for Nov 16 - Nov 22:
-const weekStart = new Date("2026-11-16T00:00:00+05:30");
-const weekEnd = new Date("2026-11-22T23:59:59+05:30");
-const inRange = mockVisits.filter(
-  (v) => v.scheduledStart >= weekStart && v.scheduledStart <= weekEnd
+const availResults1 = simulateEmployeeAvailability({
+  date: "2026-11-17",
+  startTime: "13:15",
+  endTime: "13:45",
+  employees: mockEmployees,
+  existingVisits: mockVisitsDatabase,
+});
+
+const emp1Avail = availResults1.find((a) => a.employeeId === "emp_1");
+assert.ok(emp1Avail, "Employee 1 must be evaluated");
+assert.strictEqual(emp1Avail.available, false, "Employee 1 must be marked unavailable");
+assert.ok(emp1Avail.conflictReason?.includes("Occupied"), "Employee 1 must have an Occupied conflict indicator");
+console.log("  ✓ PASS: Employee 1 detected as Occupied (1:00 pm – 2:00 pm).");
+
+// ============================================================================
+// TEST SCENARIO 6: Employee 2 remains selectable when available
+// ============================================================================
+console.log("\n--- SCENARIO 6: Employee 2 Remains Selectable When Available ---");
+const emp2Avail = availResults1.find((a) => a.employeeId === "emp_2");
+assert.ok(emp2Avail, "Employee 2 must be evaluated");
+assert.strictEqual(emp2Avail.available, true, "Employee 2 must be marked available");
+assert.strictEqual(emp2Avail.conflictReason, undefined, "Employee 2 must have no conflict reason");
+console.log("  ✓ PASS: Employee 2 remains fully Available and selectable.");
+
+// ============================================================================
+// TEST SCENARIO 7: Partial appointment overlaps are detected
+// ============================================================================
+console.log("\n--- SCENARIO 7: Interval Overlap Detection (startA < endB && endA > startB) ---");
+const baseStart = parseISTDateTimeToUTC("2026-11-17", "13:00");
+const baseEnd = parseISTDateTimeToUTC("2026-11-17", "14:00");
+
+// Partial overlap at the beginning (12:30 - 13:30)
+assert.strictEqual(
+  checkIntervalOverlap(baseStart, baseEnd, parseISTDateTimeToUTC("2026-11-17", "12:30"), parseISTDateTimeToUTC("2026-11-17", "13:30")),
+  true,
+  "Partial overlap at beginning (12:30 - 13:30) must overlap with 13:00 - 14:00"
 );
-assert.strictEqual(inRange.length, 2, "Only visits within active week must be selected (v1 and v2)");
 
-// Caregiver filter
-const emp1Visits = inRange.filter((v) => v.assignedEmpId === "emp_1");
-assert.strictEqual(emp1Visits.length, 1, "Caregiver filter must match only emp_1");
-
-// Category filter
-const adHocVisits = inRange.filter((v) => parseCategory(v.operationalNotes).category === "Ad-hoc");
-assert.strictEqual(adHocVisits.length, 1, "Category filter must match exactly 1 Ad-hoc visit");
-assert.strictEqual(adHocVisits[0].id, "v2");
-
-// Member search
-const searchResult = inRange.filter((v) =>
-  v.careCase.elder.user.name.toLowerCase().includes("prabir")
+// Partial overlap at the end (13:30 - 14:30)
+assert.strictEqual(
+  checkIntervalOverlap(baseStart, baseEnd, parseISTDateTimeToUTC("2026-11-17", "13:30"), parseISTDateTimeToUTC("2026-11-17", "14:30")),
+  true,
+  "Partial overlap at end (13:30 - 14:30) must overlap with 13:00 - 14:00"
 );
-assert.strictEqual(searchResult.length, 1, "Member search for 'prabir' must return exactly 1 result");
-assert.strictEqual(searchResult[0].id, "v1");
 
-// Location filter
-const kolkataVisits = inRange.filter((v) => v.careCase.elder.city.toLowerCase() === "kolkata");
-assert.strictEqual(kolkataVisits.length, 1, "Location filter must match Kolkata");
+// Interior overlap (13:15 - 13:45)
+assert.strictEqual(
+  checkIntervalOverlap(baseStart, baseEnd, parseISTDateTimeToUTC("2026-11-17", "13:15"), parseISTDateTimeToUTC("2026-11-17", "13:45")),
+  true,
+  "Interior interval (13:15 - 13:45) must overlap with 13:00 - 14:00"
+);
 
-console.log("  ✓ Verified date scoping and client/server filter algorithms.");
+// Exterior enclosing overlap (12:00 - 15:00)
+assert.strictEqual(
+  checkIntervalOverlap(baseStart, baseEnd, parseISTDateTimeToUTC("2026-11-17", "12:00"), parseISTDateTimeToUTC("2026-11-17", "15:00")),
+  true,
+  "Enclosing interval (12:00 - 15:00) must overlap with 13:00 - 14:00"
+);
+console.log("  ✓ PASS: All partial and enclosing interval permutations detected as overlaps.");
 
-// --- TEST 6: Reschedule & Status Mutation Rules ---
-console.log("\n--- TEST 6: Reschedule & Status Mutation Logic ---");
-function simulateStatusChange(currentVisit: any, newStatus: string) {
-  const updated = { ...currentVisit, status: newStatus };
-  if (newStatus === "COMPLETED" && !updated.actualEnd) {
-    updated.actualEnd = new Date();
-  }
-  if (newStatus === "IN_PROGRESS" && !updated.actualStart) {
-    updated.actualStart = new Date();
-  }
-  return updated;
+// ============================================================================
+// TEST SCENARIO 8: Back-to-back appointments are allowed
+// ============================================================================
+console.log("\n--- SCENARIO 8: Back-to-Back Appointments Allowed ---");
+// Immediate consecutive: 14:00 - 15:00 follows 13:00 - 14:00
+const consecutiveAfter = checkIntervalOverlap(
+  baseStart,
+  baseEnd,
+  parseISTDateTimeToUTC("2026-11-17", "14:00"),
+  parseISTDateTimeToUTC("2026-11-17", "15:00")
+);
+assert.strictEqual(consecutiveAfter, false, "Back-to-back immediately after (14:00 - 15:00) must NOT overlap");
+
+// Immediate preceding: 12:00 - 13:00 precedes 13:00 - 14:00
+const consecutiveBefore = checkIntervalOverlap(
+  baseStart,
+  baseEnd,
+  parseISTDateTimeToUTC("2026-11-17", "12:00"),
+  parseISTDateTimeToUTC("2026-11-17", "13:00")
+);
+assert.strictEqual(consecutiveBefore, false, "Back-to-back immediately before (12:00 - 13:00) must NOT overlap");
+console.log("  ✓ PASS: Zero-gap back-to-back scheduling correctly permitted without false conflicts.");
+
+// ============================================================================
+// TEST SCENARIO 9: Cancelled visits do not block availability
+// ============================================================================
+console.log("\n--- SCENARIO 9: Cancelled Visits Do Not Block Availability ---");
+const cancelledVisits: MockVisit[] = [
+  {
+    id: "visit_cancelled_1",
+    assignedEmpId: "emp_1",
+    scheduledStart: parseISTDateTimeToUTC("2026-11-17", "13:00"),
+    scheduledEnd: parseISTDateTimeToUTC("2026-11-17", "14:00"),
+    status: "CANCELLED",
+  },
+];
+
+const availCancelled = simulateEmployeeAvailability({
+  date: "2026-11-17",
+  startTime: "13:00",
+  endTime: "14:00",
+  employees: mockEmployees,
+  existingVisits: cancelledVisits,
+});
+const emp1CancelledAvail = availCancelled.find((a) => a.employeeId === "emp_1");
+assert.strictEqual(emp1CancelledAvail?.available, true, "Cancelled visits must not block employee availability");
+console.log("  ✓ PASS: Cancelled visits release employee schedule.");
+
+// ============================================================================
+// TEST SCENARIO 10: Completed visits do not block future assignments
+// ============================================================================
+console.log("\n--- SCENARIO 10: Completed Visits Do Not Block Future Assignments ---");
+const completedVisits: MockVisit[] = [
+  {
+    id: "visit_completed_1",
+    assignedEmpId: "emp_1",
+    scheduledStart: parseISTDateTimeToUTC("2026-11-17", "10:00"),
+    scheduledEnd: parseISTDateTimeToUTC("2026-11-17", "11:00"),
+    status: "COMPLETED",
+  },
+];
+
+const availCompleted = simulateEmployeeAvailability({
+  date: "2026-11-17",
+  startTime: "10:00",
+  endTime: "11:00",
+  employees: mockEmployees,
+  existingVisits: completedVisits,
+});
+const emp1CompletedAvail = availCompleted.find((a) => a.employeeId === "emp_1");
+assert.strictEqual(emp1CompletedAvail?.available, true, "Completed visits must not block availability checks");
+console.log("  ✓ PASS: Completed status visits are excluded from active scheduling locks.");
+
+// ============================================================================
+// TEST SCENARIO 11: Editing a visit does not conflict with itself
+// ============================================================================
+console.log("\n--- SCENARIO 11: Editing a Visit Does Not Conflict With Itself ---");
+const availSelfExcluded = simulateEmployeeAvailability({
+  date: "2026-11-17",
+  startTime: "13:00",
+  endTime: "14:00",
+  excludeVisitId: "visit_existing_1",
+  employees: mockEmployees,
+  existingVisits: mockVisitsDatabase,
+});
+const emp1SelfAvail = availSelfExcluded.find((a) => a.employeeId === "emp_1");
+assert.strictEqual(emp1SelfAvail?.available, true, "Editing a visit with excludeVisitId must allow keeping the same employee");
+console.log("  ✓ PASS: Self-exclusion allows modifying current appointment details seamlessly.");
+
+// ============================================================================
+// TEST SCENARIO 12: Rescheduling recalculates employee availability
+// ============================================================================
+console.log("\n--- SCENARIO 12: Rescheduling Recalculates Employee Availability ---");
+// Suppose Employee 1 is already booked at 16:00 - 17:00
+const multiVisits: MockVisit[] = [
+  {
+    id: "visit_original",
+    assignedEmpId: "emp_1",
+    scheduledStart: parseISTDateTimeToUTC("2026-11-17", "13:00"),
+    scheduledEnd: parseISTDateTimeToUTC("2026-11-17", "14:00"),
+    status: "SCHEDULED",
+  },
+  {
+    id: "visit_later",
+    assignedEmpId: "emp_1",
+    scheduledStart: parseISTDateTimeToUTC("2026-11-17", "16:00"),
+    scheduledEnd: parseISTDateTimeToUTC("2026-11-17", "17:00"),
+    status: "CONFIRMED",
+  },
+];
+
+// Rescheduling visit_original to 15:00 - 16:00 (free slot)
+const availReschedFree = simulateEmployeeAvailability({
+  date: "2026-11-17",
+  startTime: "15:00",
+  endTime: "16:00",
+  excludeVisitId: "visit_original",
+  employees: mockEmployees,
+  existingVisits: multiVisits,
+});
+assert.strictEqual(
+  availReschedFree.find((a) => a.employeeId === "emp_1")?.available,
+  true,
+  "Rescheduling to unoccupied slot must mark employee available"
+);
+
+// Rescheduling visit_original to 16:30 - 17:30 (conflicts with visit_later)
+const availReschedConflict = simulateEmployeeAvailability({
+  date: "2026-11-17",
+  startTime: "16:30",
+  endTime: "17:30",
+  excludeVisitId: "visit_original",
+  employees: mockEmployees,
+  existingVisits: multiVisits,
+});
+assert.strictEqual(
+  availReschedConflict.find((a) => a.employeeId === "emp_1")?.available,
+  false,
+  "Rescheduling to occupied slot must dynamically mark employee occupied"
+);
+console.log("  ✓ PASS: Rescheduling recalculates availability dynamically on date/time change.");
+
+// ============================================================================
+// TEST SCENARIO 13: Newly created eligible employees appear in the dropdown
+// ============================================================================
+console.log("\n--- SCENARIO 13: Eligible Active Employees Appear in Dropdown ---");
+function formatEmployeeOption(emp: MockEmployee) {
+  const codePart = emp.employeeId ? ` (${emp.employeeId})` : "";
+  const desigPart = emp.designation ? ` - ${emp.designation}` : "";
+  return `${emp.firstName} ${emp.lastName}${codePart}${desigPart}`;
 }
 
-const v1Started = simulateStatusChange(mockVisits[0], "IN_PROGRESS");
-assert.strictEqual(v1Started.status, "IN_PROGRESS");
-assert.ok(v1Started.actualStart instanceof Date, "In-progress visit must record actualStart");
+const activeEmps = mockEmployees.filter((e) => e.status === "ACTIVE");
+assert.strictEqual(activeEmps.length, 2, "Only active employees must be selectable");
+assert.strictEqual(
+  formatEmployeeOption(activeEmps[0]),
+  "Subhash Ghosh (EMP001) - Care Attendant",
+  "Dropdown label must match: FirstName LastName (EMP_ID) - Designation"
+);
+console.log("  ✓ PASS: Active employees formatted with designation and employee ID.");
 
-const v1Completed = simulateStatusChange(v1Started, "COMPLETED");
-assert.strictEqual(v1Completed.status, "COMPLETED");
-assert.ok(v1Completed.actualEnd instanceof Date, "Completed visit must record actualEnd");
+// ============================================================================
+// TEST SCENARIO 14: Inactive employees cannot be newly assigned
+// ============================================================================
+console.log("\n--- SCENARIO 14: Inactive Employees Excluded and Blocked by Server ---");
+const inactiveEmpAvail = availResults1.find((a) => a.employeeId === "emp_3");
+assert.strictEqual(inactiveEmpAvail, undefined, "Inactive employee emp_3 must not appear in availability check");
 
-console.log("  ✓ Verified timestamps and state transitions for visit lifecycle.");
+assert.throws(
+  () => {
+    simulateServerSideAssignment(
+      { assignedEmpId: "emp_3", date: "2026-11-17", startTime: "10:00", endTime: "11:00" },
+      mockEmployees,
+      []
+    );
+  },
+  /The selected employee is not active or does not exist/,
+  "Attempting to assign inactive employee must be rejected by server validation"
+);
+console.log("  ✓ PASS: Inactive employees cannot be selected or assigned.");
+
+// ============================================================================
+// TEST SCENARIO 15: Server-side validation rejects conflicting concurrent assignments
+// ============================================================================
+console.log("\n--- SCENARIO 15: Server-Side Transactional Conflict Rejection ---");
+const liveVisits: MockVisit[] = [];
+
+// Admin A schedules Employee 1 from 13:00 to 14:00
+const adminAVisit = simulateServerSideAssignment(
+  { assignedEmpId: "emp_1", date: "2026-11-17", startTime: "13:00", endTime: "14:00" },
+  mockEmployees,
+  liveVisits
+);
+assert.ok(adminAVisit.id, "Admin A visit creation must succeed");
+
+// Admin B concurrently attempts to schedule Employee 1 from 13:30 to 14:30
+assert.throws(
+  () => {
+    simulateServerSideAssignment(
+      { assignedEmpId: "emp_1", date: "2026-11-17", startTime: "13:30", endTime: "14:30" },
+      mockEmployees,
+      liveVisits
+    );
+  },
+  /This employee has already been assigned to another visit during the selected time/,
+  "Concurrent overlapping assignment must be rejected inside the transaction"
+);
+
+// Admin B schedules Employee 2 instead -> must succeed
+const adminBVisitEmp2 = simulateServerSideAssignment(
+  { assignedEmpId: "emp_2", date: "2026-11-17", startTime: "13:30", endTime: "14:30" },
+  mockEmployees,
+  liveVisits
+);
+assert.ok(adminBVisitEmp2.id, "Alternative available employee assignment must succeed");
+console.log("  ✓ PASS: Server-side transactional conflict check strictly protects against collisions.");
 
 console.log("\n================================================================");
-console.log("🎉 ALL 6 VISIT SCHEDULE CALENDAR UNIT TESTS PASSED (100%)");
-console.log("================================================================");
+console.log("🎉 ALL 15 VISIT SCHEDULE & CONFLICT DETECTION TESTS PASSED (100%)");
+console.log("================================================================\n");

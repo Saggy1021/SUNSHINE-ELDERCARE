@@ -5,6 +5,10 @@ import { db } from "@/lib/db";
 import { AuthorizationService } from "@/lib/services/authorization";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { revalidatePath } from "next/cache";
+import {
+  parseISTDateTimeToUTC,
+  formatTimeIST,
+} from "@/components/admin/schedule/schedule-date-utils";
 
 export interface ScheduleVisitDTO {
   id: string;
@@ -36,6 +40,14 @@ export interface ScheduleVisitDTO {
   };
   carePlanName: string;
 
+  assignedEmployee?: {
+    id: string;
+    employeeId: string;
+    firstName: string;
+    lastName: string;
+    designation: string;
+    contactNumber?: string | null;
+  } | null;
   assignedCaregiver?: {
     id: string;
     employeeId: string;
@@ -68,6 +80,7 @@ export interface CareScheduleFormData {
     firstName: string;
     lastName: string;
     designation: string;
+    displayName: string;
   }>;
 }
 
@@ -159,18 +172,12 @@ export async function getScheduleVisits(filters: {
           elder: {
             include: {
               user: {
-                include: {
-                  memberProfile: true,
-                },
+                include: { memberProfile: true },
               },
             },
           },
           subscription: {
-            include: {
-              plan: true,
-              carePlan: true,
-              customPlan: true,
-            },
+            include: { carePlan: true },
           },
         },
       },
@@ -183,55 +190,65 @@ export async function getScheduleVisits(filters: {
     },
   });
 
-  const memberSearchClean = filters.memberSearch?.trim().toLowerCase();
-  const locationClean = filters.location?.trim().toLowerCase();
-  const categoryFilter = filters.category;
-
-  const results: ScheduleVisitDTO[] = [];
+  const dtoList: ScheduleVisitDTO[] = [];
 
   for (const v of visits) {
     const elder = v.careCase?.elder;
-    const memberUser = elder?.user || (v.careCase as any)?.subscription?.user;
+    const memberUser = elder?.user;
     const profile = memberUser?.memberProfile;
+
+    // Filter by memberSearch if provided
+    if (filters.memberSearch && filters.memberSearch.trim()) {
+      const q = filters.memberSearch.trim().toLowerCase();
+      const matchElder = elder && `${elder.firstName} ${elder.lastName}`.toLowerCase().includes(q);
+      const matchMember = memberUser && memberUser.name && memberUser.name.toLowerCase().includes(q);
+      const matchMid = profile && profile.memberId && profile.memberId.toLowerCase().includes(q);
+      if (!matchElder && !matchMember && !matchMid) {
+        continue;
+      }
+    }
+
+    // Filter by category if provided
+    const parsedCat = parseCategory(v.operationalNotes);
+    if (filters.category && filters.category !== "ALL") {
+      if (parsedCat.category !== filters.category) {
+        continue;
+      }
+    }
+
+    // Filter by location if provided
+    if (filters.location && filters.location.trim()) {
+      const locQ = filters.location.trim().toLowerCase();
+      const address = profile?.serviceAddress || elder?.address || elder?.city || "";
+      if (!address.toLowerCase().includes(locQ)) {
+        continue;
+      }
+    }
 
     const memberName = memberUser?.name || `${profile?.firstName || ""} ${profile?.lastName || ""}`.trim() || "Member";
     const elderName = elder ? `${elder.firstName} ${elder.lastName}`.trim() : memberName;
-    const memberId = profile?.memberId || null;
-    const serviceAddress = profile?.serviceAddress || elder?.address || elder?.city || null;
-    const { category, cleanNotes } = parseCategory(v.operationalNotes);
 
-    // Apply category filter if specified
-    if (categoryFilter && categoryFilter !== "ALL" && category !== categoryFilter) {
-      continue;
-    }
+    const assignedEmpData = v.assignedEmp
+      ? {
+          id: v.assignedEmp.id,
+          employeeId: v.assignedEmp.employeeId,
+          firstName: v.assignedEmp.firstName,
+          lastName: v.assignedEmp.lastName,
+          designation: v.assignedEmp.designation,
+          contactNumber: v.assignedEmp.contactNumber,
+        }
+      : v.assignments[0]?.employee
+      ? {
+          id: v.assignments[0].employee.id,
+          employeeId: v.assignments[0].employee.employeeId,
+          firstName: v.assignments[0].employee.firstName,
+          lastName: v.assignments[0].employee.lastName,
+          designation: v.assignments[0].employee.designation,
+          contactNumber: v.assignments[0].employee.contactNumber,
+        }
+      : null;
 
-    // Apply member search if specified
-    if (memberSearchClean) {
-      const matchMember = memberName.toLowerCase().includes(memberSearchClean);
-      const matchElder = elderName.toLowerCase().includes(memberSearchClean);
-      const matchEmail = memberUser?.email?.toLowerCase().includes(memberSearchClean);
-      const matchMid = memberId?.toLowerCase().includes(memberSearchClean);
-      if (!matchMember && !matchElder && !matchEmail && !matchMid) {
-        continue;
-      }
-    }
-
-    // Apply location filter if specified
-    if (locationClean) {
-      const addrMatch = serviceAddress?.toLowerCase().includes(locationClean);
-      const cityMatch = elder?.city?.toLowerCase().includes(locationClean);
-      if (!addrMatch && !cityMatch) {
-        continue;
-      }
-    }
-
-    const carePlanName =
-      v.careCase?.subscription?.carePlan?.name ||
-      v.careCase?.subscription?.plan?.name ||
-      v.careCase?.subscription?.customPlan?.name ||
-      "Eldercare Plan";
-
-    results.push({
+    dtoList.push({
       id: v.id,
       careCaseId: v.careCaseId,
       scheduledStart: v.scheduledStart.toISOString(),
@@ -239,14 +256,14 @@ export async function getScheduleVisits(filters: {
       actualStart: v.actualStart ? v.actualStart.toISOString() : null,
       actualEnd: v.actualEnd ? v.actualEnd.toISOString() : null,
       status: v.status,
-      category,
-      operationalNotes: cleanNotes,
+      category: parsedCat.category,
+      operationalNotes: parsedCat.cleanNotes || v.operationalNotes,
       member: {
         userId: memberUser?.id || "",
         name: memberName,
         email: memberUser?.email || "",
-        memberId,
-        serviceAddress,
+        memberId: profile?.memberId || null,
+        serviceAddress: profile?.serviceAddress || elder?.address || null,
         mobileNumber: profile?.mobileNumber || elder?.contactNumber || null,
       },
       elder: {
@@ -254,47 +271,27 @@ export async function getScheduleVisits(filters: {
         firstName: elder?.firstName || "",
         lastName: elder?.lastName || "",
         relationship: elder?.relationship || "Self",
-        address: elder?.address || serviceAddress,
+        address: elder?.address || profile?.serviceAddress || null,
         city: elder?.city || null,
         contactNumber: elder?.contactNumber || null,
       },
-      carePlanName,
-      assignedCaregiver: v.assignedEmp
-        ? {
-            id: v.assignedEmp.id,
-            employeeId: v.assignedEmp.employeeId,
-            firstName: v.assignedEmp.firstName,
-            lastName: v.assignedEmp.lastName,
-            designation: v.assignedEmp.designation,
-            contactNumber: v.assignedEmp.contactNumber,
-          }
-        : v.assignments?.[0]?.employee
-        ? {
-            id: v.assignments[0].employee.id,
-            employeeId: v.assignments[0].employee.employeeId,
-            firstName: v.assignments[0].employee.firstName,
-            lastName: v.assignments[0].employee.lastName,
-            designation: v.assignments[0].employee.designation,
-            contactNumber: v.assignments[0].employee.contactNumber,
-          }
-        : null,
-      additionalCaregivers: v.assignments
-        .filter((a) => a.employeeId !== v.assignedEmpId)
-        .map((a) => ({
-          id: a.employee.id,
-          employeeId: a.employee.employeeId,
-          firstName: a.employee.firstName,
-          lastName: a.employee.lastName,
-        })),
+      carePlanName: v.careCase?.subscription?.carePlan?.name || "Care Plan",
+      assignedEmployee: assignedEmpData,
+      assignedCaregiver: assignedEmpData,
+      additionalCaregivers: v.assignments.slice(1).map((a) => ({
+        id: a.employee.id,
+        employeeId: a.employee.employeeId,
+        firstName: a.employee.firstName,
+        lastName: a.employee.lastName,
+      })),
     });
   }
 
-  return results;
+  return dtoList;
 }
 
 /**
- * Fetch form dropdown data for scheduling and editing visits.
- * Automatically discovers active cases and members with active subscriptions.
+ * Returns available cases (active subscriptions / elders) and active employees for scheduling modals.
  */
 export async function getCareScheduleFormData(): Promise<CareScheduleFormData> {
   await requireSchedulePermission(false);
@@ -378,14 +375,110 @@ export async function getCareScheduleFormData(): Promise<CareScheduleFormData> {
     });
   }
 
+  const employeeOptions = activeEmployees.map((emp) => {
+    const codePart = emp.employeeId ? ` (${emp.employeeId})` : "";
+    const desigPart = emp.designation ? ` - ${emp.designation}` : "";
+    return {
+      ...emp,
+      displayName: `${emp.firstName} ${emp.lastName}${codePart}${desigPart}`,
+    };
+  });
+
   return {
     cases: casesOptions,
-    employees: activeEmployees,
+    employees: employeeOptions,
   };
 }
 
 /**
- * Creates a new scheduled care visit with caregiver assignment and audit logging.
+ * Checks employee availability for a specific date and time interval in Asia/Kolkata.
+ * Identifies conflicts using interval overlap: existingStart < requestedEnd AND existingEnd > requestedStart.
+ */
+export async function getEmployeeAvailability(params: {
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  excludeVisitId?: string;
+}): Promise<
+  Array<{
+    employeeId: string;
+    available: boolean;
+    conflictTime?: string;
+    conflictReason?: string;
+  }>
+> {
+  await requireSchedulePermission(false);
+
+  const scheduledStart = parseISTDateTimeToUTC(params.date, params.startTime);
+  const scheduledEnd = parseISTDateTimeToUTC(params.date, params.endTime);
+
+  if (isNaN(scheduledStart.getTime()) || isNaN(scheduledEnd.getTime()) || scheduledEnd <= scheduledStart) {
+    return [];
+  }
+
+  // Active employees
+  const employees = await db.employee.findMany({
+    where: { status: "ACTIVE" },
+    select: { id: true, firstName: true, lastName: true },
+  });
+
+  // Operationally active statuses that block employee availability
+  const blockingVisits = await db.careVisit.findMany({
+    where: {
+      id: params.excludeVisitId ? { not: params.excludeVisitId } : undefined,
+      status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] },
+      scheduledStart: { lt: scheduledEnd },
+      scheduledEnd: { gt: scheduledStart },
+    },
+    select: {
+      id: true,
+      assignedEmpId: true,
+      scheduledStart: true,
+      scheduledEnd: true,
+      status: true,
+      assignments: { select: { employeeId: true } },
+      careCase: {
+        select: {
+          elder: {
+            select: {
+              firstName: true,
+              lastName: true,
+              user: { select: { name: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  return employees.map((emp) => {
+    const conflict = blockingVisits.find(
+      (v) => v.assignedEmpId === emp.id || v.assignments.some((a) => a.employeeId === emp.id)
+    );
+
+    if (conflict) {
+      const memberName =
+        conflict.careCase?.elder?.user?.name ||
+        `${conflict.careCase?.elder?.firstName || ""} ${conflict.careCase?.elder?.lastName || ""}`.trim() ||
+        "Member";
+      const timeStr = `${formatTimeIST(conflict.scheduledStart)} – ${formatTimeIST(conflict.scheduledEnd)}`;
+      return {
+        employeeId: emp.id,
+        available: false,
+        conflictTime: timeStr,
+        conflictReason: `Occupied (${timeStr} for ${memberName})`,
+      };
+    }
+
+    return {
+      employeeId: emp.id,
+      available: true,
+    };
+  });
+}
+
+/**
+ * Creates a new scheduled care visit with employee assignment, concurrency collision protection, and audit logging.
  */
 export async function createScheduleVisit(input: {
   caseSelectionId: string;
@@ -403,8 +496,9 @@ export async function createScheduleVisit(input: {
     return { success: false, error: "Please fill in all required date, time, and case fields." };
   }
 
-  const scheduledStart = new Date(`${input.date}T${input.startTime}:00`);
-  const scheduledEnd = new Date(`${input.date}T${input.endTime}:00`);
+  // Parse strictly as Asia/Kolkata date & time to UTC
+  const scheduledStart = parseISTDateTimeToUTC(input.date, input.startTime);
+  const scheduledEnd = parseISTDateTimeToUTC(input.date, input.endTime);
 
   if (isNaN(scheduledStart.getTime()) || isNaN(scheduledEnd.getTime())) {
     return { success: false, error: "Invalid date or time format." };
@@ -459,6 +553,36 @@ export async function createScheduleVisit(input: {
     const visitStatus = input.status || "SCHEDULED";
 
     const visit = await db.$transaction(async (tx) => {
+      // Server-side transactional conflict protection
+      if (input.assignedEmpId) {
+        const emp = await tx.employee.findUnique({
+          where: { id: input.assignedEmpId },
+          select: { id: true, firstName: true, lastName: true, status: true },
+        });
+
+        if (!emp || emp.status !== "ACTIVE") {
+          throw new Error("The selected employee is not active or does not exist.");
+        }
+
+        const conflict = await tx.careVisit.findFirst({
+          where: {
+            status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] },
+            scheduledStart: { lt: scheduledEnd },
+            scheduledEnd: { gt: scheduledStart },
+            OR: [
+              { assignedEmpId: input.assignedEmpId },
+              { assignments: { some: { employeeId: input.assignedEmpId } } },
+            ],
+          },
+        });
+
+        if (conflict) {
+          throw new Error(
+            "This employee has already been assigned to another visit during the selected time. Please select another employee."
+          );
+        }
+      }
+
       const created = await tx.careVisit.create({
         data: {
           careCaseId: resolvedCaseId,
@@ -508,11 +632,14 @@ export async function createScheduleVisit(input: {
 }
 
 /**
- * Updates full visit details (caregiver, notes, category, timings, status).
+ * Updates full visit details (employee, notes, category, timings, status) with transactional conflict detection.
  */
 export async function updateCareVisitDetails(
   visitId: string,
   input: {
+    date?: string;
+    startTime?: string;
+    endTime?: string;
     scheduledStart?: string;
     scheduledEnd?: string;
     assignedEmpId?: string | null;
@@ -530,11 +657,19 @@ export async function updateCareVisitDetails(
 
   const dataToUpdate: any = {};
 
-  if (input.scheduledStart && input.scheduledEnd) {
-    const start = new Date(input.scheduledStart);
-    const end = new Date(input.scheduledEnd);
+  if (input.date && input.startTime && input.endTime) {
+    const start = parseISTDateTimeToUTC(input.date, input.startTime);
+    const end = parseISTDateTimeToUTC(input.date, input.endTime);
     if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
-      return { success: false, error: "Invalid start/end timings." };
+      return { success: false, error: "End time must be after start time." };
+    }
+    dataToUpdate.scheduledStart = start;
+    dataToUpdate.scheduledEnd = end;
+  } else if (input.scheduledStart && input.scheduledEnd) {
+    const start = parseISTDateTimeToUTC(input.scheduledStart);
+    const end = parseISTDateTimeToUTC(input.scheduledEnd);
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
+      return { success: false, error: "End time must be after start time." };
     }
     dataToUpdate.scheduledStart = start;
     dataToUpdate.scheduledEnd = end;
@@ -559,8 +694,44 @@ export async function updateCareVisitDetails(
     dataToUpdate.assignedEmpId = input.assignedEmpId || null;
   }
 
+  const targetEmpId = input.assignedEmpId !== undefined ? input.assignedEmpId : existing.assignedEmpId;
+  const targetStart = dataToUpdate.scheduledStart || existing.scheduledStart;
+  const targetEnd = dataToUpdate.scheduledEnd || existing.scheduledEnd;
+  const targetStatus = dataToUpdate.status || existing.status;
+
   try {
     await db.$transaction(async (tx) => {
+      // Conflict checking for assigned employee on active statuses
+      if (targetEmpId && ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"].includes(targetStatus)) {
+        const emp = await tx.employee.findUnique({
+          where: { id: targetEmpId },
+          select: { id: true, firstName: true, lastName: true, status: true },
+        });
+
+        if (!emp || emp.status !== "ACTIVE") {
+          throw new Error("The selected employee is not active or does not exist.");
+        }
+
+        const conflict = await tx.careVisit.findFirst({
+          where: {
+            id: { not: visitId },
+            status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] },
+            scheduledStart: { lt: targetEnd },
+            scheduledEnd: { gt: targetStart },
+            OR: [
+              { assignedEmpId: targetEmpId },
+              { assignments: { some: { employeeId: targetEmpId } } },
+            ],
+          },
+        });
+
+        if (conflict) {
+          throw new Error(
+            "This employee has already been assigned to another visit during the selected time. Please select another employee."
+          );
+        }
+      }
+
       await tx.careVisit.update({
         where: { id: visitId },
         data: dataToUpdate,
@@ -600,37 +771,87 @@ export async function updateCareVisitDetails(
 }
 
 /**
- * Reschedules a visit to new start/end date and time.
+ * Reschedules a visit to a new start/end date and time with conflict detection and optional employee reassignment.
  */
 export async function rescheduleCareVisit(
   visitId: string,
   newStartStr: string,
   newEndStr: string,
-  reason?: string
+  reason?: string,
+  assignedEmpId?: string | null
 ): Promise<{ success: boolean; error?: string }> {
   const admin = await requireSchedulePermission(true);
 
-  const start = new Date(newStartStr);
-  const end = new Date(newEndStr);
+  // Parse strictly as Asia/Kolkata date & time to UTC
+  const start = parseISTDateTimeToUTC(newStartStr);
+  const end = parseISTDateTimeToUTC(newEndStr);
   if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
-    return { success: false, error: "Invalid reschedule time range." };
+    return { success: false, error: "Invalid reschedule time range. End time must be after start time." };
   }
 
   const existing = await db.careVisit.findUnique({ where: { id: visitId } });
   if (!existing) return { success: false, error: "Visit not found." };
 
+  const targetEmpId = assignedEmpId !== undefined ? (assignedEmpId || null) : existing.assignedEmpId;
+
   try {
     await db.$transaction(async (tx) => {
+      // Check employee availability if assigned and operationally active
+      if (targetEmpId && ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"].includes(existing.status)) {
+        const emp = await tx.employee.findUnique({
+          where: { id: targetEmpId },
+          select: { id: true, firstName: true, lastName: true, status: true },
+        });
+
+        if (!emp || emp.status !== "ACTIVE") {
+          throw new Error("The selected employee is not active or does not exist.");
+        }
+
+        const conflict = await tx.careVisit.findFirst({
+          where: {
+            id: { not: visitId },
+            status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] },
+            scheduledStart: { lt: end },
+            scheduledEnd: { gt: start },
+            OR: [
+              { assignedEmpId: targetEmpId },
+              { assignments: { some: { employeeId: targetEmpId } } },
+            ],
+          },
+        });
+
+        if (conflict) {
+          throw new Error(
+            "This employee has already been assigned to another visit during the selected time. Please select another employee."
+          );
+        }
+      }
+
+      const updateData: any = {
+        scheduledStart: start,
+        scheduledEnd: end,
+        operationalNotes: reason
+          ? `${existing.operationalNotes || ""}\n[Rescheduled: ${reason}]`.trim()
+          : existing.operationalNotes,
+      };
+
+      if (assignedEmpId !== undefined) {
+        updateData.assignedEmpId = targetEmpId;
+      }
+
       await tx.careVisit.update({
         where: { id: visitId },
-        data: {
-          scheduledStart: start,
-          scheduledEnd: end,
-          operationalNotes: reason
-            ? `${existing.operationalNotes || ""}\n[Rescheduled: ${reason}]`.trim()
-            : existing.operationalNotes,
-        },
+        data: updateData,
       });
+
+      if (assignedEmpId !== undefined) {
+        await tx.visitAssignment.deleteMany({ where: { visitId } });
+        if (targetEmpId) {
+          await tx.visitAssignment.create({
+            data: { visitId, employeeId: targetEmpId },
+          });
+        }
+      }
 
       await tx.auditLog.create({
         data: {
@@ -644,6 +865,7 @@ export async function rescheduleCareVisit(
             newStart: start.toISOString(),
             newEnd: end.toISOString(),
             reason: reason || "Administrative reschedule",
+            assignedEmpId: targetEmpId,
           },
         },
       });
