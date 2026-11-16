@@ -1,66 +1,308 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Plus, Edit2, Shield, Lock, Activity, UserX, Search } from "lucide-react";
-import { inviteAdminUserAction, updateAdminUserAction, toggleAdminStatusAction, resetAdminPasswordAction, revokeAdminInvitationAction } from "@/app/actions/admin-users";
+import { 
+  Plus, Edit2, Shield, Lock, Activity, UserX, Search, Users, 
+  CheckCircle, XCircle, Phone, Mail, Calendar, AlertCircle, 
+  Briefcase, Check, Sparkles, Building, UserCheck
+} from "lucide-react";
+import { 
+  inviteAdminUserAction, 
+  updateAdminUserAction, 
+  toggleAdminStatusAction, 
+  resetAdminPasswordAction, 
+  revokeAdminInvitationAction 
+} from "@/app/actions/admin-users";
+import { 
+  createEmployee, 
+  updateEmployee, 
+  toggleEmployeeStatus 
+} from "@/app/actions/employee";
 import { useRouter } from "next/navigation";
 
-export function EmployeesClient({ initialUsers, initialInvitations, invitationError, roles, employees }: any) {
-  const invitations = initialInvitations || [];
-  const [isCreating, setIsCreating] = useState(false);
-  const [editingUser, setEditingUser] = useState<any>(null);
-  const [passwordResetUser, setPasswordResetUser] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-  
-  // Search and filter state
-  const [searchQuery, setSearchQuery] = useState("");
-  const [roleFilter, setRoleFilter] = useState("");
-  
+interface EmployeesClientProps {
+  initialUsers?: any[];
+  initialInvitations?: any[];
+  invitationError?: boolean;
+  roles?: any[];
+  initialEmployees?: any[];
+  employees?: any[];
+  permissions?: {
+    isOwner?: boolean;
+    canManageAdmins?: boolean;
+    canViewAdmins?: boolean;
+    canViewEmployees?: boolean;
+    canCreateEmployee?: boolean;
+    canEditEmployee?: boolean;
+    canDeactivateEmployee?: boolean;
+  };
+}
+
+function formatDate(dateInput: any): string {
+  if (!dateInput) return "-";
+  try {
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return "-";
+    const day = String(d.getDate()).padStart(2, "0");
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const month = months[d.getMonth()];
+    const year = d.getFullYear();
+    return `${day} ${month} ${year}`;
+  } catch {
+    return "-";
+  }
+}
+
+export function EmployeesClient({
+  initialUsers = [],
+  initialInvitations = [],
+  invitationError = false,
+  roles = [],
+  initialEmployees,
+  employees: legacyEmployees,
+  permissions = {},
+}: EmployeesClientProps) {
   const router = useRouter();
 
-  // Filter and sort users client-side since this list is typically small
-  const filteredUsers = useMemo(() => {
-    return initialUsers.filter((user: any) => {
-      const matchesSearch = !searchQuery || 
-        user.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchQuery.toLowerCase());
-        
-      const matchesRole = !roleFilter || 
-        user.userRoles.some((ur: any) => ur.roleId === roleFilter);
-        
-      return matchesSearch && matchesRole;
-    }).sort((a: any, b: any) => a.name.localeCompare(b.name));
-  }, [initialUsers, searchQuery, roleFilter]);
+  // Determine initial tab based on permissions
+  const canViewEmployees = permissions.canViewEmployees ?? true;
+  const canViewAdmins = permissions.canViewAdmins ?? true;
+  const canCreateEmployee = permissions.canCreateEmployee ?? true;
+  const canEditEmployee = permissions.canEditEmployee ?? true;
+  const canDeactivateEmployee = permissions.canDeactivateEmployee ?? true;
+  const canManageAdmins = permissions.canManageAdmins ?? true;
 
-  async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
+  const [activeTab, setActiveTab] = useState<"employees" | "admins">(
+    canViewEmployees ? "employees" : "admins"
+  );
+
+  // --- Employee State ---
+  const [employeeList, setEmployeeList] = useState<any[]>(initialEmployees || legacyEmployees || []);
+  const [employeeSearch, setEmployeeSearch] = useState("");
+  const [employeeStatusFilter, setEmployeeStatusFilter] = useState<string>("ALL");
+  const [isCreatingEmployee, setIsCreatingEmployee] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<any | null>(null);
+  const [employeeSubmitting, setEmployeeSubmitting] = useState(false);
+  const [employeeError, setEmployeeError] = useState<string | null>(null);
+  const [employeeSuccessMsg, setEmployeeSuccessMsg] = useState<string | null>(null);
+
+  // --- Admin State (Preserved) ---
+  const invitations = initialInvitations || [];
+  const [isCreatingAdmin, setIsCreatingAdmin] = useState(false);
+  const [editingUser, setEditingUser] = useState<any>(null);
+  const [passwordResetUser, setPasswordResetUser] = useState<any>(null);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminSearchQuery, setAdminSearchQuery] = useState("");
+  const [adminRoleFilter, setAdminRoleFilter] = useState("");
+
+  // Sync employee list when props change
+  useMemo(() => {
+    if (initialEmployees) {
+      setEmployeeList(initialEmployees);
+    } else if (legacyEmployees) {
+      setEmployeeList(legacyEmployees);
+    }
+  }, [initialEmployees, legacyEmployees]);
+
+  // Filtered employees
+  const filteredEmployees = useMemo(() => {
+    return employeeList.filter((emp) => {
+      const q = employeeSearch.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        (emp.firstName && emp.firstName.toLowerCase().includes(q)) ||
+        (emp.lastName && emp.lastName.toLowerCase().includes(q)) ||
+        (emp.employeeId && emp.employeeId.toLowerCase().includes(q)) ||
+        (emp.designation && emp.designation.toLowerCase().includes(q)) ||
+        (emp.contactNumber && emp.contactNumber.toLowerCase().includes(q)) ||
+        (emp.email && emp.email.toLowerCase().includes(q));
+
+      const matchesStatus =
+        employeeStatusFilter === "ALL" || emp.status === employeeStatusFilter;
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [employeeList, employeeSearch, employeeStatusFilter]);
+
+  // Filtered admin users
+  const filteredUsers = useMemo(() => {
+    return initialUsers
+      .filter((user: any) => {
+        const matchesSearch =
+          !adminSearchQuery ||
+          user.name?.toLowerCase().includes(adminSearchQuery.toLowerCase()) ||
+          user.email.toLowerCase().includes(adminSearchQuery.toLowerCase());
+
+        const matchesRole =
+          !adminRoleFilter ||
+          user.userRoles?.some((ur: any) => ur.roleId === adminRoleFilter);
+
+        return matchesSearch && matchesRole;
+      })
+      .sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""));
+  }, [initialUsers, adminSearchQuery, adminRoleFilter]);
+
+  // Counts
+  const activeEmployeeCount = useMemo(() => {
+    return employeeList.filter((e) => e.status === "ACTIVE").length;
+  }, [employeeList]);
+
+  // --- Employee Handlers ---
+  async function handleCreateEmployeeSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setLoading(true);
+    setEmployeeSubmitting(true);
+    setEmployeeError(null);
+
+    const formData = new FormData(e.currentTarget);
+    const firstName = (formData.get("firstName") as string)?.trim();
+    const lastName = (formData.get("lastName") as string)?.trim();
+    const designation = (formData.get("designation") as string)?.trim();
+    const employeeId = (formData.get("employeeId") as string)?.trim() || undefined;
+    const contactNumber = (formData.get("contactNumber") as string)?.trim() || undefined;
+    const email = (formData.get("email") as string)?.trim() || undefined;
+    const status = (formData.get("status") as "ACTIVE" | "INACTIVE") || "ACTIVE";
+    const publicBiography = (formData.get("publicBiography") as string)?.trim() || undefined;
+
+    try {
+      const res = await createEmployee({
+        firstName,
+        lastName,
+        designation,
+        employeeId,
+        contactNumber,
+        email,
+        status,
+        publicBiography,
+      });
+
+      if (!res.success) {
+        setEmployeeError(res.error || "Failed to create employee.");
+        setEmployeeSubmitting(false);
+        return;
+      }
+
+      setEmployeeSuccessMsg(`Employee ${firstName} ${lastName} created successfully! (ID: ${res.employee.employeeId})`);
+      setIsCreatingEmployee(false);
+      if (res.employee) {
+        setEmployeeList((prev) => [res.employee, ...prev]);
+      }
+      router.refresh();
+      setTimeout(() => setEmployeeSuccessMsg(null), 4000);
+    } catch (err: any) {
+      setEmployeeError(err?.message || "An unexpected error occurred.");
+    } finally {
+      setEmployeeSubmitting(false);
+    }
+  }
+
+  async function handleEditEmployeeSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!editingEmployee) return;
+
+    setEmployeeSubmitting(true);
+    setEmployeeError(null);
+
+    const formData = new FormData(e.currentTarget);
+    const firstName = (formData.get("firstName") as string)?.trim();
+    const lastName = (formData.get("lastName") as string)?.trim();
+    const designation = (formData.get("designation") as string)?.trim();
+    const employeeId = (formData.get("employeeId") as string)?.trim();
+    const contactNumber = (formData.get("contactNumber") as string)?.trim() || undefined;
+    const email = (formData.get("email") as string)?.trim() || undefined;
+    const status = (formData.get("status") as "ACTIVE" | "INACTIVE") || "ACTIVE";
+    const publicBiography = (formData.get("publicBiography") as string)?.trim() || undefined;
+
+    try {
+      const res = await updateEmployee(editingEmployee.id, {
+        firstName,
+        lastName,
+        designation,
+        employeeId,
+        contactNumber,
+        email,
+        status,
+        publicBiography,
+      });
+
+      if (!res.success) {
+        setEmployeeError(res.error || "Failed to update employee.");
+        setEmployeeSubmitting(false);
+        return;
+      }
+
+      setEmployeeSuccessMsg(`Employee ${firstName} ${lastName} updated successfully.`);
+      setEditingEmployee(null);
+      if (res.employee) {
+        setEmployeeList((prev) =>
+          prev.map((emp) => (emp.id === res.employee.id ? res.employee : emp))
+        );
+      }
+      router.refresh();
+      setTimeout(() => setEmployeeSuccessMsg(null), 4000);
+    } catch (err: any) {
+      setEmployeeError(err?.message || "An unexpected error occurred.");
+    } finally {
+      setEmployeeSubmitting(false);
+    }
+  }
+
+  async function handleToggleEmployeeStatus(employee: any) {
+    const isActivating = employee.status !== "ACTIVE";
+    const confirmMsg = isActivating
+      ? `Activate employee ${employee.firstName} ${employee.lastName}? They will be available for visit assignments.`
+      : `Deactivate employee ${employee.firstName} ${employee.lastName}? They will no longer appear in new visit scheduling dropdowns. Historical visits remain intact.`;
+
+    if (!confirm(confirmMsg)) return;
+
+    setEmployeeSubmitting(true);
+    try {
+      const res = await toggleEmployeeStatus(employee.id);
+      if (!res.success) {
+        alert(res.error || "Failed to update employee status.");
+        return;
+      }
+
+      setEmployeeList((prev) =>
+        prev.map((emp) => (emp.id === employee.id ? res.employee : emp))
+      );
+      router.refresh();
+    } catch (err: any) {
+      alert(err?.message || "Error updating status.");
+    } finally {
+      setEmployeeSubmitting(false);
+    }
+  }
+
+  // --- Admin Handlers (Preserved) ---
+  async function handleCreateAdmin(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setAdminLoading(true);
     try {
       await inviteAdminUserAction(new FormData(e.currentTarget));
-      setIsCreating(false);
+      setIsCreatingAdmin(false);
       router.refresh();
     } catch (err: any) {
       alert(err.message);
     }
-    setLoading(false);
+    setAdminLoading(false);
   }
 
-  async function handleRevoke(invId: string) {
-    if (!confirm('Revoke this invitation?')) return;
-    setLoading(true);
+  async function handleRevokeAdmin(invId: string) {
+    if (!confirm("Revoke this invitation?")) return;
+    setAdminLoading(true);
     try {
       await revokeAdminInvitationAction(invId);
       router.refresh();
     } catch (err: any) {
       alert(err.message);
     }
-    setLoading(false);
+    setAdminLoading(false);
   }
 
-  async function handleUpdate(e: React.FormEvent<HTMLFormElement>) {
+  async function handleUpdateAdmin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!editingUser) return;
-    setLoading(true);
+    setAdminLoading(true);
     try {
       await updateAdminUserAction(editingUser.id, new FormData(e.currentTarget));
       setEditingUser(null);
@@ -68,223 +310,922 @@ export function EmployeesClient({ initialUsers, initialInvitations, invitationEr
     } catch (err: any) {
       alert(err.message);
     }
-    setLoading(false);
+    setAdminLoading(false);
   }
 
-  async function handleToggleStatus(user: any) {
-    if (!confirm(`Are you sure you want to ${user.status === 'ACTIVE' ? 'deactivate' : 'activate'} this admin?`)) return;
-    setLoading(true);
+  async function handleToggleAdminStatus(user: any) {
+    if (
+      !confirm(
+        `Are you sure you want to ${
+          user.status === "ACTIVE" ? "deactivate" : "activate"
+        } this admin?`
+      )
+    )
+      return;
+    setAdminLoading(true);
     try {
       await toggleAdminStatusAction(user.id, user.status);
       router.refresh();
     } catch (err: any) {
       alert(err.message);
     }
-    setLoading(false);
+    setAdminLoading(false);
   }
 
   async function handlePasswordReset(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!passwordResetUser) return;
-    setLoading(true);
+    setAdminLoading(true);
     try {
-      await resetAdminPasswordAction(passwordResetUser.id, new FormData(e.currentTarget));
+      await resetAdminPasswordAction(
+        passwordResetUser.id,
+        new FormData(e.currentTarget)
+      );
       setPasswordResetUser(null);
       alert("Password reset successfully.");
       router.refresh();
     } catch (err: any) {
       alert(err.message);
     }
-    setLoading(false);
+    setAdminLoading(false);
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-        <div className="flex items-center gap-2">
-          <Shield className="h-5 w-5 text-amber-600" />
-          <h2 className="font-semibold text-slate-800">Administrative Accounts</h2>
-        </div>
-        <button
-          onClick={() => setIsCreating(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors"
-        >
-          <Plus className="h-4 w-4" /> New Admin
-        </button>
-      </div>
-
-      {invitationError && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl mb-6">
-          <p className="text-sm font-medium">Pending invitations cannot be displayed.</p>
-          <p className="text-sm">The system is currently undergoing a database upgrade. This section will be restored shortly.</p>
+      {/* Toast Notification */}
+      {employeeSuccessMsg && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl flex items-center justify-between shadow-sm animate-in fade-in duration-200">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0" />
+            <span className="text-sm font-medium">{employeeSuccessMsg}</span>
+          </div>
+          <button
+            onClick={() => setEmployeeSuccessMsg(null)}
+            className="text-emerald-700 hover:text-emerald-900 text-xs font-semibold ml-4"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
-      {!invitationError && invitations.length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-amber-50 text-amber-700 font-medium border-b border-amber-200">
-              <tr>
-                <th className="px-6 py-4">Invited Name & Email</th>
-                <th className="px-6 py-4">Roles</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {invitations.map((inv: any) => {
-                const roleIds = JSON.parse(inv.roleIds || '[]');
-                const roleNames = roles.filter((r: any) => roleIds.includes(r.id)).map((r: any) => r.name);
-                return (
-                  <tr key={inv.id} className="hover:bg-slate-50">
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-slate-900">{inv.name}</div>
-                      <div className="text-slate-500 text-xs">{inv.email}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-wrap gap-1">
-                        {roleNames.map((name: string) => (
-                          <span key={name} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs font-medium border border-indigo-100">
-                            {name}
+      {/* Top Tabs: Clearly separates Employees and Administrative Accounts */}
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200">
+        <div className="flex items-center gap-2 -mb-px">
+          {canViewEmployees && (
+            <button
+              onClick={() => setActiveTab("employees")}
+              className={`flex items-center gap-2.5 px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${
+                activeTab === "employees"
+                  ? "border-[#1A365D] text-[#1A365D]"
+                  : "border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300"
+              }`}
+            >
+              <Users className="h-4 w-4" />
+              <span>Employees</span>
+              <span
+                className={`ml-1.5 px-2 py-0.5 text-xs font-medium rounded-full ${
+                  activeTab === "employees"
+                    ? "bg-blue-100 text-[#1A365D]"
+                    : "bg-slate-100 text-slate-600"
+                }`}
+              >
+                {employeeList.length}
+              </span>
+            </button>
+          )}
+
+          {canViewAdmins && (
+            <button
+              onClick={() => setActiveTab("admins")}
+              className={`flex items-center gap-2.5 px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${
+                activeTab === "admins"
+                  ? "border-amber-600 text-amber-900"
+                  : "border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300"
+              }`}
+            >
+              <Shield className="h-4 w-4 text-amber-600" />
+              <span>Administrative Accounts</span>
+              <span
+                className={`ml-1.5 px-2 py-0.5 text-xs font-medium rounded-full ${
+                  activeTab === "admins"
+                    ? "bg-amber-100 text-amber-800"
+                    : "bg-slate-100 text-slate-600"
+                }`}
+              >
+                {initialUsers.length}
+              </span>
+            </button>
+          )}
+        </div>
+
+        {/* Header Action Button according to active tab */}
+        <div className="pb-2">
+          {activeTab === "employees" && canCreateEmployee && (
+            <button
+              onClick={() => {
+                setEmployeeError(null);
+                setIsCreatingEmployee(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-[#1A365D] text-white text-sm font-medium rounded-lg hover:bg-[#152C4F] transition-colors shadow-sm"
+            >
+              <Plus className="h-4 w-4" /> New Employee
+            </button>
+          )}
+
+          {activeTab === "admins" && canManageAdmins && (
+            <button
+              onClick={() => setIsCreatingAdmin(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
+            >
+              <Plus className="h-4 w-4" /> New Admin
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* TAB 1: EMPLOYEES (Care Staff & Field Personnel)                            */}
+      {/* ========================================================================= */}
+      {activeTab === "employees" && (
+        <div className="space-y-6">
+          {/* Quick Metrics Bar */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Staff</p>
+                <p className="text-2xl font-bold text-slate-900 mt-1">{employeeList.length}</p>
+              </div>
+              <div className="h-10 w-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                <Users className="h-5 w-5" />
+              </div>
+            </div>
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Active Staff</p>
+                <p className="text-2xl font-bold text-emerald-600 mt-1">{activeEmployeeCount}</p>
+              </div>
+              <div className="h-10 w-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <UserCheck className="h-5 w-5" />
+              </div>
+            </div>
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Inactive Staff</p>
+                <p className="text-2xl font-bold text-slate-500 mt-1">{employeeList.length - activeEmployeeCount}</p>
+              </div>
+              <div className="h-10 w-10 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center">
+                <UserX className="h-5 w-5" />
+              </div>
+            </div>
+          </div>
+
+          {/* Search, Filter & Table */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-slate-100 bg-slate-50 flex flex-wrap gap-4 items-center justify-between">
+              <div className="flex flex-wrap gap-4 w-full md:w-auto flex-1">
+                <div className="relative w-full md:w-80">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Search by name, ID, designation, phone, email..."
+                    value={employeeSearch}
+                    onChange={(e) => setEmployeeSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1A365D]"
+                  />
+                </div>
+                <select
+                  value={employeeStatusFilter}
+                  onChange={(e) => setEmployeeStatusFilter(e.target.value)}
+                  className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A365D] bg-white text-slate-700"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="ACTIVE">Active Only</option>
+                  <option value="INACTIVE">Inactive Only</option>
+                </select>
+              </div>
+              <div className="text-xs text-slate-500 font-medium">
+                Showing {filteredEmployees.length} of {employeeList.length} employee{employeeList.length !== 1 ? "s" : ""}
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200 text-xs uppercase tracking-wider">
+                  <tr>
+                    <th className="px-6 py-3.5">Employee Name</th>
+                    <th className="px-6 py-3.5">Employee ID</th>
+                    <th className="px-6 py-3.5">Designation</th>
+                    <th className="px-6 py-3.5">Contact Details</th>
+                    <th className="px-6 py-3.5">Status</th>
+                    <th className="px-6 py-3.5">Joining Date</th>
+                    <th className="px-6 py-3.5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredEmployees.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
+                        <Users className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                        <p className="font-medium text-slate-700">No employees found</p>
+                        <p className="text-xs text-slate-400 mt-1">
+                          {employeeSearch || employeeStatusFilter !== "ALL"
+                            ? "Try adjusting your search query or status filter."
+                            : "Click 'New Employee' above to register your first care staff member."}
+                        </p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredEmployees.map((emp) => {
+                      const initials = `${(emp.firstName?.[0] || "").toUpperCase()}${(emp.lastName?.[0] || "").toUpperCase()}` || "SE";
+                      const isActive = emp.status === "ACTIVE";
+
+                      return (
+                        <tr key={emp.id} className="hover:bg-slate-50/80 transition-colors">
+                          {/* Name & Avatar */}
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="h-9 w-9 rounded-full bg-slate-100 text-[#1A365D] font-bold text-xs flex items-center justify-center shrink-0 border border-slate-200">
+                                {initials}
+                              </div>
+                              <div>
+                                <div className="font-semibold text-slate-900 flex items-center gap-1.5">
+                                  <span>{emp.firstName} {emp.lastName}</span>
+                                  {emp.userId && (
+                                    <span title="Linked to Admin Account" className="inline-flex items-center px-1.5 py-0.2 bg-amber-50 text-amber-700 text-[10px] font-medium rounded border border-amber-200">
+                                      Admin
+                                    </span>
+                                  )}
+                                </div>
+                                {emp.publicBiography && (
+                                  <p className="text-xs text-slate-400 truncate max-w-xs" title={emp.publicBiography}>
+                                    {emp.publicBiography}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Employee ID */}
+                          <td className="px-6 py-4">
+                            <span className="font-mono text-xs px-2.5 py-1 rounded-md bg-slate-100 text-slate-800 border border-slate-200 font-medium">
+                              {emp.employeeId || "—"}
+                            </span>
+                          </td>
+
+                          {/* Designation */}
+                          <td className="px-6 py-4">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                              <Briefcase className="h-3 w-3 shrink-0" />
+                              {emp.designation || "Staff"}
+                            </span>
+                          </td>
+
+                          {/* Contact Details */}
+                          <td className="px-6 py-4">
+                            <div className="space-y-1">
+                              {emp.contactNumber ? (
+                                <div className="flex items-center gap-1.5 text-xs text-slate-700">
+                                  <Phone className="h-3 w-3 text-slate-400 shrink-0" />
+                                  <span>{emp.contactNumber}</span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-slate-400 italic">No phone</span>
+                              )}
+                              {emp.email && (
+                                <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                                  <Mail className="h-3 w-3 text-slate-400 shrink-0" />
+                                  <span className="truncate max-w-[180px]">{emp.email}</span>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Status */}
+                          <td className="px-6 py-4">
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full ${
+                                isActive
+                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                  : "bg-slate-100 text-slate-600 border border-slate-200"
+                              }`}
+                            >
+                              <span
+                                className={`h-1.5 w-1.5 rounded-full ${
+                                  isActive ? "bg-emerald-500" : "bg-slate-400"
+                                }`}
+                              />
+                              {emp.status}
+                            </span>
+                          </td>
+
+                          {/* Joining Date */}
+                          <td className="px-6 py-4 text-xs text-slate-600">
+                            <div className="flex items-center gap-1.5">
+                              <Calendar className="h-3 w-3 text-slate-400 shrink-0" />
+                              <span>{formatDate(emp.createdAt)}</span>
+                            </div>
+                          </td>
+
+                          {/* Actions */}
+                          <td className="px-6 py-4 text-right space-x-2">
+                            {canEditEmployee && (
+                              <button
+                                onClick={() => {
+                                  setEmployeeError(null);
+                                  setEditingEmployee(emp);
+                                }}
+                                title="Edit Employee"
+                                className="inline-flex items-center justify-center p-1.5 text-slate-500 hover:text-[#1A365D] hover:bg-slate-100 rounded-lg transition-colors"
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </button>
+                            )}
+
+                            {canDeactivateEmployee && (
+                              <button
+                                onClick={() => handleToggleEmployeeStatus(emp)}
+                                title={isActive ? "Deactivate Employee" : "Activate Employee"}
+                                disabled={employeeSubmitting}
+                                className={`inline-flex items-center justify-center p-1.5 rounded-lg transition-colors ${
+                                  isActive
+                                    ? "text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                                    : "text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"
+                                }`}
+                              >
+                                {isActive ? (
+                                  <UserX className="h-4 w-4" />
+                                ) : (
+                                  <Activity className="h-4 w-4" />
+                                )}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 2: ADMINISTRATIVE ACCOUNTS (Preserved Original Implementation)        */}
+      {/* ========================================================================= */}
+      {activeTab === "admins" && (
+        <div className="space-y-6">
+          <div className="bg-amber-50/60 border border-amber-200/80 p-4 rounded-xl flex items-start gap-3">
+            <Shield className="h-5 w-5 text-amber-700 mt-0.5 shrink-0" />
+            <div>
+              <h3 className="font-semibold text-amber-900 text-sm">Administrative Dashboard Credentials</h3>
+              <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
+                Accounts listed here possess system credentials to access the Sunshine Admin Dashboard with specific role-based permissions. They are strictly separate from operational care staff.
+              </p>
+            </div>
+          </div>
+
+          {invitationError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl mb-6">
+              <p className="text-sm font-medium">Pending invitations cannot be displayed.</p>
+              <p className="text-sm">
+                The system is currently undergoing a database upgrade. This section will be restored shortly.
+              </p>
+            </div>
+          )}
+
+          {!invitationError && invitations.length > 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-amber-50 text-amber-700 font-medium border-b border-amber-200">
+                  <tr>
+                    <th className="px-6 py-4">Invited Name & Email</th>
+                    <th className="px-6 py-4">Roles</th>
+                    <th className="px-6 py-4">Status</th>
+                    <th className="px-6 py-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {invitations.map((inv: any) => {
+                    const roleIds = JSON.parse(inv.roleIds || "[]");
+                    const roleNames = roles
+                      .filter((r: any) => roleIds.includes(r.id))
+                      .map((r: any) => r.name);
+                    return (
+                      <tr key={inv.id} className="hover:bg-slate-50">
+                        <td className="px-6 py-4">
+                          <div className="font-medium text-slate-900">{inv.name}</div>
+                          <div className="text-slate-500 text-xs">{inv.email}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-wrap gap-1">
+                            {roleNames.map((name: string) => (
+                              <span
+                                key={name}
+                                className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs font-medium border border-indigo-100"
+                              >
+                                {name}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="px-2 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
+                            {inv.status}
                           </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
-                        {inv.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      {inv.status === 'PENDING' && (
-                        <button onClick={() => handleRevoke(inv.id)} className="text-xs font-medium text-rose-600 hover:text-rose-800">
-                          Revoke
-                        </button>
-                      )}
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          {inv.status === "PENDING" && (
+                            <button
+                              onClick={() => handleRevokeAdmin(inv.id)}
+                              className="text-xs font-medium text-rose-600 hover:text-rose-800"
+                            >
+                              Revoke
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            {/* Search and Filters */}
+            <div className="p-4 border-b border-slate-100 bg-slate-50 flex flex-wrap gap-4 items-center justify-between">
+              <div className="flex flex-wrap gap-4 w-full md:w-auto">
+                <div className="relative w-full md:w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Search admins by name/email..."
+                    value={adminSearchQuery}
+                    onChange={(e) => setAdminSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <select
+                  value={adminRoleFilter}
+                  onChange={(e) => setAdminRoleFilter(e.target.value)}
+                  className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">All Roles</option>
+                  {roles.map((r: any) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="text-sm text-slate-500">
+                {filteredUsers.length} admin{filteredUsers.length !== 1 ? "s" : ""}
+              </div>
+            </div>
+
+            <table className="w-full text-sm text-left">
+              <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
+                <tr>
+                  <th className="px-6 py-4">Admin Name</th>
+                  <th className="px-6 py-4">Roles</th>
+                  <th className="px-6 py-4">Employee Link</th>
+                  <th className="px-6 py-4">Status</th>
+                  <th className="px-6 py-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                      No administrative users match your search criteria.
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                ) : (
+                  filteredUsers.map((user: any) => (
+                    <tr key={user.id} className="hover:bg-slate-50">
+                      <td className="px-6 py-4">
+                        <div className="font-medium text-slate-900">{user.name}</div>
+                        <div className="text-slate-500 text-xs">{user.email}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap gap-1">
+                          {user.userRoles?.map((ur: any) => (
+                            <span
+                              key={ur.roleId}
+                              className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs font-medium border border-indigo-100"
+                            >
+                              {ur.role.name}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {user.employee ? (
+                          <span className="text-slate-700 font-medium">
+                            {user.employee.firstName} {user.employee.lastName}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 italic">None</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span
+                          className={`px-2 py-1 text-xs font-medium rounded-full ${
+                            user.status === "ACTIVE"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-rose-100 text-rose-700"
+                          }`}
+                        >
+                          {user.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right space-x-2">
+                        {canManageAdmins && (
+                          <>
+                            <button
+                              onClick={() => setEditingUser(user)}
+                              className="text-slate-400 hover:text-indigo-600"
+                              title="Edit Admin Roles"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => setPasswordResetUser(user)}
+                              className="text-slate-400 hover:text-amber-600"
+                              title="Reset Password"
+                            >
+                              <Lock className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleToggleAdminStatus(user)}
+                              className="text-slate-400 hover:text-rose-600"
+                              title="Toggle Active Status"
+                            >
+                              {user.status === "ACTIVE" ? (
+                                <UserX className="h-4 w-4" />
+                              ) : (
+                                <Activity className="h-4 w-4" />
+                              )}
+                            </button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        {/* Search and Filters */}
-        <div className="p-4 border-b border-slate-100 bg-slate-50 flex flex-wrap gap-4 items-center justify-between">
-          <div className="flex flex-wrap gap-4 w-full md:w-auto">
-            <div className="relative w-full md:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search admins by name/email..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+      {/* ========================================================================= */}
+      {/* MODAL: Register New Employee                                              */}
+      {/* ========================================================================= */}
+      {isCreatingEmployee && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-100 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <Users className="h-5 w-5 text-[#1A365D]" /> Register New Employee
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Operational care personnel for home visits and assignments.
+                </p>
+              </div>
             </div>
-            <select
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
-              className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-            >
-              <option value="">All Roles</option>
-              {roles.map((r: any) => (
-                <option key={r.id} value={r.id}>{r.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="text-sm text-slate-500">
-            {filteredUsers.length} admin{filteredUsers.length !== 1 ? 's' : ''}
+
+            {/* Explanatory Notice */}
+            <div className="bg-blue-50/80 border border-blue-200/80 rounded-xl p-3 mb-4 text-xs text-blue-900 flex items-start gap-2.5">
+              <Sparkles className="h-4 w-4 text-blue-700 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-semibold">Care Personnel Only:</span> Creating an employee records operational staff. It does <strong className="underline">not</strong> grant dashboard login credentials.
+              </div>
+            </div>
+
+            {employeeError && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3 rounded-xl mb-4 text-xs flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{employeeError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateEmployeeSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    First Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    name="firstName"
+                    required
+                    placeholder="e.g. Ananya"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Last Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    name="lastName"
+                    required
+                    placeholder="e.g. Roy"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Designation / Role <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  name="designation"
+                  required
+                  placeholder="e.g. Care Coordinator, Nurse, Attendant, Physiotherapist"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Employee ID <span className="text-slate-400 font-normal">(Optional)</span>
+                </label>
+                <input
+                  name="employeeId"
+                  placeholder="Leave blank to auto-generate (e.g. SEC/173/ANRO)"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-[#1A365D] outline-none placeholder:font-sans"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  If left empty, canonical sequence numbering will be assigned automatically.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Contact / Mobile <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="tel"
+                    name="contactNumber"
+                    placeholder="e.g. +91 98301 23456"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Email Address <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="email"
+                    name="email"
+                    placeholder="e.g. staff@sunshineeldercare.in"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Operational Status <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  name="status"
+                  defaultValue="ACTIVE"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none bg-white"
+                >
+                  <option value="ACTIVE">ACTIVE (Available for visit assignments)</option>
+                  <option value="INACTIVE">INACTIVE (Excluded from scheduling)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Public Biography / Operational Notes <span className="text-slate-400 font-normal">(Optional)</span>
+                </label>
+                <textarea
+                  name="publicBiography"
+                  rows={2}
+                  placeholder="Specialities, certifications, or operational instructions..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsCreatingEmployee(false)}
+                  disabled={employeeSubmitting}
+                  className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={employeeSubmitting}
+                  className="px-5 py-2 bg-[#1A365D] text-white text-sm font-semibold rounded-lg hover:bg-[#152C4F] transition-colors disabled:opacity-50 shadow-sm flex items-center gap-2"
+                >
+                  {employeeSubmitting ? "Creating..." : "Register Employee"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
+      )}
 
-        <table className="w-full text-sm text-left">
-          <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
-            <tr>
-              <th className="px-6 py-4">Admin Name</th>
-              <th className="px-6 py-4">Roles</th>
-              <th className="px-6 py-4">Employee Link</th>
-              <th className="px-6 py-4">Status</th>
-              <th className="px-6 py-4 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {filteredUsers.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
-                  No administrative users match your search criteria.
-                </td>
-              </tr>
-            ) : (
-              filteredUsers.map((user: any) => (
-                <tr key={user.id} className="hover:bg-slate-50">
-                  <td className="px-6 py-4">
-                    <div className="font-medium text-slate-900">{user.name}</div>
-                    <div className="text-slate-500 text-xs">{user.email}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex flex-wrap gap-1">
-                      {user.userRoles.map((ur: any) => (
-                        <span key={ur.roleId} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs font-medium border border-indigo-100">
-                          {ur.role.name}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    {user.employee ? (
-                      <span className="text-slate-700">{user.employee.firstName} {user.employee.lastName}</span>
-                    ) : (
-                      <span className="text-slate-400 italic">None</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                      user.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
-                    }`}>
-                      {user.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right space-x-2">
-                    <button onClick={() => setEditingUser(user)} className="text-slate-400 hover:text-indigo-600">
-                      <Edit2 className="h-4 w-4" />
-                    </button>
-                    <button onClick={() => setPasswordResetUser(user)} className="text-slate-400 hover:text-amber-600">
-                      <Lock className="h-4 w-4" />
-                    </button>
-                    <button onClick={() => handleToggleStatus(user)} className="text-slate-400 hover:text-rose-600">
-                      {user.status === 'ACTIVE' ? <UserX className="h-4 w-4" /> : <Activity className="h-4 w-4" />}
-                    </button>
-                  </td>
-                </tr>
-              ))
+      {/* ========================================================================= */}
+      {/* MODAL: Edit Existing Employee                                             */}
+      {/* ========================================================================= */}
+      {editingEmployee && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-100 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <Edit2 className="h-5 w-5 text-[#1A365D]" /> Edit Employee
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Updating operational record for {editingEmployee.firstName} {editingEmployee.lastName}
+                </p>
+              </div>
+            </div>
+
+            {employeeError && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3 rounded-xl mb-4 text-xs flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{employeeError}</span>
+              </div>
             )}
-          </tbody>
-        </table>
-      </div>
 
-      {/* Creation Modal */}
-      {isCreating && (
-        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-bold text-slate-900 mb-4">Invite Admin User</h3>
-            <form onSubmit={handleCreate} className="space-y-4">
+            <form onSubmit={handleEditEmployeeSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    First Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    name="firstName"
+                    defaultValue={editingEmployee.firstName}
+                    required
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Last Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    name="lastName"
+                    defaultValue={editingEmployee.lastName}
+                    required
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Designation / Role <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  name="designation"
+                  defaultValue={editingEmployee.designation}
+                  required
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Employee ID <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  name="employeeId"
+                  defaultValue={editingEmployee.employeeId}
+                  required
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-[#1A365D] outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Contact / Mobile
+                  </label>
+                  <input
+                    type="tel"
+                    name="contactNumber"
+                    defaultValue={editingEmployee.contactNumber || ""}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    name="email"
+                    defaultValue={editingEmployee.email || ""}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Operational Status <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  name="status"
+                  defaultValue={editingEmployee.status}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none bg-white"
+                >
+                  <option value="ACTIVE">ACTIVE (Available for visit assignments)</option>
+                  <option value="INACTIVE">INACTIVE (Excluded from scheduling)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Public Biography / Operational Notes
+                </label>
+                <textarea
+                  name="publicBiography"
+                  defaultValue={editingEmployee.publicBiography || ""}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingEmployee(null)}
+                  disabled={employeeSubmitting}
+                  className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={employeeSubmitting}
+                  className="px-5 py-2 bg-[#1A365D] text-white text-sm font-semibold rounded-lg hover:bg-[#152C4F] transition-colors disabled:opacity-50 shadow-sm"
+                >
+                  {employeeSubmitting ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: Creation Modal (Admin Invitation - Preserved)                       */}
+      {/* ========================================================================= */}
+      {isCreatingAdmin && (
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl">
+            <h3 className="text-lg font-bold text-slate-900 mb-1">Invite Admin User</h3>
+            <p className="text-xs text-slate-500 mb-4">
+              Grants system dashboard access with specified role permissions.
+            </p>
+            <form onSubmit={handleCreateAdmin} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
-                <input name="name" required className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" />
+                <input
+                  name="name"
+                  required
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-                <input type="email" name="email" required className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" />
+                <input
+                  type="email"
+                  name="email"
+                  required
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Employee Link (Optional)</label>
-                <select name="employeeId" className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Employee Link (Optional)
+                </label>
+                <select
+                  name="employeeId"
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                >
                   <option value="">-- No Link --</option>
-                  {employees.map((e: any) => (
-                    <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>
+                  {employeeList.map((e: any) => (
+                    <option key={e.id} value={e.id}>
+                      {e.firstName} {e.lastName} ({e.employeeId || e.designation})
+                    </option>
                   ))}
                 </select>
               </div>
@@ -300,26 +1241,50 @@ export function EmployeesClient({ initialUsers, initialInvitations, invitationEr
                 </div>
               </div>
               <div className="flex justify-end gap-3 mt-6">
-                <button type="button" onClick={() => setIsCreating(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
-                <button type="submit" disabled={loading} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">Send Invitation</button>
+                <button
+                  type="button"
+                  onClick={() => setIsCreatingAdmin(false)}
+                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={adminLoading}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium"
+                >
+                  Send Invitation
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Editing Modal */}
+      {/* ========================================================================= */}
+      {/* MODAL: Editing Modal (Admin User - Preserved)                             */}
+      {/* ========================================================================= */}
       {editingUser && (
-        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-bold text-slate-900 mb-4">Edit Admin: {editingUser.name}</h3>
-            <form onSubmit={handleUpdate} className="space-y-4">
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl">
+            <h3 className="text-lg font-bold text-slate-900 mb-4">
+              Edit Admin: {editingUser.name}
+            </h3>
+            <form onSubmit={handleUpdateAdmin} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Employee Link (Optional)</label>
-                <select name="employeeId" defaultValue={editingUser.employeeId || ""} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Employee Link (Optional)
+                </label>
+                <select
+                  name="employeeId"
+                  defaultValue={editingUser.employeeId || ""}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                >
                   <option value="">-- No Link --</option>
-                  {employees.map((e: any) => (
-                    <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>
+                  {employeeList.map((e: any) => (
+                    <option key={e.id} value={e.id}>
+                      {e.firstName} {e.lastName} ({e.employeeId || e.designation})
+                    </option>
                   ))}
                 </select>
               </div>
@@ -327,10 +1292,17 @@ export function EmployeesClient({ initialUsers, initialInvitations, invitationEr
                 <label className="block text-sm font-medium text-slate-700 mb-2">Roles</label>
                 <div className="space-y-2 max-h-48 overflow-y-auto p-2 border rounded-lg bg-slate-50">
                   {roles.map((r: any) => {
-                    const hasRole = editingUser.userRoles.some((ur: any) => ur.roleId === r.id);
+                    const hasRole = editingUser.userRoles?.some(
+                      (ur: any) => ur.roleId === r.id
+                    );
                     return (
                       <label key={r.id} className="flex items-center gap-2">
-                        <input type="checkbox" name="roleIds" value={r.id} defaultChecked={hasRole} />
+                        <input
+                          type="checkbox"
+                          name="roleIds"
+                          value={r.id}
+                          defaultChecked={hasRole}
+                        />
                         <span className="text-sm font-medium text-slate-700">{r.name}</span>
                       </label>
                     );
@@ -338,27 +1310,62 @@ export function EmployeesClient({ initialUsers, initialInvitations, invitationEr
                 </div>
               </div>
               <div className="flex justify-end gap-3 mt-6">
-                <button type="button" onClick={() => setEditingUser(null)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
-                <button type="submit" disabled={loading} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">Save Changes</button>
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={adminLoading}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium"
+                >
+                  Save Changes
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Password Reset Modal */}
+      {/* ========================================================================= */}
+      {/* MODAL: Password Reset Modal (Admin User - Preserved)                      */}
+      {/* ========================================================================= */}
       {passwordResetUser && (
-        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-bold text-slate-900 mb-4">Reset Password: {passwordResetUser.name}</h3>
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl">
+            <h3 className="text-lg font-bold text-slate-900 mb-4">
+              Reset Password: {passwordResetUser.name}
+            </h3>
             <form onSubmit={handlePasswordReset} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">New Password</label>
-                <input type="password" name="newPassword" required className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500 outline-none" />
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  name="newPassword"
+                  required
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500 outline-none"
+                />
               </div>
               <div className="flex justify-end gap-3 mt-6">
-                <button type="button" onClick={() => setPasswordResetUser(null)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
-                <button type="submit" disabled={loading} className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50">Reset Password</button>
+                <button
+                  type="button"
+                  onClick={() => setPasswordResetUser(null)}
+                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={adminLoading}
+                  className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 text-sm font-medium"
+                >
+                  Reset Password
+                </button>
               </div>
             </form>
           </div>
