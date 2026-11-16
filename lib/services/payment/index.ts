@@ -452,17 +452,19 @@ export async function adminVerifyPayment(
       });
 
       // Check if there is an existing PENDING subscription created for this user (e.g. via admin onboarding)
-      const pendingSub = await tx.subscription.findFirst({
-        where: {
-          userId: payment.userId,
-          status: "PENDING",
-          OR: [
-            carePlan?.id ? { carePlanId: carePlan.id } : undefined,
-            legacyPlanId ? { planId: legacyPlanId } : undefined,
-          ].filter(Boolean) as any,
-        },
-        orderBy: { createdAt: "desc" },
-      });
+      const pendingSub = typeof tx.subscription?.findFirst === "function"
+        ? await tx.subscription.findFirst({
+            where: {
+              userId: payment.userId,
+              status: "PENDING",
+              OR: [
+                carePlan?.id ? { carePlanId: carePlan.id } : undefined,
+                legacyPlanId ? { planId: legacyPlanId } : undefined,
+              ].filter(Boolean) as any,
+            },
+            orderBy: { createdAt: "desc" },
+          })
+        : null;
 
       let activeSubId: string;
       if (pendingSub) {
