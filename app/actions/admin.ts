@@ -156,6 +156,8 @@ export async function getMembersCore(
           OR: [
             { name: { contains: rawQuery, mode: 'insensitive' as const } },
             { email: { contains: rawQuery, mode: 'insensitive' as const } },
+            { memberProfile: { mobileNumber: { contains: rawQuery, mode: 'insensitive' as const } } },
+            { memberProfile: { spouseMobileNumber: { contains: rawQuery, mode: 'insensitive' as const } } },
             ...memberIdConditions,
           ]
         }
@@ -179,6 +181,8 @@ export async function getMembersCore(
             lastName: true,
             spouseFirstName: true,
             spouseLastName: true,
+            spouseMobileNumber: true,
+            dateOfEnrollment: true,
             serviceAddress: true,
             mobileNumber: true,
             bloodGroup: true,
@@ -301,6 +305,8 @@ export async function getMembersCore(
       serialNumber: genuineSerialMap.get(m.id) ?? null,
       service,
       secondaryName: secondaryName || null,
+      primaryMobile: m.memberProfile?.mobileNumber || null,
+      secondaryMobile: m.memberProfile?.spouseMobileNumber || null,
       scheduledVisitDate: scheduledDate,
       maskedMedicalConditions: medical,
       insuranceProvider: insuranceProvider,
@@ -436,6 +442,495 @@ export async function updateMembershipStartDate(
     if (sub?.userId) {
       revalidatePath(`/admin/members/${sub.userId}`);
     }
+  }
+  return result;
+}
+
+// --- Comprehensive Member Profile Editing ---
+export interface AdminUpdateMemberInput {
+  userId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  mobileNumber: string;
+  alternateNumber?: string | null;
+  serviceAddress?: string | null;
+  nearestLandmark?: string | null;
+  dateOfBirth?: string | Date | null;
+  gender?: string | null;
+  bloodGroup?: string | null;
+  idProofType?: string | null;
+  idProofNumber?: string | null;
+
+  // Spouse / Secondary Member
+  hasSpouse?: boolean;
+  spouseFirstName?: string | null;
+  spouseLastName?: string | null;
+  spouseMobileNumber?: string | null;
+  spouseDateOfBirth?: string | Date | null;
+  spouseGender?: string | null;
+  spouseIdProofType?: string | null;
+  spouseIdProofNumber?: string | null;
+
+  // Membership & Dates
+  dateOfEnrollment?: string | Date | null;
+  carePlanId?: string | null;
+  startDate?: string | Date | null;
+  endDate?: string | Date | null;
+  durationMonths?: number | null;
+
+  // Medical & Health Profile
+  medicalConditions?: string | null;
+  hospitalForSos?: string | null;
+  shiftAuthorization?: boolean;
+
+  // Insurance
+  insuranceProvider?: string | null;
+  policyNumber?: string | null;
+  coverageAmount?: string | null;
+
+  // Contacts
+  emergencyContactName?: string | null;
+  emergencyContactRelationship?: string | null;
+  emergencyContactPhone?: string | null;
+  emergencyContactAlternatePhone?: string | null;
+  emergencyContactEmail?: string | null;
+
+  sponsorName?: string | null;
+  sponsorRelationship?: string | null;
+  sponsorMobile?: string | null;
+  sponsorAlternateNumber?: string | null;
+  sponsorEmail?: string | null;
+}
+
+export async function adminUpdateMemberCore(
+  input: AdminUpdateMemberInput,
+  actorUserId: string,
+  database: any = db,
+  hasSensitiveView: boolean = true
+): Promise<{ success: boolean; error?: string; userId?: string }> {
+  if (!input.userId) {
+    return { success: false, error: "Member ID is required." };
+  }
+  if (!input.firstName?.trim() || !input.lastName?.trim()) {
+    return { success: false, error: "First and last name are required." };
+  }
+  if (!input.email?.trim()) {
+    return { success: false, error: "Email address is required." };
+  }
+  if (!input.mobileNumber?.trim()) {
+    return { success: false, error: "Primary mobile number is required." };
+  }
+
+  const cleanMobile = input.mobileNumber.replace(/\D/g, "");
+  if (cleanMobile.length < 10) {
+    return { success: false, error: "Primary mobile number must be at least 10 digits." };
+  }
+
+  if (input.spouseMobileNumber?.trim()) {
+    const cleanSpouseMobile = input.spouseMobileNumber.replace(/\D/g, "");
+    if (cleanSpouseMobile.length < 10) {
+      return { success: false, error: "Secondary mobile number must be at least 10 digits." };
+    }
+  }
+
+  try {
+    return await database.$transaction(async (tx: any) => {
+      // 1. Fetch current user and profile for before snapshot
+      const currentUser = await tx.user.findUnique({
+        where: { id: input.userId },
+        include: {
+          memberProfile: {
+            include: {
+              sponsor: true,
+              insuranceDetails: true,
+              medicalAuth: true,
+            }
+          },
+          subscriptions: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+          emergencyContact: true,
+        }
+      });
+
+      if (!currentUser) {
+        return { success: false, error: "Member not found." };
+      }
+
+      // 2. Check email uniqueness if email changed
+      const normalizedEmail = input.email.toLowerCase().trim();
+      if (normalizedEmail !== currentUser.email.toLowerCase()) {
+        const existingByEmail = await tx.user.findUnique({
+          where: { email: normalizedEmail }
+        });
+        if (existingByEmail && existingByEmail.id !== currentUser.id) {
+          return { success: false, error: "Email address is already in use by another account." };
+        }
+      }
+
+      const beforeSnapshot = {
+        name: currentUser.name,
+        email: currentUser.email,
+        profile: currentUser.memberProfile ? {
+          firstName: currentUser.memberProfile.firstName,
+          lastName: currentUser.memberProfile.lastName,
+          mobileNumber: currentUser.memberProfile.mobileNumber,
+          serviceAddress: currentUser.memberProfile.serviceAddress,
+          spouseFirstName: currentUser.memberProfile.spouseFirstName,
+          spouseLastName: currentUser.memberProfile.spouseLastName,
+          spouseMobileNumber: currentUser.memberProfile.spouseMobileNumber,
+          bloodGroup: currentUser.memberProfile.bloodGroup,
+          dateOfEnrollment: currentUser.memberProfile.dateOfEnrollment,
+        } : null,
+      };
+
+      // 3. Update User record
+      const fullName = `${input.firstName.trim()} ${input.lastName.trim()}`.trim();
+      await tx.user.update({
+        where: { id: currentUser.id },
+        data: {
+          name: fullName,
+          email: normalizedEmail,
+        }
+      });
+
+      // 4. Update or Upsert MemberProfile record
+      // CRITICAL: Member ID is strictly PRESERVED! Never modify or overwrite memberId.
+      const profileData: any = {
+        firstName: input.firstName.trim(),
+        lastName: input.lastName.trim(),
+        email: normalizedEmail,
+        mobileNumber: input.mobileNumber.trim(),
+        alternateNumber: input.alternateNumber?.trim() || null,
+        serviceAddress: input.serviceAddress?.trim() || null,
+        nearestLandmark: input.nearestLandmark?.trim() || null,
+        gender: input.gender || null,
+        bloodGroup: input.bloodGroup || null,
+        idProofType: input.idProofType || null,
+      };
+
+      if (input.dateOfBirth) {
+        profileData.dateOfBirth = new Date(input.dateOfBirth);
+      } else if (input.dateOfBirth === null || input.dateOfBirth === "") {
+        profileData.dateOfBirth = null;
+      }
+
+      if (input.idProofNumber !== undefined && input.idProofNumber !== null) {
+        profileData.idProofNumber = input.idProofNumber.trim() || null;
+      }
+
+      if (input.dateOfEnrollment) {
+        profileData.dateOfEnrollment = new Date(input.dateOfEnrollment);
+      } else if (input.dateOfEnrollment === null || input.dateOfEnrollment === "") {
+        profileData.dateOfEnrollment = null;
+      }
+
+      // Spouse handling:
+      // If hasSpouse is explicitly false, clear spouse fields.
+      if (input.hasSpouse === false) {
+        profileData.spouseFirstName = null;
+        profileData.spouseLastName = null;
+        profileData.spouseMobileNumber = null;
+        profileData.spouseDateOfBirth = null;
+        profileData.spouseGender = null;
+        profileData.spouseIdProofType = null;
+        profileData.spouseIdProofNumber = null;
+      } else if (input.hasSpouse === true || input.spouseFirstName || input.spouseLastName || input.spouseMobileNumber) {
+        profileData.spouseFirstName = input.spouseFirstName?.trim() || null;
+        profileData.spouseLastName = input.spouseLastName?.trim() || null;
+        profileData.spouseMobileNumber = input.spouseMobileNumber?.trim() || null;
+        profileData.spouseGender = input.spouseGender || null;
+        profileData.spouseIdProofType = input.spouseIdProofType || null;
+        if (input.spouseIdProofNumber !== undefined && input.spouseIdProofNumber !== null) {
+          profileData.spouseIdProofNumber = input.spouseIdProofNumber.trim() || null;
+        }
+        if (input.spouseDateOfBirth) {
+          profileData.spouseDateOfBirth = new Date(input.spouseDateOfBirth);
+        } else if (input.spouseDateOfBirth === null || input.spouseDateOfBirth === "") {
+          profileData.spouseDateOfBirth = null;
+        }
+      }
+
+      // Medical conditions: Only update if actor has sensitive view permission
+      if (hasSensitiveView && input.medicalConditions !== undefined) {
+        profileData.medicalConditions = input.medicalConditions?.trim() || null;
+      }
+
+      let memberProfileId: string;
+      if (currentUser.memberProfile) {
+        memberProfileId = currentUser.memberProfile.id;
+        await tx.memberProfile.update({
+          where: { id: memberProfileId },
+          data: profileData,
+        });
+      } else {
+        const createdProfile = await tx.memberProfile.create({
+          data: {
+            userId: currentUser.id,
+            ...profileData,
+          }
+        });
+        memberProfileId = createdProfile.id;
+      }
+
+      // 5. Update Subscription Dates & Plan if provided
+      const sub = currentUser.subscriptions?.[0];
+      if (sub) {
+        const subData: any = {};
+        if (input.startDate) {
+          subData.startDate = new Date(input.startDate);
+        }
+        if (input.endDate) {
+          subData.endDate = new Date(input.endDate);
+        }
+        if (input.carePlanId) {
+          subData.carePlanId = input.carePlanId;
+        }
+        if (input.durationMonths && input.durationMonths > 0) {
+          subData.durationMonths = input.durationMonths;
+        }
+        if (Object.keys(subData).length > 0) {
+          await tx.subscription.update({
+            where: { id: sub.id },
+            data: subData,
+          });
+        }
+      }
+
+      // 6. Emergency Contact
+      if (input.emergencyContactName !== undefined || input.emergencyContactPhone !== undefined) {
+        if (input.emergencyContactName?.trim() || input.emergencyContactPhone?.trim()) {
+          await tx.emergencyContact.upsert({
+            where: { userId: currentUser.id },
+            update: {
+              fullName: input.emergencyContactName?.trim() || "Emergency Contact",
+              relationship: input.emergencyContactRelationship?.trim() || "Contact",
+              phone: input.emergencyContactPhone?.trim() || "",
+              alternatePhone: input.emergencyContactAlternatePhone?.trim() || null,
+              email: input.emergencyContactEmail?.trim() || null,
+            },
+            create: {
+              userId: currentUser.id,
+              fullName: input.emergencyContactName?.trim() || "Emergency Contact",
+              relationship: input.emergencyContactRelationship?.trim() || "Contact",
+              phone: input.emergencyContactPhone?.trim() || "",
+              alternatePhone: input.emergencyContactAlternatePhone?.trim() || null,
+              email: input.emergencyContactEmail?.trim() || null,
+            }
+          });
+        }
+      }
+
+      // 7. Sponsor Details
+      if (input.sponsorName !== undefined || input.sponsorMobile !== undefined) {
+        if (input.sponsorName?.trim() || input.sponsorMobile?.trim()) {
+          await tx.sponsor.upsert({
+            where: { memberProfileId: memberProfileId },
+            update: {
+              fullName: input.sponsorName?.trim() || "Sponsor",
+              relationship: input.sponsorRelationship?.trim() || "Sponsor",
+              mobileNumber: input.sponsorMobile?.trim() || "",
+              alternateNumber: input.sponsorAlternateNumber?.trim() || null,
+              email: input.sponsorEmail?.trim() || null,
+            },
+            create: {
+              memberProfileId: memberProfileId,
+              fullName: input.sponsorName?.trim() || "Sponsor",
+              relationship: input.sponsorRelationship?.trim() || "Sponsor",
+              mobileNumber: input.sponsorMobile?.trim() || "",
+              alternateNumber: input.sponsorAlternateNumber?.trim() || null,
+              email: input.sponsorEmail?.trim() || null,
+            }
+          });
+        }
+      }
+
+      // 8. Insurance Details
+      if (input.insuranceProvider !== undefined || input.policyNumber !== undefined) {
+        if (input.insuranceProvider?.trim() || input.policyNumber?.trim()) {
+          await tx.insuranceDetails.upsert({
+            where: { memberProfileId: memberProfileId },
+            update: {
+              providerName: input.insuranceProvider?.trim() || "Insurance",
+              policyNumber: input.policyNumber?.trim() || "N/A",
+              coverageAmount: input.coverageAmount?.trim() || null,
+            },
+            create: {
+              memberProfileId: memberProfileId,
+              providerName: input.insuranceProvider?.trim() || "Insurance",
+              policyNumber: input.policyNumber?.trim() || "N/A",
+              coverageAmount: input.coverageAmount?.trim() || null,
+            }
+          });
+        }
+      }
+
+      // 9. Medical Authorization
+      if (input.hospitalForSos !== undefined || input.shiftAuthorization !== undefined) {
+        await tx.medicalAuthorization.upsert({
+          where: { memberProfileId: memberProfileId },
+          update: {
+            hospitalForSos: input.hospitalForSos?.trim() || null,
+            shiftAuthorization: Boolean(input.shiftAuthorization),
+          },
+          create: {
+            memberProfileId: memberProfileId,
+            hospitalForSos: input.hospitalForSos?.trim() || null,
+            shiftAuthorization: Boolean(input.shiftAuthorization),
+          }
+        });
+      }
+
+      // 10. Audit Log with meaningful before/after changes
+      await tx.auditLog.create({
+        data: {
+          actorUserId,
+          action: "MEMBER_UPDATED_BY_ADMIN",
+          entityType: "USER",
+          entityId: currentUser.id,
+          metadata: {
+            before: beforeSnapshot,
+            after: {
+              name: fullName,
+              email: normalizedEmail,
+              mobileNumber: input.mobileNumber.trim(),
+              spouseName: input.spouseFirstName ? `${input.spouseFirstName} ${input.spouseLastName || ""}`.trim() : null,
+              spouseMobileNumber: input.spouseMobileNumber?.trim() || null,
+              dateOfEnrollment: input.dateOfEnrollment || null,
+            },
+            memberId: currentUser.memberProfile?.memberId || "UNASSIGNED",
+          }
+        }
+      });
+
+      return { success: true, userId: currentUser.id };
+    });
+  } catch (error: any) {
+    return { success: false, error: error.message || "Failed to update member." };
+  }
+}
+
+export async function adminUpdateMember(formData: FormData) {
+  const sessionUser = await requirePermission("MEMBER_MANAGE");
+  try {
+    await RateLimitService.checkLimit("ADMINISTRATIVE");
+  } catch (error: any) {
+    if (error?.name === "RateLimitError") {
+      return { success: false, error: "Too many requests. Please try again later." };
+    }
+  }
+
+  const hasSensitiveView = await AuthorizationService.can(sessionUser, "MEMBER_SENSITIVE_VIEW");
+
+  const userId = formData.get("userId") as string;
+  const firstName = formData.get("firstName") as string;
+  const lastName = formData.get("lastName") as string;
+  const email = formData.get("email") as string;
+  const mobileNumber = formData.get("mobileNumber") as string;
+  const alternateNumber = formData.get("alternateNumber") as string;
+  const serviceAddress = formData.get("serviceAddress") as string;
+  const nearestLandmark = formData.get("nearestLandmark") as string;
+  const dateOfBirth = formData.get("dateOfBirth") as string;
+  const gender = formData.get("gender") as string;
+  const bloodGroup = formData.get("bloodGroup") as string;
+  const idProofType = formData.get("idProofType") as string;
+  const idProofNumber = formData.get("idProofNumber") as string;
+
+  const hasSpouseStr = formData.get("hasSpouse") as string;
+  const hasSpouse = hasSpouseStr === "true" || hasSpouseStr === "1" || hasSpouseStr === "on";
+  const spouseFirstName = formData.get("spouseFirstName") as string;
+  const spouseLastName = formData.get("spouseLastName") as string;
+  const spouseMobileNumber = formData.get("spouseMobileNumber") as string;
+  const spouseDateOfBirth = formData.get("spouseDateOfBirth") as string;
+  const spouseGender = formData.get("spouseGender") as string;
+  const spouseIdProofType = formData.get("spouseIdProofType") as string;
+  const spouseIdProofNumber = formData.get("spouseIdProofNumber") as string;
+
+  const dateOfEnrollment = formData.get("dateOfEnrollment") as string;
+  const carePlanId = formData.get("carePlanId") as string;
+  const startDate = formData.get("startDate") as string;
+  const endDate = formData.get("endDate") as string;
+  const durationMonthsStr = formData.get("durationMonths") as string;
+  const durationMonths = durationMonthsStr ? parseInt(durationMonthsStr, 10) : undefined;
+
+  const medicalConditions = formData.get("medicalConditions") as string;
+  const hospitalForSos = formData.get("hospitalForSos") as string;
+  const shiftAuthorization = formData.get("shiftAuthorization") === "true" || formData.get("shiftAuthorization") === "on";
+
+  const insuranceProvider = formData.get("insuranceProvider") as string;
+  const policyNumber = formData.get("policyNumber") as string;
+  const coverageAmount = formData.get("coverageAmount") as string;
+
+  const emergencyContactName = formData.get("emergencyContactName") as string;
+  const emergencyContactRelationship = formData.get("emergencyContactRelationship") as string;
+  const emergencyContactPhone = formData.get("emergencyContactPhone") as string;
+  const emergencyContactAlternatePhone = formData.get("emergencyContactAlternatePhone") as string;
+  const emergencyContactEmail = formData.get("emergencyContactEmail") as string;
+
+  const sponsorName = formData.get("sponsorName") as string;
+  const sponsorRelationship = formData.get("sponsorRelationship") as string;
+  const sponsorMobile = formData.get("sponsorMobile") as string;
+  const sponsorAlternateNumber = formData.get("sponsorAlternateNumber") as string;
+  const sponsorEmail = formData.get("sponsorEmail") as string;
+
+  const input: AdminUpdateMemberInput = {
+    userId,
+    firstName,
+    lastName,
+    email,
+    mobileNumber,
+    alternateNumber: alternateNumber || null,
+    serviceAddress: serviceAddress || null,
+    nearestLandmark: nearestLandmark || null,
+    dateOfBirth: dateOfBirth || null,
+    gender: gender || null,
+    bloodGroup: bloodGroup || null,
+    idProofType: idProofType || null,
+    idProofNumber: idProofNumber || null,
+
+    hasSpouse,
+    spouseFirstName: spouseFirstName || null,
+    spouseLastName: spouseLastName || null,
+    spouseMobileNumber: spouseMobileNumber || null,
+    spouseDateOfBirth: spouseDateOfBirth || null,
+    spouseGender: spouseGender || null,
+    spouseIdProofType: spouseIdProofType || null,
+    spouseIdProofNumber: spouseIdProofNumber || null,
+
+    dateOfEnrollment: dateOfEnrollment || null,
+    carePlanId: carePlanId || null,
+    startDate: startDate || null,
+    endDate: endDate || null,
+    durationMonths: durationMonths || null,
+
+    medicalConditions: medicalConditions !== null ? medicalConditions : undefined,
+    hospitalForSos: hospitalForSos || null,
+    shiftAuthorization,
+
+    insuranceProvider: insuranceProvider || null,
+    policyNumber: policyNumber || null,
+    coverageAmount: coverageAmount || null,
+
+    emergencyContactName: emergencyContactName || null,
+    emergencyContactRelationship: emergencyContactRelationship || null,
+    emergencyContactPhone: emergencyContactPhone || null,
+    emergencyContactAlternatePhone: emergencyContactAlternatePhone || null,
+    emergencyContactEmail: emergencyContactEmail || null,
+
+    sponsorName: sponsorName || null,
+    sponsorRelationship: sponsorRelationship || null,
+    sponsorMobile: sponsorMobile || null,
+    sponsorAlternateNumber: sponsorAlternateNumber || null,
+    sponsorEmail: sponsorEmail || null,
+  };
+
+  const result = await adminUpdateMemberCore(input, sessionUser, db, hasSensitiveView);
+  if (result.success && result.userId) {
+    revalidatePath("/admin/members");
+    revalidatePath(`/admin/members/${result.userId}`);
+    revalidatePath(`/admin/members/${result.userId}/edit`);
   }
   return result;
 }

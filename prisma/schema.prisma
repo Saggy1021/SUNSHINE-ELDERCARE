@@ -573,6 +573,9 @@ model MemberProfile {
   spouseIdProofDocumentId String?         @unique
   spouseIdProofDocument   MemberDocument? @relation("MemberSpouseIdProof", fields: [spouseIdProofDocumentId], references: [id], onDelete: SetNull)
 
+  // Enrollment Date
+  dateOfEnrollment        DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

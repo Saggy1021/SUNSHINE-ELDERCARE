@@ -255,14 +255,14 @@ async function runMembershipDatesAndTableTests() {
   console.log('  ✓ Requirement 5 passed: Legacy slash-separated IDs normalize and validate seamlessly.');
 
   // ---------------------------------------------------------------------------
-  // REQUIREMENT 7: The exact 15-column order in page.tsx
+  // REQUIREMENT 7: The exact 16-column order in page.tsx
   // REQUIREMENT 15: Responsive horizontal scrolling
   // ---------------------------------------------------------------------------
-  console.log('\n--- TEST 7 & 15: Exact 15-Column Order & Horizontal Scrolling in page.tsx ---');
+  console.log('\n--- TEST 7 & 15: Exact 16-Column Order (including Dual Mobile Numbers) & Horizontal Scrolling ---');
   const membersPageFilePath = path.join(__dirname, '../../app/admin/members/page.tsx');
   const membersPageContent = fs.readFileSync(membersPageFilePath, 'utf8');
 
-  const expected15Columns = [
+  const expected16Columns = [
     'Ser No',
     'MID',
     'Name of Primary Member',
@@ -272,7 +272,8 @@ async function runMembershipDatesAndTableTests() {
     'From',
     'To',
     'Service Address',
-    'Mobile No',
+    'Primary Mobile No',
+    'Secondary Mobile No',
     'Email ID',
     'Blood Group',
     'Medical Condition',
@@ -281,7 +282,7 @@ async function runMembershipDatesAndTableTests() {
   ];
 
   let lastIndex = 0;
-  for (const col of expected15Columns) {
+  for (const col of expected16Columns) {
     const colIndex = membersPageContent.indexOf(`>${col}<`, lastIndex);
     assert.ok(
       colIndex !== -1,
@@ -294,12 +295,11 @@ async function runMembershipDatesAndTableTests() {
     lastIndex = colIndex;
   }
 
-  // Ensure Secondary Mobile is NOT included
-  assert.strictEqual(
-    membersPageContent.includes('>Secondary Mobile<'),
-    false,
-    'Secondary Mobile must NOT be included in the table'
-  );
+  // Ensure Secondary Mobile No immediately follows Primary Mobile No
+  const primIdx = membersPageContent.indexOf('>Primary Mobile No<');
+  const secIdx = membersPageContent.indexOf('>Secondary Mobile No<');
+  assert.ok(primIdx !== -1 && secIdx !== -1, 'Both primary and secondary mobile columns must exist');
+  assert.ok(secIdx > primIdx, 'Secondary Mobile No must immediately follow Primary Mobile No');
 
   // Responsive horizontal scrolling container check
   assert.ok(
@@ -312,7 +312,7 @@ async function runMembershipDatesAndTableTests() {
     'Table header must be sticky for vertical scrolling'
   );
 
-  console.log('  ✓ Requirement 7 passed: Verified exact 15-column order: ' + JSON.stringify(expected15Columns));
+  console.log('  ✓ Requirement 7 passed: Verified exact 16-column order: ' + JSON.stringify(expected16Columns));
   console.log('  ✓ Requirement 15 passed: Responsive horizontal scrolling container and sticky top header verified.');
 
   // ---------------------------------------------------------------------------

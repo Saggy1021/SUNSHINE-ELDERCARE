@@ -46,8 +46,8 @@ export default async function AdminMembersPage({
           </h1>
           <p className="text-sm text-slate-500 mt-1">Manage user accounts and eldercare memberships.</p>
         </div>
-        <Link 
-          href="/admin/members/new" 
+        <Link
+          href="/admin/members/new"
           className="inline-flex items-center gap-2 px-4 py-2 bg-[#091329] text-white text-sm font-medium rounded-lg hover:bg-[#162850] shadow-sm transition-colors self-start sm:self-auto"
         >
           + Create Member
@@ -61,7 +61,7 @@ export default async function AdminMembersPage({
 
         {/* Compact, horizontally scrollable table with sticky headers */}
         <div className="overflow-x-auto max-h-[calc(100vh-240px)] overflow-y-auto">
-          <table className="min-w-[1550px] w-full text-left text-xs border-collapse">
+          <table className="min-w-[1750px] w-full text-left text-xs border-collapse">
             <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs z-10 border-b border-slate-200 text-slate-600 text-[11px] font-semibold uppercase tracking-wider shadow-2xs">
               <tr>
                 {/* 1. Ser No */}
@@ -120,36 +120,41 @@ export default async function AdminMembersPage({
                 </th>
 
                 {/* 9. Service Address */}
-                <th className="px-3.5 py-3 whitespace-nowrap">
+                <th className="px-3.5 py-3 whitespace-nowrap min-w-[280px] max-w-md">
                   <span>Service Address</span>
                 </th>
 
-                {/* 10. Mobile No */}
+                {/* 10. Primary Mobile No */}
                 <th className="px-3.5 py-3 whitespace-nowrap">
-                  <span>Mobile No</span>
+                  <span>Primary Mobile No</span>
                 </th>
 
-                {/* 11. Email ID */}
+                {/* 11. Secondary Mobile No */}
+                <th className="px-3.5 py-3 whitespace-nowrap">
+                  <span>Secondary Mobile No</span>
+                </th>
+
+                {/* 12. Email ID */}
                 <th className="px-3.5 py-3 whitespace-nowrap">
                   <span>Email ID</span>
                 </th>
 
-                {/* 12. Blood Group */}
+                {/* 13. Blood Group */}
                 <th className="px-3.5 py-3 text-center whitespace-nowrap">
                   <span>Blood Group</span>
                 </th>
 
-                {/* 13. Medical Condition */}
+                {/* 14. Medical Condition */}
                 <th className="px-3.5 py-3 whitespace-nowrap">
                   <span>Medical Condition</span>
                 </th>
 
-                {/* 14. Health Insurance */}
+                {/* 15. Health Insurance */}
                 <th className="px-3.5 py-3 whitespace-nowrap">
                   <span>Health Insurance</span>
                 </th>
 
-                {/* 15. SCH Visit */}
+                {/* 16. SCH Visit */}
                 <th className="px-3.5 py-3 whitespace-nowrap">
                   <span>SCH Visit</span>
                 </th>
@@ -158,7 +163,7 @@ export default async function AdminMembersPage({
             <tbody className="divide-y divide-slate-100 bg-white">
               {members.length === 0 ? (
                 <tr>
-                  <td colSpan={15} className="px-6 py-12 text-center text-slate-500">
+                  <td colSpan={16} className="px-6 py-12 text-center text-slate-500">
                     No members found.
                   </td>
                 </tr>
@@ -178,7 +183,7 @@ export default async function AdminMembersPage({
                     {/* 2. MID */}
                     <td className="px-3.5 py-3 whitespace-nowrap">
                       {member.memberProfile?.memberId ? (
-                        <Link 
+                        <Link
                           href={`/admin/members/${member.id}`}
                           className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-2 py-0.5 rounded hover:bg-indigo-100 hover:border-indigo-300 transition-colors"
                           title="View Member Details"
@@ -193,7 +198,7 @@ export default async function AdminMembersPage({
 
                     {/* 3. Name of Primary Member */}
                     <td className="px-3.5 py-3 font-medium text-slate-900 whitespace-nowrap">
-                      <Link 
+                      <Link
                         href={`/admin/members/${member.id}`}
                         className="inline-flex items-center gap-1.5 hover:text-[#B08A4A] transition-colors"
                         title="View Member Details"
@@ -228,22 +233,27 @@ export default async function AdminMembersPage({
                       {formatMembershipDate(sub?.endDate)}
                     </td>
 
-                    {/* 9. Service Address */}
-                    <td className="px-3.5 py-3 text-slate-600 text-xs max-w-xs truncate" title={member.memberProfile?.serviceAddress || ""}>
+                    {/* 9. Service Address (Fully visible, wrapped without truncation) */}
+                    <td className="px-3.5 py-3 text-slate-700 text-xs whitespace-normal break-words min-w-[280px] max-w-md leading-relaxed">
                       {member.memberProfile?.serviceAddress || "—"}
                     </td>
 
-                    {/* 10. Mobile No */}
+                    {/* 10. Primary Mobile No */}
                     <td className="px-3.5 py-3 text-slate-700 font-mono text-xs whitespace-nowrap">
                       {member.memberProfile?.mobileNumber || "—"}
                     </td>
 
-                    {/* 11. Email ID */}
+                    {/* 11. Secondary Mobile No */}
+                    <td className="px-3.5 py-3 text-slate-700 font-mono text-xs whitespace-nowrap">
+                      {member.memberProfile?.spouseMobileNumber || "—"}
+                    </td>
+
+                    {/* 12. Email ID */}
                     <td className="px-3.5 py-3 text-slate-600 text-xs whitespace-nowrap">
                       {member.email || "—"}
                     </td>
 
-                    {/* 12. Blood Group */}
+                    {/* 13. Blood Group */}
                     <td className="px-3.5 py-3 text-center whitespace-nowrap">
                       {member.memberProfile?.bloodGroup ? (
                         <span className="inline-block bg-slate-100 text-slate-800 font-semibold font-mono px-2 py-0.5 rounded border border-slate-200">
@@ -254,17 +264,17 @@ export default async function AdminMembersPage({
                       )}
                     </td>
 
-                    {/* 13. Medical Condition */}
+                    {/* 14. Medical Condition */}
                     <td className="px-3.5 py-3 text-slate-600 text-xs max-w-xs truncate" title={member.maskedMedicalConditions || ""}>
                       {member.maskedMedicalConditions || "—"}
                     </td>
 
-                    {/* 14. Health Insurance */}
+                    {/* 15. Health Insurance */}
                     <td className="px-3.5 py-3 text-slate-600 text-xs whitespace-nowrap">
                       {member.insuranceProvider || "—"}
                     </td>
 
-                    {/* 15. SCH Visit */}
+                    {/* 16. SCH Visit */}
                     <td className="px-3.5 py-3 text-slate-700 text-xs whitespace-nowrap font-medium">
                       {formatMembershipDate(member.scheduledVisitDate)}
                     </td>
