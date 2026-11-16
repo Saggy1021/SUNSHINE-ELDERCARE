@@ -1130,13 +1130,27 @@ export function VisitScheduleCalendar({
                     Change Status
                   </button>
                   <button
-                    onClick={() => setShowRescheduleModal(true)}
+                    onClick={() => {
+                      setRescheduleDate(formatDateKey(selectedVisit.scheduledStart));
+                      setRescheduleStartTime(formatTimeInputIST(selectedVisit.scheduledStart));
+                      setRescheduleEndTime(formatTimeInputIST(selectedVisit.scheduledEnd));
+                      setRescheduleAssignedEmp(selectedVisit.assignedEmployee?.id || selectedVisit.assignedCaregiver?.id || "");
+                      setActionError(null);
+                      setShowRescheduleModal(true);
+                    }}
                     className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-2xs"
                   >
                     Reschedule
                   </button>
                   <button
-                    onClick={() => setShowEditModal(true)}
+                    onClick={() => {
+                      setEditDate(formatDateKey(selectedVisit.scheduledStart));
+                      setEditStartTime(formatTimeInputIST(selectedVisit.scheduledStart));
+                      setEditEndTime(formatTimeInputIST(selectedVisit.scheduledEnd));
+                      setEditAssignedEmp(selectedVisit.assignedEmployee?.id || selectedVisit.assignedCaregiver?.id || "");
+                      setActionError(null);
+                      setShowEditModal(true);
+                    }}
                     className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-2xs"
                   >
                     Edit Visit
