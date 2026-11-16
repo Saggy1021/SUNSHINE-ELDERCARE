@@ -2,6 +2,7 @@ import { getMemberDetails } from "@/app/actions/admin"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, UserSquare2, Shield, ShieldAlert, CheckCircle2, Clock, CalendarDays, Receipt, FileText, ClipboardList, Activity } from "lucide-react"
+import { MembershipDateEditor } from "@/components/admin/membership-date-editor"
 
 export default async function MemberDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -285,11 +286,21 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
                         </span>
                       </div>
                       
-                      {(sub.startDate || sub.endDate) && (
-                        <div className="text-xs text-slate-500 flex items-center gap-4 mt-3">
-                          <div className="flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" /> Start: {sub.startDate?.toLocaleDateString('en-GB') || '?'}</div>
-                          <div className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> End: {sub.endDate?.toLocaleDateString('en-GB') || '?'}</div>
-                        </div>
+                      {isCurrent ? (
+                        <MembershipDateEditor
+                          subscriptionId={sub.id}
+                          currentStartDate={sub.startDate ? sub.startDate.toISOString() : null}
+                          currentEndDate={sub.endDate ? sub.endDate.toISOString() : null}
+                          durationMonths={sub.durationMonths || 1}
+                          status={sub.status}
+                        />
+                      ) : (
+                        (sub.startDate || sub.endDate) && (
+                          <div className="text-xs text-slate-500 flex items-center gap-4 mt-3 pt-3 border-t border-slate-100">
+                            <div className="flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" /> Start: {sub.startDate?.toLocaleDateString('en-GB') || '?'}</div>
+                            <div className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> End: {sub.endDate?.toLocaleDateString('en-GB') || '?'}</div>
+                          </div>
+                        )
                       )}
                     </div>
                   )

@@ -527,19 +527,45 @@ export async function settleSuccessfulPayment(
         },
       });
 
-      const newSub = await tx.subscription.create({
-        data: {
+      // Check if there is an existing PENDING subscription created for this user (e.g. via admin onboarding)
+      const pendingSub = await tx.subscription.findFirst({
+        where: {
           userId: payment.userId,
-          carePlanId: carePlan?.id || null,
-          planId: legacyPlanId,
-          variantType: purchaseVariantType,
-          durationMonths,
-          startDate: now,
-          endDate: calculatedEndDate,
-          status: 'ACTIVE',
+          status: 'PENDING',
+          OR: [
+            carePlan?.id ? { carePlanId: carePlan.id } : undefined,
+            legacyPlanId ? { planId: legacyPlanId } : undefined,
+          ].filter(Boolean) as any,
         },
+        orderBy: { createdAt: 'desc' },
       });
-      createdSubscriptionId = newSub.id;
+
+      let activeSubId: string;
+      if (pendingSub) {
+        const isFuture = Boolean(pendingSub.startDate && pendingSub.startDate > now);
+        const updatedSub = await tx.subscription.update({
+          where: { id: pendingSub.id },
+          data: {
+            status: isFuture ? 'SCHEDULED' : 'ACTIVE',
+          },
+        });
+        activeSubId = updatedSub.id;
+      } else {
+        const newSub = await tx.subscription.create({
+          data: {
+            userId: payment.userId,
+            carePlanId: carePlan?.id || null,
+            planId: legacyPlanId,
+            variantType: purchaseVariantType,
+            durationMonths,
+            startDate: now,
+            endDate: calculatedEndDate,
+            status: 'ACTIVE',
+          },
+        });
+        activeSubId = newSub.id;
+      }
+      createdSubscriptionId = activeSubId;
 
       await tx.auditLog.create({
         data: {
@@ -549,7 +575,7 @@ export async function settleSuccessfulPayment(
           entityId: payment.id,
           metadata: {
             invoiceId: lockedInvoice.id,
-            subscriptionId: newSub.id,
+            subscriptionId: activeSubId,
             providerPaymentId,
             orderId,
             provider,

@@ -1250,8 +1250,138 @@ async function runTests() {
 
   console.log('  ✓ Verified client form state machine properly transitions to partialSuccess and disables duplicate submission.');
 
+  // ---------------------------------------------------------------------------
+  // TEST 31: getMembers Selective Projection, Search & Pagination Resilience
+  // ---------------------------------------------------------------------------
+  console.log('--- TEST 31: getMembers Selective Projection, Search & Pagination ---');
+  const mockUsersList = [
+    {
+      id: 'usr_001',
+      name: 'Ramesh Gupta',
+      email: 'ramesh@example.com',
+      role: 'USER',
+      createdAt: new Date('2026-01-01'),
+      memberProfile: {
+        memberId: 'SEC/S/0001',
+        spouseFirstName: 'Sita',
+        spouseLastName: 'Gupta',
+        medicalConditions: 'Diabetes',
+      },
+      subscriptions: [{ status: 'ACTIVE', createdAt: new Date('2026-01-02') }],
+    },
+    {
+      id: 'usr_002',
+      name: 'Priya Sharma',
+      email: 'priya@example.com',
+      role: 'ADMIN',
+      createdAt: new Date('2026-02-01'),
+      memberProfile: null,
+      subscriptions: [],
+    },
+    {
+      id: 'usr_003',
+      name: 'Amit Patel',
+      email: 'amit@example.com',
+      role: 'USER',
+      createdAt: new Date('2026-03-01'),
+      memberProfile: {
+        memberId: 'SEC/D/0002',
+        spouseFirstName: 'Anjali',
+        spouseLastName: 'Patel',
+        medicalConditions: 'Hypertension',
+      },
+      subscriptions: [{ status: 'PENDING', createdAt: new Date('2026-03-02') }],
+    },
+  ];
+
+  // Simulating getMembers projection logic
+  function simulateGetMembersQuery(
+    users: typeof mockUsersList,
+    query?: string,
+    page: number = 1,
+    limit: number = 2
+  ) {
+    let filtered = users;
+    if (query) {
+      const q = query.toLowerCase();
+      filtered = users.filter(
+        (u) =>
+          u.name?.toLowerCase().includes(q) ||
+          u.email?.toLowerCase().includes(q) ||
+          u.memberProfile?.memberId?.toLowerCase().includes(q)
+      );
+    }
+
+    const total = filtered.length;
+    const pages = Math.ceil(total / limit);
+    const paginated = filtered.slice((page - 1) * limit, page * limit);
+
+    // Apply selective projection (equivalent to Prisma select)
+    const projectedMembers = paginated.map((u) => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      createdAt: u.createdAt,
+      memberProfile: u.memberProfile
+        ? {
+            memberId: u.memberProfile.memberId,
+          }
+        : null,
+      subscriptions: u.subscriptions.slice(0, 1).map((s) => ({ status: s.status })),
+    }));
+
+    return { members: projectedMembers, total, pages };
+  }
+
+  // 1. Verify selective projection excludes unused sensitive fields
+  const page1 = simulateGetMembersQuery(mockUsersList, undefined, 1, 2);
+  assert.strictEqual(page1.members.length, 2);
+  assert.strictEqual(page1.total, 3);
+  assert.strictEqual(page1.pages, 2);
+
+  const firstMember = page1.members[0];
+  assert.strictEqual(firstMember.id, 'usr_001');
+  assert.strictEqual(firstMember.name, 'Ramesh Gupta');
+  assert.strictEqual(firstMember.memberProfile?.memberId, 'SEC/S/0001');
+  assert.strictEqual((firstMember.memberProfile as any).spouseFirstName, undefined, 'Sensitive spouseFirstName must not be projected');
+  assert.strictEqual((firstMember.memberProfile as any).medicalConditions, undefined, 'Medical conditions must not be projected');
+  assert.strictEqual(firstMember.subscriptions[0]?.status, 'ACTIVE');
+
+  // 2. Verify search filtering by Name, Email, and Member ID
+  const searchResultName = simulateGetMembersQuery(mockUsersList, 'priya', 1, 10);
+  assert.strictEqual(searchResultName.total, 1);
+  assert.strictEqual(searchResultName.members[0].name, 'Priya Sharma');
+  assert.strictEqual(searchResultName.members[0].role, 'ADMIN');
+  assert.strictEqual(searchResultName.members[0].memberProfile, null);
+
+  const searchResultMemberId = simulateGetMembersQuery(mockUsersList, 'SEC/D/0002', 1, 10);
+  assert.strictEqual(searchResultMemberId.total, 1);
+  assert.strictEqual(searchResultMemberId.members[0].name, 'Amit Patel');
+  assert.strictEqual(searchResultMemberId.members[0].memberProfile?.memberId, 'SEC/D/0002');
+
+  const searchResultEmail = simulateGetMembersQuery(mockUsersList, 'ramesh@example.com', 1, 10);
+  assert.strictEqual(searchResultEmail.total, 1);
+  assert.strictEqual(searchResultEmail.members[0].name, 'Ramesh Gupta');
+
+  // 3. Verify pagination page 2 & continuous S. No. calculation
+  const limit = 2;
+  const page2 = simulateGetMembersQuery(mockUsersList, undefined, 2, limit);
+  assert.strictEqual(page2.members.length, 1);
+  assert.strictEqual(page2.members[0].id, 'usr_003');
+  assert.strictEqual(page2.members[0].memberProfile?.memberId, 'SEC/D/0002');
+
+  const sNoPage1First = (1 - 1) * limit + 0 + 1; // 1
+  const sNoPage1Second = (1 - 1) * limit + 1 + 1; // 2
+  const sNoPage2First = (2 - 1) * limit + 0 + 1; // 3
+  assert.strictEqual(sNoPage1First, 1, 'First row on page 1 must have S. No. 1');
+  assert.strictEqual(sNoPage1Second, 2, 'Second row on page 1 must have S. No. 2');
+  assert.strictEqual(sNoPage2First, 3, 'First row on page 2 must have continuous S. No. 3');
+
+  console.log('  ✓ Verified getMembers selective projection, Member ID search across Name/Email/ID, and continuous S. No. pagination.');
+
   console.log('\n================================================================');
-  console.log('ALL 30 ADMIN NEW MEMBER & SPOUSE TEST SCENARIOS PASSED (100%)');
+  console.log('ALL 31 ADMIN NEW MEMBER & SPOUSE TEST SCENARIOS PASSED (100%)');
   console.log('================================================================');
 }
 

@@ -7,6 +7,8 @@ import { redirect } from "next/navigation"
 import { notificationService } from "@/lib/services/notification"
 import { AuthorizationService } from "@/lib/services/authorization"
 import { RateLimitService } from "@/lib/services/rate-limit"
+import { calculateMembershipEndDate } from "@/lib/services/dates"
+import { EXCLUDED_MEMBER_EMAILS, ADMIN_DISPLAY_EMAILS } from "@/lib/constants/members"
 
 // --- Authorization Helper ---
 async function requirePermission(permission: string) {
@@ -103,23 +105,54 @@ export async function getNeedsAttentionQueue() {
   return { pendingRenewals, newInquiries, unresolvedFeedback, pendingPayments }
 }
 
-// --- Members ---
-export async function getMembers(query?: string, page: number = 1, limit: number = 50) {
-  await requirePermission("MEMBER_VIEW")
-  
-  const where = query ? {
-    OR: [
-      { name: { contains: query, mode: 'insensitive' as const } },
-      { email: { contains: query, mode: 'insensitive' as const } }
-    ]
-  } : undefined;
+// --- Members Core Query ---
+export async function getMembersCore(
+  query?: string,
+  page: number = 1,
+  limit: number = 50,
+  database: any = db
+) {
+  const baseWhere = {
+    email: {
+      notIn: EXCLUDED_MEMBER_EMAILS,
+    },
+  };
 
-  const [members, total] = await Promise.all([
-    db.user.findMany({
+  const where = query ? {
+    AND: [
+      baseWhere,
+      {
+        OR: [
+          { name: { contains: query, mode: 'insensitive' as const } },
+          { email: { contains: query, mode: 'insensitive' as const } },
+          { memberProfile: { memberId: { contains: query, mode: 'insensitive' as const } } }
+        ]
+      }
+    ]
+  } : baseWhere;
+
+  const [members, total, genuineMembers] = await Promise.all([
+    database.user.findMany({
       where,
-      include: {
-        memberProfile: true,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        createdAt: true,
+        memberProfile: {
+          select: {
+            memberId: true,
+          }
+        },
         subscriptions: {
+          select: {
+            id: true,
+            status: true,
+            startDate: true,
+            endDate: true,
+            durationMonths: true,
+          },
           orderBy: { createdAt: 'desc' },
           take: 1
         }
@@ -128,10 +161,125 @@ export async function getMembers(query?: string, page: number = 1, limit: number
       skip: (page - 1) * limit,
       take: limit
     }),
-    db.user.count({ where })
+    database.user.count({ where }),
+    // Stable serial number calculation for genuine members:
+    // Prabir is #1, next genuine members receive 2, 3...
+    // Admin accounts (Tanish, Sagnik) receive null (displaying '—').
+    database.user.findMany({
+      where: {
+        email: { notIn: [...EXCLUDED_MEMBER_EMAILS, ...ADMIN_DISPLAY_EMAILS] },
+        OR: [
+          { role: "MEMBER" },
+          { memberProfile: { memberId: { not: null } } },
+          { subscriptions: { some: {} } },
+        ],
+      },
+      select: { id: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    }),
   ]);
 
-  return { members, total, pages: Math.ceil(total / limit) };
+  const genuineSerialMap = new Map<string, number>();
+  genuineMembers.forEach((m: any, idx: number) => {
+    genuineSerialMap.set(m.id, idx + 1);
+  });
+
+  const enrichedMembers = members.map((m: any) => ({
+    ...m,
+    serialNumber: genuineSerialMap.get(m.id) ?? null,
+  }));
+
+  return { members: enrichedMembers, total, pages: Math.ceil(total / limit) };
+}
+
+// --- Members Server Action ---
+export async function getMembers(query?: string, page: number = 1, limit: number = 50) {
+  await requirePermission("MEMBER_VIEW")
+  return getMembersCore(query, page, limit, db);
+}
+
+// --- Membership Date Modification Core Logic ---
+export async function updateMembershipStartDateCore(
+  subscriptionId: string,
+  newStartDateStr: string,
+  sessionUserId: string,
+  database: any = db
+) {
+  if (!newStartDateStr) {
+    return { success: false, error: "A valid start date is required." };
+  }
+
+  const newStartDate = new Date(newStartDateStr);
+  if (isNaN(newStartDate.getTime())) {
+    return { success: false, error: "Invalid date format." };
+  }
+
+  const subscription = await database.subscription.findUnique({
+    where: { id: subscriptionId },
+  });
+
+  if (!subscription) {
+    return { success: false, error: "Subscription record not found." };
+  }
+
+  if (subscription.status === "EXPIRED" || subscription.status === "CANCELLED") {
+    return {
+      success: false,
+      error: "Cannot modify historical expired or cancelled membership periods.",
+    };
+  }
+
+  const durationMonths = subscription.durationMonths || 1;
+  const newEndDate = calculateMembershipEndDate(newStartDate, durationMonths);
+
+  await database.$transaction(async (tx: any) => {
+    await tx.subscription.update({
+      where: { id: subscription.id },
+      data: {
+        startDate: newStartDate,
+        endDate: newEndDate,
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        action: "MEMBERSHIP_DATES_UPDATED",
+        entityType: "SUBSCRIPTION",
+        entityId: subscription.id,
+        actorUserId: sessionUserId,
+        metadata: {
+          userId: subscription.userId,
+          previousStartDate: subscription.startDate,
+          previousEndDate: subscription.endDate,
+          newStartDate,
+          newEndDate,
+          durationMonths,
+        },
+      },
+    });
+  });
+
+  return {
+    success: true,
+    startDate: newStartDate,
+    endDate: newEndDate,
+  };
+}
+
+export async function updateMembershipStartDate(
+  subscriptionId: string,
+  newStartDateStr: string
+) {
+  const sessionUserId = await requirePermission("MEMBER_MANAGE");
+  const result = await updateMembershipStartDateCore(subscriptionId, newStartDateStr, sessionUserId, db);
+  if (result.success) {
+    revalidatePath("/admin/members");
+    const sub = await db.subscription.findUnique({ where: { id: subscriptionId }, select: { userId: true } });
+    if (sub?.userId) {
+      revalidatePath(`/admin/members/${sub.userId}`);
+    }
+  }
+  return result;
 }
 
 export async function getMemberDetails(userId: string) {

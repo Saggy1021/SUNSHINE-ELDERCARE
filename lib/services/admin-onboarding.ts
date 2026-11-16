@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client'
 import { validateUpload } from '@/lib/services/document/validation'
 import { documentService } from '@/lib/services/document'
 import { storageService } from '@/lib/services/storage'
+import { calculateMembershipEndDate } from '@/lib/services/dates'
 
 export type AdminOnboardDependencies = {
   dbClient?: any
@@ -117,6 +118,11 @@ export async function executeAdminOnboardMember(
   // 5. Calculate Authoritative Prices
   const [planSlug, variantType, monthsStr] = planId.split('|')
   const months = parseInt(monthsStr, 10)
+  const durationMonths = months || 1
+
+  const membershipStartDateStr = (formData.get('membershipStartDate') as string) || new Date().toISOString()
+  const membershipStartDate = new Date(membershipStartDateStr)
+  const calculatedEndDate = calculateMembershipEndDate(membershipStartDate, durationMonths)
 
   let carePlanResult
   try {
@@ -132,7 +138,7 @@ export async function executeAdminOnboardMember(
   // 6. Execute Atomic Transaction
   const passwordHash = await bcrypt.hash(validatedData.password, 10)
   
-  let txResult: { userId: string; documentUrl: string | null }
+  let txResult: { userId: string; documentUrl: string | null; subscriptionId?: string }
   try {
     txResult = await database.$transaction(async (tx: any) => {
       // Create User
@@ -278,7 +284,24 @@ export async function executeAdminOnboardMember(
         })
       }
 
-      return { userId: newUser.id, documentUrl }
+      // Create Pending Subscription with the calculated start and end dates
+      let subscriptionId: string | undefined
+      if (tx.subscription?.create) {
+        const subscription = await tx.subscription.create({
+          data: {
+            userId: newUser.id,
+            carePlanId: carePlanResult.carePlanId || null,
+            variantType: carePlanResult.variantType,
+            durationMonths,
+            startDate: membershipStartDate,
+            endDate: calculatedEndDate,
+            status: 'PENDING',
+          }
+        })
+        subscriptionId = subscription.id
+      }
+
+      return { userId: newUser.id, documentUrl, subscriptionId }
     })
   } catch (txError: any) {
     // Transaction failed BEFORE commit: Postgres rolled back all database records.
@@ -360,6 +383,12 @@ export async function executeAdminOnboardMember(
           status: 'VERIFICATION_PENDING',
           reference: paymentReference,
           notes: paymentNotes,
+          metadata: {
+            subscriptionId: txResult.subscriptionId,
+            startDate: membershipStartDate.toISOString(),
+            endDate: calculatedEndDate.toISOString(),
+            durationMonths,
+          }
         }
       })
     }
@@ -375,7 +404,10 @@ export async function executeAdminOnboardMember(
           planId,
           isCustomPrice,
           paymentMethod,
-          customPriceReason
+          customPriceReason,
+          startDate: membershipStartDate.toISOString(),
+          endDate: calculatedEndDate.toISOString(),
+          durationMonths,
         }
       }
     })
