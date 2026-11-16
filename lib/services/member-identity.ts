@@ -2,11 +2,33 @@ import { db } from "../db";
 
 export class MemberIdentityService {
   /**
-   * Generates a unique business Member ID.
-   * Format: SEC/S/1002/SAKR or SEC/D/1002/SAKR
-   * S = Single, D = Couple
+   * Normalizes any Member ID by removing separators (slashes, hyphens, spaces).
+   * Ensures legacy slash format (e.g. SEC/D/1001/PRTY) is resolved to canonical format (SECD1001PRTY).
+   */
+  static normalizeMemberId(id?: string | null): string {
+    if (!id) return "";
+    return id.replace(/[\/\s-]/g, "").toUpperCase();
+  }
+
+  /**
+   * Validates whether a Member ID matches either the canonical slash-free format
+   * (e.g. SECD1001PRTY, SECS1002SAKR) or legacy slash format (SEC/D/1001/PRTY).
+   */
+  static isValidMemberId(id?: string | null): boolean {
+    if (!id) return false;
+    const clean = id.trim().toUpperCase();
+    const canonicalRegex = /^SEC[SD]\d{4}[A-Z]{4}$/;
+    const legacyRegex = /^SEC\/[SD]\/\d{4}\/[A-Z]{4}$/;
+    return canonicalRegex.test(clean) || legacyRegex.test(clean);
+  }
+
+  /**
+   * Generates a unique business Member ID in canonical format without separators.
+   * Format: SECS1002SAKR or SECD1002SAKR
+   * SECS = Senior / Single membership
+   * SECD = Domestic / Couple membership
    *
-   * 1001 is strictly reserved for Wg Cdr Prabir Chakraverty (SEC/D/1001/PRTY).
+   * 1001 is strictly reserved for Wg Cdr Prabir Chakraverty (SECD1001PRTY).
    * New registrations receive sequential serial numbers starting from 1002.
    *
    * Concurrency-safe: Uses transaction-aware client and atomic sequence upsert/increment.
@@ -30,11 +52,11 @@ export class MemberIdentityService {
       (cleanFirst.includes("PRABIR") || firstName?.toUpperCase().includes("PRABIR")) &&
       (cleanLast.includes("CHAKRAVERTY") || lastName?.toUpperCase().includes("CHAKRAVERTY"))
     ) {
-      return `SEC/D/1001/PRTY`;
+      return `SECD1001PRTY`;
     }
 
     // 2. Safely increment the sequence using a database transaction with upsert for safe initialization.
-    // 1001 is reserved for Prabir Chakraverty (SEC/D/1001/PRTY).
+    // 1001 is reserved for Prabir Chakraverty (SECD1001PRTY).
     // Initializing the sequence for new registrations starts at 1002.
     const sequence = await client.memberSequence.upsert({
       where: { id: "MEMBER_SEQ" },
@@ -51,13 +73,14 @@ export class MemberIdentityService {
 
     const serialNumber = sequence.current;
 
-    // 3. Construct ID
-    return `SEC/${type}/${serialNumber}/${initials}`;
+    // 3. Construct canonical ID without separators: e.g. SECD1002SAKR or SECS1002SAKR
+    return `SEC${type}${serialNumber}${initials}`;
   }
 
   /**
    * Ensures a user has a permanent unique Member ID after a verified payment.
    * If the user already has a Member ID, preserves it permanently without generating a duplicate.
+   * Seamlessly normalizes any historical slash-separated ID to canonical format.
    * Concurrency-safe: Runs inside the settlement transaction client.
    */
   static async ensureMemberIdForUser(
@@ -71,10 +94,19 @@ export class MemberIdentityService {
     });
 
     if (profile?.memberId) {
+      // If historical record has forward slashes, normalize to canonical format
+      if (profile.memberId.includes("/")) {
+        const canonical = this.normalizeMemberId(profile.memberId);
+        await client.memberProfile.update({
+          where: { userId },
+          data: { memberId: canonical },
+        });
+        return canonical;
+      }
       return profile.memberId;
     }
 
-    // Special reservation check: Wg Cdr Prabir Chakraverty is always assigned SEC/D/1001/PRTY
+    // Special reservation check: Wg Cdr Prabir Chakraverty is always assigned SECD1001PRTY
     const user = await client.user.findUnique({
       where: { id: userId },
       select: { email: true, name: true },
@@ -86,7 +118,7 @@ export class MemberIdentityService {
         user?.name?.toUpperCase().includes("CHAKRAVERTY"));
 
     if (isPrabir) {
-      const prabirId = "SEC/D/1001/PRTY";
+      const prabirId = "SECD1001PRTY";
       if (profile) {
         await client.memberProfile.update({
           where: { userId },
@@ -122,7 +154,7 @@ export class MemberIdentityService {
       }
     }
 
-    // 4. Generate unique Member ID
+    // 4. Generate unique Member ID in canonical format (SECS... or SECD...)
     const memberId = await this.generateMemberId(firstName, lastName, type, client);
 
     // 5. Permanently assign to MemberProfile

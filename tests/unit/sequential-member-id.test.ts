@@ -3,7 +3,7 @@ import { MemberIdentityService } from '../../lib/services/member-identity';
 
 async function runSequentialMemberIdTests() {
   console.log('================================================================');
-  console.log('Sunshine Eldercare — Sequential Member ID Generation Tests');
+  console.log('Sunshine Eldercare — Sequential Member ID Generation Tests (Canonical Standard)');
   console.log('================================================================\n');
 
   // Test 1: Prabir Chakraverty special reservation (generateMemberId)
@@ -13,15 +13,15 @@ async function runSequentialMemberIdTests() {
     'CHAKRAVERTY',
     'D'
   );
-  assert.strictEqual(prabirGenId1, 'SEC/D/1001/PRTY', 'Prabir must receive canonical SEC/D/1001/PRTY');
+  assert.strictEqual(prabirGenId1, 'SECD1001PRTY', 'Prabir must receive canonical SECD1001PRTY');
 
   const prabirGenId2 = await MemberIdentityService.generateMemberId(
     'PRABIR',
     'CHAKRAVERTY',
     'D'
   );
-  assert.strictEqual(prabirGenId2, 'SEC/D/1001/PRTY', 'Prabir without title must receive canonical SEC/D/1001/PRTY');
-  console.log('  ✓ Verified generateMemberId preserves SEC/D/1001/PRTY for Prabir.');
+  assert.strictEqual(prabirGenId2, 'SECD1001PRTY', 'Prabir without title must receive canonical SECD1001PRTY');
+  console.log('  ✓ Verified generateMemberId preserves SECD1001PRTY for Prabir.');
 
   // Test 2: Prabir Chakraverty special reservation (ensureMemberIdForUser)
   console.log('--- TEST 2: Prabir Chakraverty ensureMemberIdForUser Reservation ---');
@@ -57,9 +57,9 @@ async function runSequentialMemberIdTests() {
     'COUPLE',
     mockDbPrabir
   );
-  assert.strictEqual(prabirEnsuredId, 'SEC/D/1001/PRTY');
-  assert.strictEqual(inMemoryProfiles.get('usr_prabir')?.memberId, 'SEC/D/1001/PRTY');
-  console.log('  ✓ Verified ensureMemberIdForUser permanently assigns SEC/D/1001/PRTY to Prabir by email.');
+  assert.strictEqual(prabirEnsuredId, 'SECD1001PRTY');
+  assert.strictEqual(inMemoryProfiles.get('usr_prabir')?.memberId, 'SECD1001PRTY');
+  console.log('  ✓ Verified ensureMemberIdForUser permanently assigns SECD1001PRTY to Prabir by email.');
 
   // Test 3: Fresh Database Sequence Starts at 1002 for Next Member
   console.log('--- TEST 3: Fresh Database Sequence Starts at 1002 ---');
@@ -83,8 +83,8 @@ async function runSequentialMemberIdTests() {
     'D',
     mockDbFresh
   );
-  assert.strictEqual(firstNewMemberId, 'SEC/D/1002/RASH', 'First new member must receive 1002');
-  console.log('  ✓ Verified fresh database sequence starts at 1002 (SEC/D/1002/RASH).');
+  assert.strictEqual(firstNewMemberId, 'SECD1002RASH', 'First new member must receive 1002');
+  console.log('  ✓ Verified fresh database sequence starts at 1002 (SECD1002RASH).');
 
   // Test 4: Existing Sequence at 1001 Advances to 1002 on Next Registration
   console.log('--- TEST 4: Existing Sequence at 1001 Increments to 1002 ---');
@@ -104,7 +104,7 @@ async function runSequentialMemberIdTests() {
     'S',
     mockDbExisting
   );
-  assert.strictEqual(nextMemberId, 'SEC/S/1002/AMRO', 'Next member after 1001 must receive 1002');
+  assert.strictEqual(nextMemberId, 'SECS1002AMRO', 'Next member after 1001 must receive 1002');
   assert.strictEqual(existingSeq, 1002);
   console.log('  ✓ Verified existing sequence at 1001 correctly increments to 1002.');
 
@@ -116,7 +116,7 @@ async function runSequentialMemberIdTests() {
     'D',
     mockDbExisting
   );
-  assert.strictEqual(member3, 'SEC/D/1003/SNMU');
+  assert.strictEqual(member3, 'SECD1003SNMU');
 
   const member4 = await MemberIdentityService.generateMemberId(
     'Debashis',
@@ -124,7 +124,7 @@ async function runSequentialMemberIdTests() {
     'S',
     mockDbExisting
   );
-  assert.strictEqual(member4, 'SEC/S/1004/DEBA');
+  assert.strictEqual(member4, 'SECS1004DEBA');
   console.log('  ✓ Verified consecutive registrations generate 1003, 1004 without gaps.');
 
   // Test 6: Concurrency Safety Under High Load
@@ -133,7 +133,6 @@ async function runSequentialMemberIdTests() {
   const mockDbConcurrent: any = {
     memberSequence: {
       upsert: async () => {
-        // Simulate atomic Postgres sequence increment
         const allocated = ++atomicCounter;
         return { id: 'MEMBER_SEQ', current: allocated };
       },
@@ -155,14 +154,18 @@ async function runSequentialMemberIdTests() {
   assert.strictEqual(uniqueSet.size, parallelCount, 'All 50 IDs must be strictly unique');
 
   // Verify all serial numbers start at 1002 and end at 1051
-  const serials = results.map((r) => parseInt(r.split('/')[2], 10));
+  const serials = results.map((r) => {
+    // Format: SEC[S|D]xxxxYYYY (e.g. SECS1002...)
+    const numStr = r.slice(4, 8);
+    return parseInt(numStr, 10);
+  });
   serials.sort((a, b) => a - b);
   assert.strictEqual(serials[0], 1002);
   assert.strictEqual(serials[serials.length - 1], 1001 + parallelCount);
   console.log(`  ✓ Verified concurrency safety: ${parallelCount} concurrent registrations yielded zero collisions (1002 to ${1001 + parallelCount}).`);
 
-  // Test 7: Variant Types (Single SEC/S vs Couple SEC/D)
-  console.log('--- TEST 7: Variant Types (SEC/S vs SEC/D) ---');
+  // Test 7: Variant Types (Single SECS vs Couple SECD)
+  console.log('--- TEST 7: Variant Types (SECS vs SECD) ---');
   let testVariantSeq = 1050;
   const mockVariantDb: any = {
     memberSequence: {
@@ -170,10 +173,10 @@ async function runSequentialMemberIdTests() {
     },
   };
   const singleId = await MemberIdentityService.generateMemberId('John', 'Smith', 'S', mockVariantDb);
-  assert.strictEqual(singleId, 'SEC/S/1051/JOSM');
+  assert.strictEqual(singleId, 'SECS1051JOSM');
   const coupleId = await MemberIdentityService.generateMemberId('John', 'Smith', 'D', mockVariantDb);
-  assert.strictEqual(coupleId, 'SEC/D/1052/JOSM');
-  console.log('  ✓ Verified variant type prefix is properly applied (/S/ vs /D/).');
+  assert.strictEqual(coupleId, 'SECD1052JOSM');
+  console.log('  ✓ Verified variant type prefix is properly applied (SECS vs SECD without slashes).');
 
   // Test 8: Initials Suffix Resilience & Padding
   console.log('--- TEST 8: Suffix Initials Resilience ---');
@@ -184,13 +187,38 @@ async function runSequentialMemberIdTests() {
     },
   };
   const shortId = await MemberIdentityService.generateMemberId('A', 'B', 'S', mockInitDb);
-  assert.strictEqual(shortId, 'SEC/S/1101/AXBX');
+  assert.strictEqual(shortId, 'SECS1101AXBX');
   const unicodeId = await MemberIdentityService.generateMemberId('অমিতাভ', 'বসু', 'S', mockInitDb);
-  assert.strictEqual(unicodeId, 'SEC/S/1102/XXXX');
+  assert.strictEqual(unicodeId, 'SECS1102XXXX');
   console.log('  ✓ Verified initials padding (XX) and Unicode non-ASCII fallback.');
 
+  // Test 9: Legacy Slash Separator Normalization & Compatibility
+  console.log('--- TEST 9: Legacy Slash Separator Compatibility & Normalization ---');
+  assert.strictEqual(MemberIdentityService.normalizeMemberId('SEC/D/1001/PRTY'), 'SECD1001PRTY');
+  assert.strictEqual(MemberIdentityService.normalizeMemberId('SEC/S/1002/SAKR'), 'SECS1002SAKR');
+  assert.strictEqual(MemberIdentityService.normalizeMemberId('sec-d-1001-prty'), 'SECD1001PRTY');
+  assert.strictEqual(MemberIdentityService.normalizeMemberId('SECD1001PRTY'), 'SECD1001PRTY');
+  assert.strictEqual(MemberIdentityService.isValidMemberId('SECD1001PRTY'), true);
+  assert.strictEqual(MemberIdentityService.isValidMemberId('SECS1002SAKR'), true);
+  assert.strictEqual(MemberIdentityService.isValidMemberId('SEC/D/1001/PRTY'), true);
+  assert.strictEqual(MemberIdentityService.isValidMemberId('INVALID_ID'), false);
+
+  // Test automatic upgrade of legacy slash ID in ensureMemberIdForUser
+  inMemoryProfiles.set('usr_legacy', {
+    userId: 'usr_legacy',
+    memberId: 'SEC/S/1050/LEGA',
+  });
+  const upgradedId = await MemberIdentityService.ensureMemberIdForUser(
+    'usr_legacy',
+    'SINGLE',
+    mockDbPrabir
+  );
+  assert.strictEqual(upgradedId, 'SECS1050LEGA');
+  assert.strictEqual(inMemoryProfiles.get('usr_legacy')?.memberId, 'SECS1050LEGA');
+  console.log('  ✓ Verified legacy slash-separated IDs are smoothly upgraded and validated.');
+
   console.log('\n================================================================');
-  console.log('ALL 8 SEQUENTIAL MEMBER ID TESTS PASSED SUCCESSFULLY (100%)');
+  console.log('ALL 9 SEQUENTIAL MEMBER ID TESTS PASSED SUCCESSFULLY (100%)');
   console.log('================================================================');
 }
 

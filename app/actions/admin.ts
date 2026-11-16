@@ -110,7 +110,10 @@ export async function getMembersCore(
   query?: string,
   page: number = 1,
   limit: number = 50,
-  database: any = db
+  database: any = db,
+  hasSensitiveView: boolean = true,
+  sortField?: string,
+  sortDirection?: "asc" | "desc"
 ) {
   const baseWhere = {
     email: {
@@ -118,18 +121,47 @@ export async function getMembersCore(
     },
   };
 
-  const where = query ? {
-    AND: [
-      baseWhere,
-      {
-        OR: [
-          { name: { contains: query, mode: 'insensitive' as const } },
-          { email: { contains: query, mode: 'insensitive' as const } },
-          { memberProfile: { memberId: { contains: query, mode: 'insensitive' as const } } }
-        ]
+  let where: any = baseWhere;
+  if (query && query.trim()) {
+    const rawQuery = query.trim();
+    const unslashedQuery = rawQuery.replace(/[\/\s-]/g, "");
+
+    const memberIdConditions: any[] = [
+      { memberProfile: { memberId: { contains: rawQuery, mode: 'insensitive' as const } } }
+    ];
+
+    if (unslashedQuery && unslashedQuery !== rawQuery) {
+      memberIdConditions.push(
+        { memberProfile: { memberId: { contains: unslashedQuery, mode: 'insensitive' as const } } }
+      );
+    }
+
+    const slashMatch = unslashedQuery.match(/^SEC([SD])?(\d{1,4})?([A-Z]{1,4})?$/i);
+    if (slashMatch && !rawQuery.includes('/')) {
+      const type = slashMatch[1] ? `/${slashMatch[1].toUpperCase()}` : '';
+      const seq = slashMatch[2] ? `/${slashMatch[2]}` : '';
+      const inits = slashMatch[3] ? `/${slashMatch[3].toUpperCase()}` : '';
+      const slashedVariant = `SEC${type}${seq}${inits}`;
+      if (slashedVariant !== rawQuery) {
+        memberIdConditions.push(
+          { memberProfile: { memberId: { contains: slashedVariant, mode: 'insensitive' as const } } }
+        );
       }
-    ]
-  } : baseWhere;
+    }
+
+    where = {
+      AND: [
+        baseWhere,
+        {
+          OR: [
+            { name: { contains: rawQuery, mode: 'insensitive' as const } },
+            { email: { contains: rawQuery, mode: 'insensitive' as const } },
+            ...memberIdConditions,
+          ]
+        }
+      ]
+    };
+  }
 
   const [members, total, genuineMembers] = await Promise.all([
     database.user.findMany({
@@ -143,6 +175,20 @@ export async function getMembersCore(
         memberProfile: {
           select: {
             memberId: true,
+            firstName: true,
+            lastName: true,
+            spouseFirstName: true,
+            spouseLastName: true,
+            serviceAddress: true,
+            mobileNumber: true,
+            bloodGroup: true,
+            medicalConditions: true,
+            insuranceDetails: {
+              select: {
+                providerName: true,
+                policyNumber: true,
+              }
+            }
           }
         },
         subscriptions: {
@@ -152,8 +198,48 @@ export async function getMembersCore(
             startDate: true,
             endDate: true,
             durationMonths: true,
+            plan: { select: { name: true } },
+            carePlan: { select: { name: true } },
+            customPlan: { select: { name: true } },
+            careCases: {
+              select: {
+                visits: {
+                  where: {
+                    status: { in: ['SCHEDULED', 'IN_PROGRESS'] }
+                  },
+                  select: {
+                    scheduledStart: true,
+                    status: true,
+                  },
+                  orderBy: { scheduledStart: 'asc' },
+                  take: 1
+                }
+              },
+              take: 1
+            }
           },
           orderBy: { createdAt: 'desc' },
+          take: 1
+        },
+        elders: {
+          select: {
+            cases: {
+              select: {
+                visits: {
+                  where: {
+                    status: { in: ['SCHEDULED', 'IN_PROGRESS'] }
+                  },
+                  select: {
+                    scheduledStart: true,
+                    status: true,
+                  },
+                  orderBy: { scheduledStart: 'asc' },
+                  take: 1
+                }
+              },
+              take: 1
+            }
+          },
           take: 1
         }
       },
@@ -184,18 +270,90 @@ export async function getMembersCore(
     genuineSerialMap.set(m.id, idx + 1);
   });
 
-  const enrichedMembers = members.map((m: any) => ({
-    ...m,
-    serialNumber: genuineSerialMap.get(m.id) ?? null,
-  }));
+  let enrichedMembers = members.map((m: any) => {
+    const sub = m.subscriptions?.[0];
+    const planName = sub?.carePlan?.name || sub?.plan?.name || sub?.customPlan?.name;
+    let service = "—";
+    if (planName) {
+      service = sub?.durationMonths ? `${planName} (${sub.durationMonths} Month${sub.durationMonths > 1 ? 's' : ''})` : planName;
+    } else if (sub?.durationMonths) {
+      service = `${sub.durationMonths} Month${sub.durationMonths > 1 ? 's' : ''}`;
+    }
+
+    const secondaryName = [m.memberProfile?.spouseFirstName, m.memberProfile?.spouseLastName]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+
+    // Sourced scheduled visit date
+    const visitFromSub = sub?.careCases?.[0]?.visits?.[0]?.scheduledStart;
+    const visitFromElder = m.elders?.[0]?.cases?.[0]?.visits?.[0]?.scheduledStart;
+    const scheduledDate = visitFromSub || visitFromElder || null;
+
+    // Restrict medical information to authorized administrators
+    const medical = hasSensitiveView ? (m.memberProfile?.medicalConditions || null) : null;
+
+    // Health Insurance
+    const insuranceProvider = m.memberProfile?.insuranceDetails?.providerName || null;
+
+    return {
+      ...m,
+      serialNumber: genuineSerialMap.get(m.id) ?? null,
+      service,
+      secondaryName: secondaryName || null,
+      scheduledVisitDate: scheduledDate,
+      maskedMedicalConditions: medical,
+      insuranceProvider: insuranceProvider,
+    };
+  });
+
+  // Optional server-side sorting
+  if (sortField) {
+    const dir = sortDirection === "desc" ? -1 : 1;
+    enrichedMembers.sort((a: any, b: any) => {
+      let valA: any = "";
+      let valB: any = "";
+      switch (sortField) {
+        case "serNo":
+          valA = a.serialNumber ?? 999999;
+          valB = b.serialNumber ?? 999999;
+          return (valA - valB) * dir;
+        case "mid":
+          valA = a.memberProfile?.memberId || "ZZZ";
+          valB = b.memberProfile?.memberId || "ZZZ";
+          return valA.localeCompare(valB) * dir;
+        case "primaryMember":
+          valA = a.name || "";
+          valB = b.name || "";
+          return valA.localeCompare(valB) * dir;
+        case "from":
+          valA = a.subscriptions?.[0]?.startDate ? new Date(a.subscriptions[0].startDate).getTime() : 0;
+          valB = b.subscriptions?.[0]?.startDate ? new Date(b.subscriptions[0].startDate).getTime() : 0;
+          return (valA - valB) * dir;
+        case "to":
+          valA = a.subscriptions?.[0]?.endDate ? new Date(a.subscriptions[0].endDate).getTime() : 0;
+          valB = b.subscriptions?.[0]?.endDate ? new Date(b.subscriptions[0].endDate).getTime() : 0;
+          return (valA - valB) * dir;
+        default:
+          return 0;
+      }
+    });
+  }
 
   return { members: enrichedMembers, total, pages: Math.ceil(total / limit) };
 }
 
 // --- Members Server Action ---
-export async function getMembers(query?: string, page: number = 1, limit: number = 50) {
-  await requirePermission("MEMBER_VIEW")
-  return getMembersCore(query, page, limit, db);
+export async function getMembers(
+  query?: string,
+  page: number = 1,
+  limit: number = 50,
+  sortField?: string,
+  sortDirection?: "asc" | "desc"
+) {
+  const sessionUser = await requirePermission("MEMBER_VIEW");
+  const hasSensitiveView = await AuthorizationService.can(sessionUser, "MEMBER_SENSITIVE_VIEW");
+  return getMembersCore(query, page, limit, db, hasSensitiveView, sortField, sortDirection);
 }
 
 // --- Membership Date Modification Core Logic ---

@@ -228,7 +228,7 @@ async function runTests() {
     'S',
     mockClient
   );
-  assert.strictEqual(singleMemberId, 'SEC/S/2001/RASH', 'Single member ID must have /S/ and initials RASH');
+  assert.strictEqual(singleMemberId, 'SECS2001RASH', 'Single member ID must have SECS and initials RASH without slashes');
 
   const coupleMemberId = await MemberIdentityService.generateMemberId(
     'Ramesh',
@@ -236,8 +236,8 @@ async function runTests() {
     'D',
     mockClient
   );
-  assert.strictEqual(coupleMemberId, 'SEC/D/2002/RASH', 'Couple member ID must have /D/ and initials RASH');
-  console.log('  ✓ Verified Member ID generation: Single produces SEC/S/... and Couple produces SEC/D/....');
+  assert.strictEqual(coupleMemberId, 'SECD2002RASH', 'Couple member ID must have SECD and initials RASH without slashes');
+  console.log('  ✓ Verified Member ID generation: Single produces SECS... and Couple produces SECD....');
 
   // ---------------------------------------------------------------------------
   // TEST 9: Document Upload Security & Validation

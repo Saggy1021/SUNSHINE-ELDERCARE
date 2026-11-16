@@ -354,25 +354,25 @@ async function runPostPaymentActivationTests() {
 
   // 1A. Standard Single variant
   const memberId1 = await MemberIdentityService.generateMemberId('Sagnik', 'Roy', 'S', mockDbClient);
-  assert.strictEqual(memberId1, 'SEC/S/1001/SARO', 'Expected SEC/S/1001/SARO for Sagnik Roy Single');
+  assert.strictEqual(memberId1, 'SECS1001SARO', 'Expected SECS1001SARO for Sagnik Roy Single');
 
   // 1B. Standard Couple variant
   const memberId2 = await MemberIdentityService.generateMemberId('Jane', 'Doe', 'D', mockDbClient);
-  assert.strictEqual(memberId2, 'SEC/D/1002/JADO', 'Expected SEC/D/1002/JADO for Jane Doe Couple');
+  assert.strictEqual(memberId2, 'SECD1002JADO', 'Expected SECD1002JADO for Jane Doe Couple');
 
   // 1C. Short / single-character name with deterministic 'XX' padding
   const memberId3 = await MemberIdentityService.generateMemberId('Al', 'Li', 'S', mockDbClient);
-  assert.strictEqual(memberId3, 'SEC/S/1003/ALLI', 'Expected SEC/S/1003/ALLI for Al Li');
+  assert.strictEqual(memberId3, 'SECS1003ALLI', 'Expected SECS1003ALLI for Al Li');
 
   // 1D. Missing last name
   const memberId4 = await MemberIdentityService.generateMemberId('A', '', 'S', mockDbClient);
-  assert.strictEqual(memberId4, 'SEC/S/1004/AXXX', 'Expected SEC/S/1004/AXXX for single letter A');
+  assert.strictEqual(memberId4, 'SECS1004AXXX', 'Expected SECS1004AXXX for single letter A');
 
   // 1E. Non-ASCII / Bengali name falls back cleanly to padded 'XXXX'
   const memberId5 = await MemberIdentityService.generateMemberId('অমিত', 'রায়', 'S', mockDbClient);
-  assert.strictEqual(memberId5, 'SEC/S/1005/XXXX', 'Expected SEC/S/1005/XXXX for non-ASCII Unicode name');
+  assert.strictEqual(memberId5, 'SECS1005XXXX', 'Expected SECS1005XXXX for non-ASCII Unicode name');
 
-  console.log('  ✓ Verified Member ID formats: Single (SEC/S), Couple (SEC/D), short name padding (XX), and Unicode fallback.');
+  console.log('  ✓ Verified Member ID formats: Single (SECS), Couple (SECD), short name padding (XX), and Unicode fallback.');
 
   // =========================================================================
   // SCENARIO 2: Existing Member ID Preservation on Subsequent Payments
@@ -381,16 +381,16 @@ async function runPostPaymentActivationTests() {
 
   // Ensure initial Member ID assigned to user
   const initialId = await MemberIdentityService.ensureMemberIdForUser('usr_sagnik', 'SINGLE', mockDbClient);
-  assert.strictEqual(initialId, 'SEC/S/1006/SARO');
+  assert.strictEqual(initialId, 'SECS1006SARO');
 
   const profileBefore = await mockDbClient.memberProfile.findUnique({ where: { userId: 'usr_sagnik' } });
-  assert.strictEqual(profileBefore.memberId, 'SEC/S/1006/SARO');
+  assert.strictEqual(profileBefore.memberId, 'SECS1006SARO');
 
   const seqBefore = inMemoryMemberSeq;
 
   // Second call for same user MUST preserve existing ID and NOT increment sequence
   const preservedId = await MemberIdentityService.ensureMemberIdForUser('usr_sagnik', 'COUPLE', mockDbClient);
-  assert.strictEqual(preservedId, 'SEC/S/1006/SARO', 'Must return the already assigned Member ID');
+  assert.strictEqual(preservedId, 'SECS1006SARO', 'Must return the already assigned Member ID');
   assert.strictEqual(inMemoryMemberSeq, seqBefore, 'Member sequence must not advance on repeat payments');
 
   console.log('  ✓ Verified existing Member ID is permanently preserved across subsequent payments.');
@@ -413,7 +413,7 @@ async function runPostPaymentActivationTests() {
   const uniqueIds = new Set(generatedIds);
   assert.strictEqual(uniqueIds.size, parallelUserCount, 'All generated Member IDs under concurrent load must be unique');
   for (const id of generatedIds) {
-    assert.match(id, /^SEC\/S\/\d{4}\/[A-Z]{4}$/, 'Each ID must strictly conform to canonical pattern');
+    assert.match(id, /^SECS\d{4}[A-Z]{4}$/, 'Each ID must strictly conform to canonical pattern without slashes');
   }
 
   console.log(`  ✓ Verified atomic sequence upsert: ${parallelUserCount} concurrent operations produced zero collisions.`);

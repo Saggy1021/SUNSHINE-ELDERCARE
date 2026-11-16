@@ -543,7 +543,7 @@ export async function settleSuccessfulPayment(
         : null;
 
       let activeSubId: string;
-      if (pendingSub) {
+      if (pendingSub && pendingSub.status === 'PENDING') {
         const isFuture = Boolean(pendingSub.startDate && pendingSub.startDate > now);
         const updatedSub = await tx.subscription.update({
           where: { id: pendingSub.id },

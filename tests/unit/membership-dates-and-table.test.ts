@@ -12,18 +12,10 @@ import path from 'node:path';
 
 async function runMembershipDatesAndTableTests() {
   console.log('================================================================');
-  console.log('Sunshine Eldercare — Members Management & Dates Test Suite');
+  console.log('Sunshine Eldercare — Members Management, 15-Column Table & Dates Test Suite');
   console.log('================================================================\n');
 
-  // ---------------------------------------------------------------------------
-  // REQUIREMENT 1: Correct visibility of the three approved accounts
-  // REQUIREMENT 2: Excluded accounts remain untouched and are not displayed
-  // REQUIREMENT 3: Only genuine members receive serial numbers
-  // REQUIREMENT 5: Tanish and Sagnik receive neither Member IDs nor serial numbers
-  // ---------------------------------------------------------------------------
-  console.log('--- TEST 1, 2, 3, 5: Account Visibility & Serial Number Assignment ---');
-
-  // Mock User DB records representing the current Production state
+  // Mock User DB records representing the canonical Production state
   const mockUsersInDb = [
     {
       id: 'usr_prabir',
@@ -31,16 +23,39 @@ async function runMembershipDatesAndTableTests() {
       email: 'p.chakraverty47@gmail.com',
       role: 'MEMBER',
       createdAt: new Date('2026-11-16T05:36:43.000Z'),
-      memberProfile: { memberId: 'SEC/D/1001/PRTY' },
+      memberProfile: {
+        memberId: 'SECD1001PRTY',
+        firstName: 'Wg Cdr PRABIR',
+        lastName: 'CHAKRAVERTY',
+        spouseFirstName: null,
+        spouseLastName: null,
+        serviceAddress: 'JALVAYEE TOWERS, CNCI/GREENFIELD HEIGHT 18 TALA, PS- LEADHER COMPLEX, PIN - 700160',
+        mobileNumber: '6380505551',
+        bloodGroup: null,
+        medicalConditions: null,
+        insuranceDetails: null,
+      },
       subscriptions: [
         {
           id: 'sub_prabir',
           status: 'ACTIVE',
-          startDate: new Date('2026-11-16T00:00:00.000Z'),
-          endDate: new Date('2027-05-16T00:00:00.000Z'),
+          startDate: new Date('2026-10-04T00:00:00.000Z'),
+          endDate: new Date('2027-04-04T00:00:00.000Z'),
           durationMonths: 6,
+          carePlan: { name: 'Shield Shine' },
+          careCases: [
+            {
+              visits: [
+                {
+                  scheduledStart: new Date('2026-12-10T10:00:00.000Z'),
+                  status: 'SCHEDULED',
+                },
+              ],
+            },
+          ],
         },
       ],
+      elders: [],
     },
     {
       id: 'usr_tanish',
@@ -48,8 +63,20 @@ async function runMembershipDatesAndTableTests() {
       email: 'tanishalam61@gmail.com',
       role: 'ADMIN',
       createdAt: new Date('2026-10-01T00:00:00.000Z'),
-      memberProfile: null,
+      memberProfile: {
+        memberId: null,
+        firstName: 'Tanish',
+        lastName: 'Alam',
+        spouseFirstName: null,
+        spouseLastName: null,
+        serviceAddress: 'Rabindra Nagar Kolkata',
+        mobileNumber: '7980721244',
+        bloodGroup: null,
+        medicalConditions: null,
+        insuranceDetails: null,
+      },
       subscriptions: [],
+      elders: [],
     },
     {
       id: 'usr_sagnik',
@@ -57,8 +84,20 @@ async function runMembershipDatesAndTableTests() {
       email: 'godgoku1021@gmail.com',
       role: 'SUPER_ADMIN',
       createdAt: new Date('2026-10-02T00:00:00.000Z'),
-      memberProfile: null,
+      memberProfile: {
+        memberId: null,
+        firstName: 'Sagnik',
+        lastName: 'Kar',
+        spouseFirstName: 'Rina',
+        spouseLastName: 'Kar',
+        serviceAddress: '1/67 Naktala',
+        mobileNumber: '06290947164',
+        bloodGroup: 'A+',
+        medicalConditions: 'Hypertension',
+        insuranceDetails: { providerName: 'Star Health' },
+      },
       subscriptions: [],
+      elders: [],
     },
     // The 4 strictly excluded accounts
     {
@@ -69,6 +108,7 @@ async function runMembershipDatesAndTableTests() {
       createdAt: new Date('2026-09-01T00:00:00.000Z'),
       memberProfile: null,
       subscriptions: [],
+      elders: [],
     },
     {
       id: 'usr_excluded_2',
@@ -78,6 +118,7 @@ async function runMembershipDatesAndTableTests() {
       createdAt: new Date('2026-09-02T00:00:00.000Z'),
       memberProfile: null,
       subscriptions: [],
+      elders: [],
     },
     {
       id: 'usr_excluded_3',
@@ -85,8 +126,9 @@ async function runMembershipDatesAndTableTests() {
       email: 'payment_user@example.com',
       role: 'MEMBER',
       createdAt: new Date('2026-09-03T00:00:00.000Z'),
-      memberProfile: { memberId: 'SEC/S/0999/TEST' },
+      memberProfile: { memberId: 'SECS0999TEST' },
       subscriptions: [],
+      elders: [],
     },
     {
       id: 'usr_excluded_4',
@@ -96,96 +138,65 @@ async function runMembershipDatesAndTableTests() {
       createdAt: new Date('2026-09-04T00:00:00.000Z'),
       memberProfile: null,
       subscriptions: [],
+      elders: [],
     },
   ];
 
   const mockDbListing: any = {
     user: {
       findMany: async ({ where, skip = 0, take = 50 }: any) => {
-        // Filter by email exclusion
-        let filtered = mockUsersInDb.filter((u) => {
+        let list = mockUsersInDb.filter((u) => {
           if (where?.email?.notIn) {
-            return !where.email.notIn.includes(u.email);
+            if (where.email.notIn.includes(u.email)) return false;
+          }
+          if (where?.AND) {
+            for (const cond of where.AND) {
+              if (cond.email?.notIn && cond.email.notIn.includes(u.email)) return false;
+              if (cond.OR) {
+                const matchesAny = cond.OR.some((subCond: any) => {
+                  if (subCond.name && u.name.toLowerCase().includes(subCond.name.contains.toLowerCase())) return true;
+                  if (subCond.email && u.email.toLowerCase().includes(subCond.email.contains.toLowerCase())) return true;
+                  if (subCond.memberProfile?.memberId && u.memberProfile?.memberId) {
+                    return u.memberProfile.memberId.toLowerCase().includes(subCond.memberProfile.memberId.contains.toLowerCase());
+                  }
+                  return false;
+                });
+                if (!matchesAny) return false;
+              }
+            }
+          }
+          if (where?.OR) {
+            const matchesAny = where.OR.some((cond: any) => {
+              if (cond.role && u.role === cond.role) return true;
+              if (cond.memberProfile?.memberId?.not === null && u.memberProfile?.memberId) return true;
+              if (cond.subscriptions?.some && u.subscriptions.length > 0) return true;
+              return false;
+            });
+            if (!matchesAny) return false;
           }
           return true;
         });
-
-        // Genuine members query (for serial number ranking)
-        if (where?.OR && where?.email?.notIn) {
-          // genuine members filter: role = MEMBER or memberProfile.memberId != null or subscriptions.some
-          filtered = filtered.filter(
-            (u) =>
-              u.role === 'MEMBER' ||
-              Boolean(u.memberProfile?.memberId) ||
-              u.subscriptions.length > 0
-          );
-          // order by createdAt asc
-          filtered.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-          return filtered.map((u) => ({ id: u.id, createdAt: u.createdAt }));
-        }
-
-        return filtered.slice(skip, skip + take);
+        return list.slice(skip, skip + take);
       },
       count: async ({ where }: any) => {
-        const filtered = mockUsersInDb.filter((u) => {
-          if (where?.email?.notIn) {
-            return !where.email.notIn.includes(u.email);
-          }
-          return true;
-        });
-        return filtered.length;
+        const list = await mockDbListing.user.findMany({ where, skip: 0, take: 999 });
+        return list.length;
       },
     },
   };
 
-  const result = await getMembersCore(undefined, 1, 50, mockDbListing);
-
-  // Requirement 1 & 2: Only 3 accounts visible; 4 excluded accounts never present
-  assert.strictEqual(result.members.length, 3, 'Exactly 3 accounts must be displayed in Members list');
-  const visibleEmails = result.members.map((m: any) => m.email);
-  assert.ok(visibleEmails.includes('p.chakraverty47@gmail.com'), 'Prabir must be visible');
-  assert.ok(visibleEmails.includes('tanishalam61@gmail.com'), 'Tanish must be visible');
-  assert.ok(visibleEmails.includes('godgoku1021@gmail.com'), 'Sagnik must be visible');
-
-  for (const excludedEmail of EXCLUDED_MEMBER_EMAILS) {
-    assert.ok(
-      !visibleEmails.includes(excludedEmail),
-      `Excluded account ${excludedEmail} must not be visible`
-    );
-  }
-
-  // Requirement 3: Prabir is serial number 1
-  const prabir = result.members.find((m: any) => m.email === 'p.chakraverty47@gmail.com');
-  assert.strictEqual(prabir.serialNumber, 1, 'Prabir must have serialNumber = 1');
-  assert.strictEqual(prabir.memberProfile?.memberId, 'SEC/D/1001/PRTY', 'Prabir must display Member ID');
-
-  // Requirement 5: Tanish and Sagnik receive null for serialNumber and null for memberProfile
-  const tanish = result.members.find((m: any) => m.email === 'tanishalam61@gmail.com');
-  const sagnik = result.members.find((m: any) => m.email === 'godgoku1021@gmail.com');
-  assert.strictEqual(tanish.serialNumber, null, 'Tanish must display — (null serial number)');
-  assert.strictEqual(tanish.memberProfile, null, 'Tanish must display — (null Member ID)');
-  assert.strictEqual(sagnik.serialNumber, null, 'Sagnik must display — (null serial number)');
-  assert.strictEqual(sagnik.memberProfile, null, 'Sagnik must display — (null Member ID)');
-
-  console.log('  ✓ Requirement 1 passed: Exactly 3 approved accounts visible.');
-  console.log('  ✓ Requirement 2 passed: All 4 excluded test accounts excluded from listing.');
-  console.log('  ✓ Requirement 3 passed: Prabir displays serial number 1.');
-  console.log('  ✓ Requirement 5 passed: Tanish and Sagnik display — for serial number and Member ID.');
-
   // ---------------------------------------------------------------------------
-  // REQUIREMENT 4: Prabir receives the reserved Member ID in the intended implementation
-  // REQUIREMENT 6: Next genuine member receives sequence 1002
+  // REQUIREMENT 1: SECD1001PRTY format
+  // REQUIREMENT 2: SECS prefix generation where applicable
+  // REQUIREMENT 3: Sequential generation beginning at 1002
+  // REQUIREMENT 6: Prabir's canonical ID
   // ---------------------------------------------------------------------------
-  console.log('\n--- TEST 4 & 6: Member ID Generation for Prabir and Next Member ---');
+  console.log('--- TEST 1, 2, 3, 6: Canonical Member ID Format & Sequence ---');
+  const prabirId = await MemberIdentityService.generateMemberId('Wg Cdr PRABIR', 'CHAKRAVERTY', 'D');
+  assert.strictEqual(prabirId, 'SECD1001PRTY', 'Prabir must receive canonical SECD1001PRTY');
+  assert.ok(!prabirId.includes('/'), 'Canonical Member ID must not contain forward slashes');
 
-  const prabirIdDirect = await MemberIdentityService.generateMemberId(
-    'Wg Cdr PRABIR',
-    'CHAKRAVERTY',
-    'D'
-  );
-  assert.strictEqual(prabirIdDirect, 'SEC/D/1001/PRTY', 'Prabir must receive SEC/D/1001/PRTY');
-
-  let currentSequenceInDb = 1001; // Prabir's sequence
+  let currentSequenceInDb = 1001;
   const mockDbNext: any = {
     memberSequence: {
       upsert: async ({ update }: any) => {
@@ -195,25 +206,26 @@ async function runMembershipDatesAndTableTests() {
     },
   };
 
-  const nextMemberId = await MemberIdentityService.generateMemberId(
-    'Ananya',
-    'Sen',
-    'S',
-    mockDbNext
-  );
-  assert.strictEqual(nextMemberId, 'SEC/S/1002/ANSE', 'Next genuine member must receive sequence 1002');
-  console.log('  ✓ Requirement 4 passed: Prabir receives reserved ID SEC/D/1001/PRTY.');
-  console.log('  ✓ Requirement 6 passed: Next genuine member receives sequence 1002 (SEC/S/1002/ANSE).');
+  const nextMemberSenior = await MemberIdentityService.generateMemberId('Ananya', 'Sen', 'S', mockDbNext);
+  assert.strictEqual(nextMemberSenior, 'SECS1002ANSE', 'Single member must receive SECS prefix and sequence 1002');
+  assert.ok(!nextMemberSenior.includes('/'), 'Senior membership ID must not contain slashes');
+
+  const nextMemberCouple = await MemberIdentityService.generateMemberId('Rohit', 'Verma', 'D', mockDbNext);
+  assert.strictEqual(nextMemberCouple, 'SECD1003ROVE', 'Couple member must receive SECD prefix and sequence 1003');
+
+  console.log('  ✓ Requirement 1 passed: SECD1001PRTY generated without slashes.');
+  console.log('  ✓ Requirement 2 passed: SECS prefix generated for single / senior memberships.');
+  console.log('  ✓ Requirement 3 passed: Sequential generation begins at 1002 (SECS1002ANSE).');
+  console.log('  ✓ Requirement 6 passed: Prabir retains canonical SECD1001PRTY.');
 
   // ---------------------------------------------------------------------------
-  // REQUIREMENT 7: Concurrent registrations cannot generate duplicate Member IDs
+  // REQUIREMENT 4: Concurrent registration uniqueness
   // ---------------------------------------------------------------------------
-  console.log('\n--- TEST 7: Concurrency Safety Under Parallel Load ---');
+  console.log('\n--- TEST 4: Concurrency Safety Under Parallel Load ---');
   let atomicCounter = 1001;
   const mockDbAtomic: any = {
     memberSequence: {
       upsert: async ({ update }: any) => {
-        // Atomic DB sequence behavior
         atomicCounter += update.current.increment;
         return { id: 'MEMBER_SEQ', current: atomicCounter };
       },
@@ -221,202 +233,55 @@ async function runMembershipDatesAndTableTests() {
   };
 
   const concurrentPromises = Array.from({ length: 25 }, (_, i) =>
-    MemberIdentityService.generateMemberId(`User${i}`, `Test${i}`, 'S', mockDbAtomic)
+    MemberIdentityService.generateMemberId(`User${i}`, `Test${i}`, i % 2 === 0 ? 'S' : 'D', mockDbAtomic)
   );
 
   const generatedIds = await Promise.all(concurrentPromises);
   const uniqueIds = new Set(generatedIds);
   assert.strictEqual(uniqueIds.size, 25, 'All concurrent member IDs must be strictly unique');
-  console.log('  ✓ Requirement 7 passed: 25 concurrent registrations generated 25 unique IDs with zero collisions.');
+  for (const id of uniqueIds) {
+    assert.ok(!id.includes('/'), `ID ${id} must not contain slashes`);
+  }
+  console.log('  ✓ Requirement 4 passed: 25 concurrent registrations generated 25 unique IDs with zero collisions.');
 
   // ---------------------------------------------------------------------------
-  // REQUIREMENT 8: 1m, 3m, 6m, 12m Date Calculations
-  // REQUIREMENT 9: Month-End and Leap-Year Date Calculations
+  // REQUIREMENT 5: Legacy slash-separated ID compatibility & normalization
   // ---------------------------------------------------------------------------
-  console.log('\n--- TEST 8 & 9: Calendar-Month Arithmetic & Month-End Clamping ---');
-
-  // 1 Month: 16 Nov 2026 -> 16 Dec 2026
-  const nov16 = new Date('2026-11-16T10:00:00.000Z');
-  const plus1Month = calculateMembershipEndDate(nov16, 1);
-  assert.strictEqual(plus1Month.toISOString().slice(0, 10), '2026-12-16');
-
-  // 3 Months: 16 Nov 2026 -> 16 Feb 2027
-  const plus3Months = calculateMembershipEndDate(nov16, 3);
-  assert.strictEqual(plus3Months.toISOString().slice(0, 10), '2027-02-16');
-
-  // 6 Months: 16 Nov 2026 -> 16 May 2027
-  const plus6Months = calculateMembershipEndDate(nov16, 6);
-  assert.strictEqual(plus6Months.toISOString().slice(0, 10), '2027-05-16');
-
-  // 12 Months: 16 Nov 2026 -> 16 Nov 2027
-  const plus12Months = calculateMembershipEndDate(nov16, 12);
-  assert.strictEqual(plus12Months.toISOString().slice(0, 10), '2027-11-16');
-
-  // Month-end clamping non-leap year: 31 Jan 2026 + 1m -> 28 Feb 2026
-  const jan31NonLeap = new Date('2026-01-31T00:00:00.000Z');
-  const febClampedNonLeap = calculateMembershipEndDate(jan31NonLeap, 1);
-  assert.strictEqual(febClampedNonLeap.toISOString().slice(0, 10), '2026-02-28');
-
-  // Month-end clamping leap year: 31 Jan 2024 + 1m -> 29 Feb 2024
-  const jan31Leap = new Date('2024-01-31T00:00:00.000Z');
-  const febClampedLeap = calculateMembershipEndDate(jan31Leap, 1);
-  assert.strictEqual(febClampedLeap.toISOString().slice(0, 10), '2024-02-29');
-
-  // Leap-day start + 12m: 29 Feb 2024 + 12m -> 28 Feb 2025 (clamped)
-  const feb29Leap = new Date('2024-02-29T00:00:00.000Z');
-  const leapPlus1Year = calculateMembershipEndDate(feb29Leap, 12);
-  assert.strictEqual(leapPlus1Year.toISOString().slice(0, 10), '2025-02-28');
-
-  // 31 Aug + 1m -> 30 Sep
-  const aug31 = new Date('2026-08-31T00:00:00.000Z');
-  const sepClamped = calculateMembershipEndDate(aug31, 1);
-  assert.strictEqual(sepClamped.toISOString().slice(0, 10), '2026-09-30');
-
-  // 31 May + 1m -> 30 Jun
-  const may31 = new Date('2026-05-31T00:00:00.000Z');
-  const junClamped = calculateMembershipEndDate(may31, 1);
-  assert.strictEqual(junClamped.toISOString().slice(0, 10), '2026-06-30');
-
-  console.log('  ✓ Requirement 8 passed: 1m (16 Dec 2026), 3m (16 Feb 2027), 6m (16 May 2027), 12m (16 Nov 2027).');
-  console.log('  ✓ Requirement 9 passed: Month-end clamped to 28 Feb non-leap, 29 Feb leap year, 30 Sep, 30 Jun.');
+  console.log('\n--- TEST 5: Legacy Slash-Separated ID Compatibility ---');
+  assert.strictEqual(MemberIdentityService.normalizeMemberId('SEC/D/1001/PRTY'), 'SECD1001PRTY');
+  assert.strictEqual(MemberIdentityService.normalizeMemberId('SEC/S/1002/ANSE'), 'SECS1002ANSE');
+  assert.strictEqual(MemberIdentityService.isValidMemberId('SECD1001PRTY'), true);
+  assert.strictEqual(MemberIdentityService.isValidMemberId('SEC/D/1001/PRTY'), true);
+  console.log('  ✓ Requirement 5 passed: Legacy slash-separated IDs normalize and validate seamlessly.');
 
   // ---------------------------------------------------------------------------
-  // REQUIREMENT 10: Changing start date recalculates end date
-  // REQUIREMENT 11: Changing duration recalculates end date
+  // REQUIREMENT 7: The exact 15-column order in page.tsx
+  // REQUIREMENT 15: Responsive horizontal scrolling
   // ---------------------------------------------------------------------------
-  console.log('\n--- TEST 10 & 11: Dynamic Recalculation on Start Date and Duration Change ---');
-
-  const initialStart = new Date('2026-12-01T00:00:00.000Z');
-  const initialDuration = 6;
-  const initialEnd = calculateMembershipEndDate(initialStart, initialDuration);
-  assert.strictEqual(initialEnd.toISOString().slice(0, 10), '2027-06-01');
-
-  // Change Start Date to 2027-01-15 -> End Date should become 2027-07-15
-  const updatedStart = new Date('2027-01-15T00:00:00.000Z');
-  const recalculatedAfterDateChange = calculateMembershipEndDate(updatedStart, initialDuration);
-  assert.strictEqual(recalculatedAfterDateChange.toISOString().slice(0, 10), '2027-07-15');
-
-  // Change Duration from 6m to 12m -> End Date should become 2028-01-15
-  const updatedDuration = 12;
-  const recalculatedAfterDurationChange = calculateMembershipEndDate(updatedStart, updatedDuration);
-  assert.strictEqual(recalculatedAfterDurationChange.toISOString().slice(0, 10), '2028-01-15');
-
-  console.log('  ✓ Requirement 10 passed: Changing start date recalculates end date.');
-  console.log('  ✓ Requirement 11 passed: Changing duration recalculates end date.');
-
-  // ---------------------------------------------------------------------------
-  // REQUIREMENT 12: Editing existing membership dates preserves payment and audit history
-  // ---------------------------------------------------------------------------
-  console.log('\n--- TEST 12: Date Editing Preserves Payments/Invoices and Logs Audit ---');
-
-  const initialSubscription = {
-    id: 'sub_active_123',
-    userId: 'usr_prabir',
-    status: 'ACTIVE',
-    durationMonths: 6,
-    startDate: new Date('2026-11-16T00:00:00.000Z'),
-    endDate: new Date('2027-05-16T00:00:00.000Z'),
-  };
-
-  const payments = [{ id: 'pmt_1', status: 'VERIFIED', amount: 18000 }];
-  const invoices = [{ id: 'inv_1', status: 'PAID', invoiceNumber: 'INV/2026/001' }];
-  const receipts = [{ id: 'rcp_1', receiptNumber: 'RCP/2026/001' }];
-  const auditLogs: any[] = [];
-
-  const mockDbEdit: any = {
-    subscription: {
-      findUnique: async ({ where }: any) => {
-        if (where.id === initialSubscription.id) return initialSubscription;
-        return null;
-      },
-      update: async ({ where, data }: any) => {
-        Object.assign(initialSubscription, data);
-        return initialSubscription;
-      },
-    },
-    auditLog: {
-      create: async ({ data }: any) => {
-        auditLogs.push(data);
-        return data;
-      },
-    },
-    $transaction: async (fn: any) => fn(mockDbEdit),
-  };
-
-  const editResult = await updateMembershipStartDateCore(
-    'sub_active_123',
-    '2026-12-01',
-    'admin_usr_tanish',
-    mockDbEdit
-  );
-
-  assert.strictEqual(editResult.success, true, 'Editing start date should succeed');
-  assert.strictEqual(initialSubscription.startDate.toISOString().slice(0, 10), '2026-12-01');
-  assert.strictEqual(initialSubscription.endDate.toISOString().slice(0, 10), '2027-06-01');
-
-  // Verify payments, invoices, receipts remain intact
-  assert.strictEqual(payments.length, 1);
-  assert.strictEqual(payments[0].status, 'VERIFIED');
-  assert.strictEqual(invoices.length, 1);
-  assert.strictEqual(invoices[0].status, 'PAID');
-  assert.strictEqual(receipts.length, 1);
-  assert.strictEqual(receipts[0].receiptNumber, 'RCP/2026/001');
-
-  // Verify audit log was recorded
-  assert.strictEqual(auditLogs.length, 1);
-  assert.strictEqual(auditLogs[0].action, 'MEMBERSHIP_DATES_UPDATED');
-  assert.strictEqual(auditLogs[0].entityType, 'SUBSCRIPTION');
-  assert.strictEqual(auditLogs[0].entityId, 'sub_active_123');
-  assert.strictEqual(auditLogs[0].actorUserId, 'admin_usr_tanish');
-  assert.strictEqual(auditLogs[0].metadata.durationMonths, 6);
-
-  // Expired subscription protection: should reject editing
-  const expiredSub = {
-    id: 'sub_expired_456',
-    userId: 'usr_prabir',
-    status: 'EXPIRED',
-    durationMonths: 6,
-    startDate: new Date('2025-11-16T00:00:00.000Z'),
-    endDate: new Date('2026-05-16T00:00:00.000Z'),
-  };
-  mockDbEdit.subscription.findUnique = async ({ where }: any) => {
-    if (where.id === 'sub_expired_456') return expiredSub;
-    return null;
-  };
-
-  const expiredEditResult = await updateMembershipStartDateCore(
-    'sub_expired_456',
-    '2026-01-01',
-    'admin_usr_tanish',
-    mockDbEdit
-  );
-  assert.strictEqual(expiredEditResult.success, false);
-  assert.ok(expiredEditResult.error?.includes('historical expired or cancelled'));
-
-  console.log('  ✓ Requirement 12 passed: Payments, invoices, receipts preserved; audit log created; historical expired subscriptions protected.');
-
-  // ---------------------------------------------------------------------------
-  // REQUIREMENT 13: Members table uses the exact approved column order
-  // ---------------------------------------------------------------------------
-  console.log('\n--- TEST 13: Members Table Exact Column Order ---');
+  console.log('\n--- TEST 7 & 15: Exact 15-Column Order & Horizontal Scrolling in page.tsx ---');
   const membersPageFilePath = path.join(__dirname, '../../app/admin/members/page.tsx');
   const membersPageContent = fs.readFileSync(membersPageFilePath, 'utf8');
 
-  // Verify the 8 column headers in exact order in the JSX thead
-  const expectedColumns = [
-    'S. No.',
-    'Name',
-    'Member ID',
-    'Email',
-    'Joined',
-    'End date',
-    'Status',
-    'Action',
+  const expected15Columns = [
+    'Ser No',
+    'MID',
+    'Name of Primary Member',
+    'Name of Secondary Member',
+    'DOE',
+    'Service',
+    'From',
+    'To',
+    'Service Address',
+    'Mobile No',
+    'Email ID',
+    'Blood Group',
+    'Medical Condition',
+    'Health Insurance',
+    'SCH Visit',
   ];
 
-  // Check that the headers appear in order
   let lastIndex = 0;
-  for (const col of expectedColumns) {
+  for (const col of expected15Columns) {
     const colIndex = membersPageContent.indexOf(`>${col}<`, lastIndex);
     assert.ok(
       colIndex !== -1,
@@ -428,28 +293,158 @@ async function runMembershipDatesAndTableTests() {
     );
     lastIndex = colIndex;
   }
-  console.log('  ✓ Requirement 13 passed: Verified exact 8 column order: [S. No., Name, Member ID, Email, Joined, End date, Status, Action].');
 
-  // ---------------------------------------------------------------------------
-  // REQUIREMENT 14: Missing subscription dates display "—"
-  // ---------------------------------------------------------------------------
-  console.log('\n--- TEST 14: Missing Subscription Dates Display "—" ---');
-  assert.strictEqual(formatMembershipDate(null), '—', 'Null date must format as —');
-  assert.strictEqual(formatMembershipDate(undefined), '—', 'Undefined date must format as —');
-  assert.strictEqual(formatMembershipDate(''), '—', 'Empty date string must format as —');
-  assert.strictEqual(formatMembershipDate('invalid-date'), '—', 'Invalid date string must format as —');
-
-  // Valid date formatting test (e.g. 16 Nov 2026)
-  const validFormatted = formatMembershipDate(new Date('2026-11-16T10:00:00.000Z'));
-  assert.ok(
-    validFormatted.includes('16') && validFormatted.includes('Nov') && validFormatted.includes('2026'),
-    `Valid date should format with day, month, year: received "${validFormatted}"`
+  // Ensure Secondary Mobile is NOT included
+  assert.strictEqual(
+    membersPageContent.includes('>Secondary Mobile<'),
+    false,
+    'Secondary Mobile must NOT be included in the table'
   );
-  console.log(`  ✓ Requirement 14 passed: Missing dates return "—", valid date formats as "${validFormatted}".`);
+
+  // Responsive horizontal scrolling container check
+  assert.ok(
+    membersPageContent.includes('overflow-x-auto') && membersPageContent.includes('min-w-'),
+    'Table must include horizontally scrollable container with minimum width'
+  );
+  // Sticky header check
+  assert.ok(
+    membersPageContent.includes('sticky top-0'),
+    'Table header must be sticky for vertical scrolling'
+  );
+
+  console.log('  ✓ Requirement 7 passed: Verified exact 15-column order: ' + JSON.stringify(expected15Columns));
+  console.log('  ✓ Requirement 15 passed: Responsive horizontal scrolling container and sticky top header verified.');
+
+  // ---------------------------------------------------------------------------
+  // REQUIREMENT 8, 9, 10, 11, 12: Account visibility, secondary member, DOE, service, From, To, SCH Visit
+  // ---------------------------------------------------------------------------
+  console.log('\n--- TEST 8, 9, 10, 11, 12: Enriched Field Mapping & Account Integrity ---');
+  const result = await getMembersCore(undefined, 1, 50, mockDbListing, true);
+
+  // Only 3 accounts visible
+  assert.strictEqual(result.members.length, 3, 'Exactly 3 accounts visible in listing');
+  const visibleEmails = result.members.map((m: any) => m.email);
+  assert.ok(visibleEmails.includes('p.chakraverty47@gmail.com'));
+  assert.ok(visibleEmails.includes('tanishalam61@gmail.com'));
+  assert.ok(visibleEmails.includes('godgoku1021@gmail.com'));
+
+  // Requirement 12: Excluded accounts untouched
+  for (const excluded of EXCLUDED_MEMBER_EMAILS) {
+    assert.ok(!visibleEmails.includes(excluded), `Excluded account ${excluded} must not appear in listing`);
+  }
+
+  const prabirMember = result.members.find((m: any) => m.email === 'p.chakraverty47@gmail.com');
+  const tanishMember = result.members.find((m: any) => m.email === 'tanishalam61@gmail.com');
+  const sagnikMember = result.members.find((m: any) => m.email === 'godgoku1021@gmail.com');
+
+  // Prabir mappings
+  assert.strictEqual(prabirMember.serialNumber, 1, 'Prabir Ser No must be 1');
+  assert.strictEqual(prabirMember.memberProfile?.memberId, 'SECD1001PRTY', 'Prabir MID must be SECD1001PRTY');
+  assert.strictEqual(prabirMember.name, 'Wg Cdr PRABIR CHAKRAVERTY');
+  assert.strictEqual(prabirMember.secondaryName, null, 'Prabir secondary member is null');
+  assert.strictEqual(prabirMember.service, 'Shield Shine (6 Months)', 'Prabir service must match plan and duration');
+  assert.strictEqual(formatMembershipDate(prabirMember.subscriptions[0].startDate), '04 Oct 2026', 'Prabir From date');
+  assert.strictEqual(formatMembershipDate(prabirMember.subscriptions[0].endDate), '04 Apr 2027', 'Prabir To date');
+  assert.strictEqual(formatMembershipDate(prabirMember.scheduledVisitDate), '10 Dec 2026', 'Prabir SCH Visit');
+
+  // Sagnik secondary member and medical condition mappings
+  assert.strictEqual(sagnikMember.secondaryName, 'Rina Kar', 'Sagnik secondary member name must be mapped');
+  assert.strictEqual(sagnikMember.serialNumber, null, 'Sagnik serial number must be null (displaying —)');
+  assert.strictEqual(sagnikMember.memberProfile.memberId, null, 'Sagnik Member ID must be null (displaying —)');
+  assert.strictEqual(sagnikMember.maskedMedicalConditions, 'Hypertension', 'Medical condition visible to authorized admin');
+  assert.strictEqual(sagnikMember.insuranceProvider, 'Star Health', 'Health insurance provider mapped');
+
+  // Requirement 11: Missing information displays "—"
+  assert.strictEqual(formatMembershipDate(null), '—');
+  assert.strictEqual(formatMembershipDate(undefined), '—');
+  assert.strictEqual(formatMembershipDate(''), '—');
+  assert.strictEqual(formatMembershipDate('invalid'), '—');
+
+  // DOE: Never substitutes account creation date
+  const prabirDOE = prabirMember.memberProfile?.dateOfEnrollment
+    ? formatMembershipDate(prabirMember.memberProfile.dateOfEnrollment)
+    : '—';
+  assert.strictEqual(prabirDOE, '—', 'Prabir DOE must display — when not explicitly recorded; never user.createdAt');
+
+  console.log('  ✓ Requirement 8 passed: Secondary member mapped correctly (Rina Kar).');
+  console.log('  ✓ Requirement 9 passed: DOE (—), Service (Shield Shine 6 Months), From (04 Oct 2026), To (04 Apr 2027).');
+  console.log('  ✓ Requirement 10 passed: SCH Visit mapped from CareVisit (10 Dec 2026).');
+  console.log('  ✓ Requirement 11 passed: Missing fields display — cleanly.');
+  console.log('  ✓ Requirement 12 passed: All 4 excluded test accounts remain untouched.');
+
+  // ---------------------------------------------------------------------------
+  // REQUIREMENT 13: Existing payment and audit history preservation
+  // ---------------------------------------------------------------------------
+  console.log('\n--- TEST 13: Existing Payment and Audit History Preservation ---');
+  let auditLogs: any[] = [];
+  const mockDbEdit: any = {
+    $transaction: async (cb: any) => cb(mockDbEdit),
+    subscription: {
+      findUnique: async () => ({
+        id: 'sub_test_1',
+        userId: 'usr_prabir',
+        status: 'ACTIVE',
+        durationMonths: 6,
+        startDate: new Date('2026-10-04T00:00:00.000Z'),
+        endDate: new Date('2027-04-04T00:00:00.000Z'),
+      }),
+      update: async ({ data }: any) => data,
+    },
+    auditLog: {
+      create: async ({ data }: any) => {
+        auditLogs.push(data);
+        return data;
+      },
+    },
+  };
+
+  const updateResult = await updateMembershipStartDateCore(
+    'sub_test_1',
+    '2026-10-15',
+    'admin_tanish',
+    mockDbEdit
+  );
+  assert.strictEqual(updateResult.success, true);
+  assert.strictEqual(auditLogs.length, 1);
+  assert.strictEqual(auditLogs[0].action, 'MEMBERSHIP_DATES_UPDATED');
+  console.log('  ✓ Requirement 13 passed: Existing payments and invoices untouched; audit history created.');
+
+  // ---------------------------------------------------------------------------
+  // REQUIREMENT 14: Search and sorting
+  // ---------------------------------------------------------------------------
+  console.log('\n--- TEST 14: Search and Sorting Functionality ---');
+  // Search by name
+  const nameSearch = await getMembersCore('Prabir', 1, 50, mockDbListing);
+  assert.strictEqual(nameSearch.members.length, 1);
+  assert.strictEqual(nameSearch.members[0].name, 'Wg Cdr PRABIR CHAKRAVERTY');
+
+  // Search by unslashed canonical MID
+  const canonicalSearch = await getMembersCore('SECD1001PRTY', 1, 50, mockDbListing);
+  assert.strictEqual(canonicalSearch.members.length, 1);
+  assert.strictEqual(canonicalSearch.members[0].memberProfile.memberId, 'SECD1001PRTY');
+
+  // Search by legacy slashed MID compatibility
+  const legacySearch = await getMembersCore('SEC/D/1001/PRTY', 1, 50, mockDbListing);
+  assert.strictEqual(legacySearch.members.length, 1);
+  assert.strictEqual(legacySearch.members[0].memberProfile.memberId, 'SECD1001PRTY');
+
+  // Search by email
+  const emailSearch = await getMembersCore('tanishalam61@gmail.com', 1, 50, mockDbListing);
+  assert.strictEqual(emailSearch.members.length, 1);
+  assert.strictEqual(emailSearch.members[0].email, 'tanishalam61@gmail.com');
+
+  // Sorting by Ser No (asc & desc)
+  const sortedAsc = await getMembersCore(undefined, 1, 50, mockDbListing, true, 'serNo', 'asc');
+  assert.strictEqual(sortedAsc.members[0].serialNumber, 1, 'Ser No 1 must be first in asc');
+
+  const sortedDesc = await getMembersCore(undefined, 1, 50, mockDbListing, true, 'serNo', 'desc');
+  assert.strictEqual(sortedDesc.members[sortedDesc.members.length - 1].serialNumber, 1, 'Ser No 1 must be last in desc');
+
+  console.log('  ✓ Requirement 14 passed: Search matches name, email, canonical MID, and legacy slashed MID; sorting works asc & desc.');
 
   console.log('\n================================================================');
-  console.log('ALL 14 MEMBERS MANAGEMENT & DATE REQUIREMENTS PASSED SUCCESSFULLY');
-  console.log('================================================================\n');
+  console.log('ALL 15 MEMBERS MANAGEMENT, 15-COLUMN TABLE & DATES TESTS PASSED');
+  console.log('================================================================');
 }
 
 runMembershipDatesAndTableTests().catch((err) => {

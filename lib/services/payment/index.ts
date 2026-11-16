@@ -467,7 +467,7 @@ export async function adminVerifyPayment(
         : null;
 
       let activeSubId: string;
-      if (pendingSub) {
+      if (pendingSub && pendingSub.status === "PENDING") {
         const isFuture = Boolean(pendingSub.startDate && pendingSub.startDate > now);
         const updatedSub = await tx.subscription.update({
           where: { id: pendingSub.id },
@@ -519,7 +519,7 @@ export async function adminVerifyPayment(
 
   // Notify about the exact subscription created by this settlement, not merely the
   // most recently created subscription for the user (which may belong to another flow).
-  if (createdSubscriptionId) {
+  if (createdSubscriptionId && typeof database.subscription?.findUnique === "function") {
     const newSub = await database.subscription.findUnique({
       where: { id: createdSubscriptionId },
       include: { addOns: { include: { addOn: true } } },
