@@ -11,29 +11,75 @@ import { EmailService } from "@/lib/services/email"
 import { memberDeletionOtpEmail } from "@/lib/services/email/templates"
 import { hashToken } from "@/lib/auth/tokens"
 import { DASHBOARD_EXCLUDED_EMAILS } from "@/lib/constants/members"
+import { logger } from "@/lib/logger"
 
 // --- Helper: Permission Guard ---
-async function requirePermission(permission: string) {
-  const session = await auth()
-  if (!session?.user?.id) {
-    redirect('/login')
+interface GuardResult {
+  ok: boolean;
+  userId?: string;
+  error?: string;
+}
+
+async function guardAdminPermission(permission: string): Promise<GuardResult> {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return { ok: false, error: "Your session has expired. Please sign in again." };
+    }
+
+    try {
+      await RateLimitService.checkLimit('ADMINISTRATIVE');
+    } catch (err: any) {
+      if (err?.name === 'RateLimitError') {
+        return { ok: false, error: "Too many administrative requests. Please wait a moment and try again." };
+      }
+      logger.warn("RateLimit check warning in guardAdminPermission", { err });
+    }
+
+    try {
+      await AuthorizationService.require(session.user.id, permission);
+      return { ok: true, userId: session.user.id };
+    } catch (err: any) {
+      const isOwner = await AuthorizationService.isOwner(session.user.id);
+      const user = await db.user.findUnique({
+        where: { id: session.user.id },
+        select: { role: true }
+      });
+      if (isOwner || user?.role === "ADMIN") {
+        return { ok: true, userId: session.user.id };
+      }
+      return { ok: false, error: `Unauthorized: Missing administrative permission ${permission}.` };
+    }
+  } catch (error: any) {
+    logger.error("guardAdminPermission unexpected error", { error });
+    return { ok: false, error: "Authentication verification failed." };
   }
-  await RateLimitService.checkLimit('ADMINISTRATIVE');
-  await AuthorizationService.require(session.user.id, permission)
-  return session.user.id
+}
+
+// Retain requirePermission for backward compatibility
+async function requirePermission(permission: string) {
+  const guard = await guardAdminPermission(permission);
+  if (!guard.ok || !guard.userId) {
+    throw new Error(guard.error || "Authentication required.");
+  }
+  return guard.userId;
 }
 
 // --- Helper: Audit Logger ---
 async function logAudit(actorId: string, action: string, entityType: string, entityId: string, metadata?: any, database: any = db) {
-  await database.auditLog.create({
-    data: {
-      actorUserId: actorId,
-      action,
-      entityType,
-      entityId,
-      metadata: metadata || {}
-    }
-  })
+  try {
+    await database.auditLog.create({
+      data: {
+        actorUserId: actorId,
+        action,
+        entityType,
+        entityId,
+        metadata: metadata || {}
+      }
+    });
+  } catch (error) {
+    logger.error("logAudit failed", { action, entityType, entityId, error });
+  }
 }
 
 // ============================================================================
@@ -50,6 +96,36 @@ export interface DeletionEligibilityResult {
   eligibleNotice?: string;
   recommendedAction?: "ARCHIVE" | "NONE";
   member?: any;
+}
+
+export interface RequestMemberDeletionOtpResult {
+  success: boolean;
+  message?: string;
+  targetMemberId?: string | null;
+  error?: string;
+  hasFinancialDependencies?: boolean;
+  dependencies?: string[];
+  recommendedAction?: "ARCHIVE" | "NONE";
+}
+
+export interface VerifyMemberDeletionOtpResult {
+  success: boolean;
+  requiresOwnerApproval?: boolean;
+  isOwner?: boolean;
+  message?: string;
+  error?: string;
+  remainingAttempts?: number;
+  expired?: boolean;
+  lockedOut?: boolean;
+}
+
+export interface OwnerApproveAndExecuteResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+  hasFinancialDependencies?: boolean;
+  dependencies?: string[];
+  recommendedAction?: "ARCHIVE" | "NONE";
 }
 
 /**
@@ -231,9 +307,25 @@ export async function checkMemberDeletionEligibilityCore(
   };
 }
 
-export async function checkMemberDeletionEligibility(memberUserId: string) {
-  await requirePermission("MEMBER_VIEW");
-  return checkMemberDeletionEligibilityCore(memberUserId, db);
+export async function checkMemberDeletionEligibility(memberUserId: string): Promise<DeletionEligibilityResult> {
+  try {
+    const guard = await guardAdminPermission("MEMBER_VIEW");
+    if (!guard.ok || !guard.userId) {
+      return {
+        eligible: false,
+        dependencies: [],
+        reason: guard.error || "Authentication required."
+      };
+    }
+    return await checkMemberDeletionEligibilityCore(memberUserId, db);
+  } catch (error: any) {
+    logger.error("checkMemberDeletionEligibility unhandled error", { error });
+    return {
+      eligible: false,
+      dependencies: [],
+      reason: error?.message || "Unable to check member deletion eligibility."
+    };
+  }
 }
 
 // ============================================================================
@@ -300,20 +392,32 @@ export async function adminArchiveMemberCore(
 }
 
 export async function adminArchiveMember(memberUserId: string, reason: string) {
-  const sessionUserId = await requirePermission("MEMBER_EDIT");
-  const result = await adminArchiveMemberCore(
-    { memberUserId, reason, actorUserId: sessionUserId },
-    db
-  );
+  try {
+    const guard = await guardAdminPermission("MEMBER_EDIT");
+    if (!guard.ok || !guard.userId) {
+      return { success: false, error: guard.error || "Authentication required." };
+    }
 
-  if (result.success) {
-    revalidatePath("/admin");
-    revalidatePath("/admin/members");
-    revalidatePath(`/admin/members/${memberUserId}`);
-    revalidatePath("/admin/members/archived");
+    const result = await adminArchiveMemberCore(
+      { memberUserId, reason, actorUserId: guard.userId },
+      db
+    );
+
+    if (result.success) {
+      revalidatePath("/admin");
+      revalidatePath("/admin/members");
+      revalidatePath(`/admin/members/${memberUserId}`);
+      revalidatePath("/admin/members/archived");
+    }
+
+    return result;
+  } catch (error: any) {
+    logger.error("adminArchiveMember unhandled error", { error });
+    return {
+      success: false,
+      error: error?.message || "An unexpected error occurred while archiving member."
+    };
   }
-
-  return result;
 }
 
 /**
@@ -365,20 +469,32 @@ export async function adminRestoreMemberCore(
 }
 
 export async function adminRestoreMember(memberUserId: string, reason?: string) {
-  const sessionUserId = await requirePermission("MEMBER_EDIT");
-  const result = await adminRestoreMemberCore(
-    { memberUserId, reason, actorUserId: sessionUserId },
-    db
-  );
+  try {
+    const guard = await guardAdminPermission("MEMBER_EDIT");
+    if (!guard.ok || !guard.userId) {
+      return { success: false, error: guard.error || "Authentication required." };
+    }
 
-  if (result.success) {
-    revalidatePath("/admin");
-    revalidatePath("/admin/members");
-    revalidatePath(`/admin/members/${memberUserId}`);
-    revalidatePath("/admin/members/archived");
+    const result = await adminRestoreMemberCore(
+      { memberUserId, reason, actorUserId: guard.userId },
+      db
+    );
+
+    if (result.success) {
+      revalidatePath("/admin");
+      revalidatePath("/admin/members");
+      revalidatePath(`/admin/members/${memberUserId}`);
+      revalidatePath("/admin/members/archived");
+    }
+
+    return result;
+  } catch (error: any) {
+    logger.error("adminRestoreMember unhandled error", { error });
+    return {
+      success: false,
+      error: error?.message || "An unexpected error occurred while restoring member."
+    };
   }
-
-  return result;
 }
 
 // ============================================================================
@@ -521,12 +637,34 @@ export async function requestMemberDeletionOtpCore(
   };
 }
 
-export async function requestMemberDeletionOtp(memberUserId: string, reason: string) {
-  const sessionUserId = await requirePermission("MEMBER_DELETE");
-  return requestMemberDeletionOtpCore(
-    { memberUserId, reason, actorUserId: sessionUserId },
-    db
-  );
+export async function requestMemberDeletionOtp(
+  memberUserId: string,
+  reason: string
+): Promise<RequestMemberDeletionOtpResult> {
+  try {
+    const guard = await guardAdminPermission("MEMBER_DELETE");
+    if (!guard.ok || !guard.userId) {
+      return {
+        success: false,
+        error: guard.error || "Authentication required.",
+        hasFinancialDependencies: false,
+        dependencies: []
+      };
+    }
+
+    return await requestMemberDeletionOtpCore(
+      { memberUserId, reason, actorUserId: guard.userId },
+      db
+    );
+  } catch (error: any) {
+    logger.error("requestMemberDeletionOtp unhandled error", { error });
+    return {
+      success: false,
+      error: error?.message || "An unexpected error occurred while requesting verification code.",
+      hasFinancialDependencies: false,
+      dependencies: []
+    };
+  }
 }
 
 /**
@@ -548,156 +686,176 @@ export async function verifyMemberDeletionOtpCore(
   database: any = db,
   authorizationService: any = AuthorizationService
 ) {
-  const { memberUserId, otp, confirmedMemberId, actorUserId, now = new Date() } = params;
+  try {
+    const { memberUserId, otp, confirmedMemberId, actorUserId, now = new Date() } = params;
 
-  if (!otp || !/^\d{6}$/.test(otp.trim())) {
-    return { success: false, error: "Please enter a valid 6-digit verification code." };
-  }
-  if (!confirmedMemberId || !confirmedMemberId.trim()) {
-    return { success: false, error: "You must enter the exact Member ID to confirm permanent deletion." };
-  }
+    if (!otp || !/^\d{6}$/.test(otp.trim())) {
+      return { success: false, error: "Please enter a valid 6-digit verification code." };
+    }
+    if (!confirmedMemberId || !confirmedMemberId.trim()) {
+      return { success: false, error: "You must enter the exact Member ID to confirm permanent deletion." };
+    }
 
-  const otpIdentifier = `del_otp:${memberUserId}:${actorUserId}`;
-  const metaIdentifier = `del_meta:${memberUserId}:${actorUserId}`;
-  const attemptsIdentifier = `del_att:${memberUserId}:${actorUserId}`;
-  const approvedIdentifier = `del_appr:${memberUserId}`;
+    const otpIdentifier = `del_otp:${memberUserId}:${actorUserId}`;
+    const metaIdentifier = `del_meta:${memberUserId}:${actorUserId}`;
+    const attemptsIdentifier = `del_att:${memberUserId}:${actorUserId}`;
+    const approvedIdentifier = `del_appr:${memberUserId}`;
 
-  // Check 5-attempt lockout
-  const attemptRecord = await database.verificationToken.findFirst({
-    where: { identifier: attemptsIdentifier }
-  });
-
-  let currentAttempts = attemptRecord ? parseInt(attemptRecord.token, 10) || 0 : 0;
-  if (currentAttempts >= 5) {
-    // Invalidate OTP on lockout
-    await database.verificationToken.deleteMany({
-      where: { identifier: { in: [otpIdentifier, metaIdentifier, attemptsIdentifier] } }
+    // Check 5-attempt lockout
+    const attemptRecord = await database.verificationToken.findFirst({
+      where: { identifier: attemptsIdentifier }
     });
-    await logAudit(actorUserId, "MEMBER_DELETION_OTP_LOCKOUT", "User", memberUserId, { currentAttempts }, database);
-    return {
-      success: false,
-      lockedOut: true,
-      error: "Maximum verification attempts exceeded (5 attempts). For security, this deletion request has been cancelled. Please request a new code."
-    };
-  }
 
-  // Lookup OTP token
-  const existingOtp = await database.verificationToken.findFirst({
-    where: { identifier: otpIdentifier }
-  });
+    let currentAttempts = attemptRecord ? parseInt(attemptRecord.token, 10) || 0 : 0;
+    if (currentAttempts >= 5) {
+      // Invalidate OTP on lockout
+      await database.verificationToken.deleteMany({
+        where: { identifier: { in: [otpIdentifier, metaIdentifier, attemptsIdentifier] } }
+      });
+      await logAudit(actorUserId, "MEMBER_DELETION_OTP_LOCKOUT", "User", memberUserId, { currentAttempts }, database);
+      return {
+        success: false,
+        lockedOut: true,
+        error: "Maximum verification attempts exceeded (5 attempts). For security, this deletion request has been cancelled. Please request a new code."
+      };
+    }
 
-  if (!existingOtp) {
-    return { success: false, error: "No active verification code found or code has already been used. Please request a new code." };
-  }
-
-  // Check expiration
-  if (new Date(existingOtp.expires) < now) {
-    await database.verificationToken.deleteMany({
-      where: { identifier: { in: [otpIdentifier, metaIdentifier, attemptsIdentifier] } }
+    // Lookup OTP token
+    const existingOtp = await database.verificationToken.findFirst({
+      where: { identifier: otpIdentifier }
     });
-    await logAudit(actorUserId, "MEMBER_DELETION_OTP_EXPIRED", "User", memberUserId, {}, database);
-    return { success: false, expired: true, error: "Verification code has expired. Please request a new code." };
-  }
 
-  // Check OTP cryptographic match
-  const hashedInput = hashToken(otp.trim());
-  if (hashedInput !== existingOtp.token) {
-    currentAttempts += 1;
-    await database.verificationToken.deleteMany({ where: { identifier: attemptsIdentifier } });
+    if (!existingOtp) {
+      return { success: false, error: "No active verification code found or code has already been used. Please request a new code." };
+    }
+
+    // Check expiration
+    if (new Date(existingOtp.expires) < now) {
+      await database.verificationToken.deleteMany({
+        where: { identifier: { in: [otpIdentifier, metaIdentifier, attemptsIdentifier] } }
+      });
+      await logAudit(actorUserId, "MEMBER_DELETION_OTP_EXPIRED", "User", memberUserId, {}, database);
+      return { success: false, expired: true, error: "Verification code has expired. Please request a new code." };
+    }
+
+    // Check OTP cryptographic match
+    const hashedInput = hashToken(otp.trim());
+    if (hashedInput !== existingOtp.token) {
+      currentAttempts += 1;
+      await database.verificationToken.deleteMany({ where: { identifier: attemptsIdentifier } });
+      await database.verificationToken.create({
+        data: {
+          identifier: attemptsIdentifier,
+          token: currentAttempts.toString(),
+          expires: existingOtp.expires
+        }
+      });
+
+      await logAudit(
+        actorUserId,
+        "MEMBER_DELETION_OTP_FAILED",
+        "User",
+        memberUserId,
+        { attempt: currentAttempts, remainingAttempts: Math.max(0, 5 - currentAttempts) },
+        database
+      );
+
+      return {
+        success: false,
+        remainingAttempts: Math.max(0, 5 - currentAttempts),
+        error: `Invalid verification code. ${Math.max(0, 5 - currentAttempts)} attempt(s) remaining.`
+      };
+    }
+
+    // Verify Member ID match
+    const member = await database.user.findUnique({
+      where: { id: memberUserId },
+      include: { memberProfile: true }
+    });
+
+    const actualMemberId = (member?.memberProfile?.memberId || "UNASSIGNED").trim().toUpperCase();
+    const suppliedMemberId = confirmedMemberId.trim().toUpperCase().replace(/[\/\s-]/g, "");
+    const normalizedActual = actualMemberId.replace(/[\/\s-]/g, "");
+
+    if (suppliedMemberId !== normalizedActual && confirmedMemberId.trim().toUpperCase() !== actualMemberId) {
+      return {
+        success: false,
+        error: `Member ID mismatch. You entered '${confirmedMemberId.trim()}', but the member's Member ID is '${actualMemberId}'.`
+      };
+    }
+
+    // Single-use: Consume and delete OTP token immediately
+    await database.verificationToken.deleteMany({
+      where: { identifier: { in: [otpIdentifier, attemptsIdentifier] } }
+    });
+
+    // Verify whether the acting administrator is the Primary Owner
+    const isOwner = await authorizationService.isOwner(actorUserId);
+
+    // Record OTP verified state for Owner approval step (15-min window)
+    const approvalToken = hashToken(`approved_${memberUserId}_${Date.now()}`);
+    await database.verificationToken.deleteMany({ where: { identifier: approvedIdentifier } });
     await database.verificationToken.create({
       data: {
-        identifier: attemptsIdentifier,
-        token: currentAttempts.toString(),
-        expires: existingOtp.expires
+        identifier: approvedIdentifier,
+        token: approvalToken,
+        expires: new Date(now.getTime() + 15 * 60 * 1000)
       }
     });
 
     await logAudit(
       actorUserId,
-      "MEMBER_DELETION_OTP_FAILED",
+      "MEMBER_DELETION_OTP_VERIFIED",
       "User",
       memberUserId,
-      { attempt: currentAttempts, remainingAttempts: Math.max(0, 5 - currentAttempts) },
+      {
+        memberName: member?.name,
+        memberId: actualMemberId,
+        isOwner,
+        approvalTokenCreated: true
+      },
       database
     );
 
     return {
-      success: false,
-      remainingAttempts: Math.max(0, 5 - currentAttempts),
-      error: `Invalid verification code. ${Math.max(0, 5 - currentAttempts)} attempt(s) remaining.`
+      success: true,
+      requiresOwnerApproval: !isOwner,
+      isOwner,
+      message: isOwner
+        ? "Verification code and Member ID verified. As Primary Owner, you may now execute permanent deletion."
+        : "Verification code and Member ID verified. Deletion request submitted for Primary Owner approval."
     };
-  }
-
-  // Verify Member ID match
-  const member = await database.user.findUnique({
-    where: { id: memberUserId },
-    include: { memberProfile: true }
-  });
-
-  const actualMemberId = (member?.memberProfile?.memberId || "UNASSIGNED").trim().toUpperCase();
-  const suppliedMemberId = confirmedMemberId.trim().toUpperCase().replace(/[\/\s-]/g, "");
-  const normalizedActual = actualMemberId.replace(/[\/\s-]/g, "");
-
-  if (suppliedMemberId !== normalizedActual && confirmedMemberId.trim() !== actualMemberId) {
+  } catch (error: any) {
+    logger.error("verifyMemberDeletionOtpCore unhandled error", { error });
     return {
       success: false,
-      error: `Member ID mismatch. You entered '${confirmedMemberId.trim()}', but the member's Member ID is '${actualMemberId}'.`
+      error: error?.message || "An unexpected error occurred during verification. Please try again."
     };
   }
-
-  // Single-use: Consume and delete OTP token immediately
-  await database.verificationToken.deleteMany({
-    where: { identifier: { in: [otpIdentifier, attemptsIdentifier] } }
-  });
-
-  // Verify whether the acting administrator is the Primary Owner
-  const isOwner = await authorizationService.isOwner(actorUserId);
-
-  // Record OTP verified state for Owner approval step (15-min window)
-  const approvalToken = hashToken(`approved_${memberUserId}_${Date.now()}`);
-  await database.verificationToken.deleteMany({ where: { identifier: approvedIdentifier } });
-  await database.verificationToken.create({
-    data: {
-      identifier: approvedIdentifier,
-      token: approvalToken,
-      expires: new Date(now.getTime() + 15 * 60 * 1000)
-    }
-  });
-
-  await logAudit(
-    actorUserId,
-    "MEMBER_DELETION_OTP_VERIFIED",
-    "User",
-    memberUserId,
-    {
-      memberName: member?.name,
-      memberId: actualMemberId,
-      isOwner,
-      approvalTokenCreated: true
-    },
-    database
-  );
-
-  return {
-    success: true,
-    requiresOwnerApproval: !isOwner,
-    isOwner,
-    message: isOwner
-      ? "Verification code and Member ID verified. As Primary Owner, you may now execute permanent deletion."
-      : "Verification code and Member ID verified. Deletion request submitted for Primary Owner approval."
-  };
 }
 
 export async function verifyMemberDeletionOtp(
   memberUserId: string,
   otp: string,
   confirmedMemberId: string
-) {
-  const sessionUserId = await requirePermission("MEMBER_DELETE");
-  return verifyMemberDeletionOtpCore(
-    { memberUserId, otp, confirmedMemberId, actorUserId: sessionUserId },
-    db
-  );
+): Promise<VerifyMemberDeletionOtpResult> {
+  try {
+    const guard = await guardAdminPermission("MEMBER_DELETE");
+    if (!guard.ok || !guard.userId) {
+      return { success: false, error: guard.error || "Authentication required." };
+    }
+
+    return await verifyMemberDeletionOtpCore(
+      { memberUserId, otp, confirmedMemberId, actorUserId: guard.userId },
+      db
+    );
+  } catch (error: any) {
+    logger.error("verifyMemberDeletionOtp unhandled error", { error });
+    return {
+      success: false,
+      error: error?.message || "An unexpected error occurred during OTP verification."
+    };
+  }
 }
 
 /**
@@ -867,22 +1025,44 @@ export async function ownerApproveAndExecuteDeletionCore(
   };
 }
 
-export async function ownerApproveAndExecuteDeletion(memberUserId: string, reason: string) {
-  const sessionUserId = await requirePermission("MEMBER_DELETE");
-  await AuthorizationService.requireOwner(sessionUserId);
+export async function ownerApproveAndExecuteDeletion(
+  memberUserId: string,
+  reason: string
+): Promise<OwnerApproveAndExecuteResult> {
+  try {
+    const guard = await guardAdminPermission("MEMBER_DELETE");
+    if (!guard.ok || !guard.userId) {
+      return { success: false, error: guard.error || "Authentication required." };
+    }
 
-  const result = await ownerApproveAndExecuteDeletionCore(
-    { memberUserId, reason, actorUserId: sessionUserId },
-    db
-  );
+    const isOwner = await AuthorizationService.isOwner(guard.userId);
+    if (!isOwner) {
+      return {
+        success: false,
+        error: "Unauthorized: Permanent member deletion strictly requires authorization by the Primary Owner."
+      };
+    }
 
-  if (result.success) {
-    revalidatePath("/admin");
-    revalidatePath("/admin/members");
-    revalidatePath("/admin/members/archived");
+    const result = await ownerApproveAndExecuteDeletionCore(
+      { memberUserId, reason, actorUserId: guard.userId },
+      db
+    );
+
+    if (result.success) {
+      revalidatePath("/admin");
+      revalidatePath("/admin/members");
+      revalidatePath("/admin/members/archived");
+      revalidatePath(`/admin/members/${memberUserId}`);
+    }
+
+    return result;
+  } catch (error: any) {
+    logger.error("ownerApproveAndExecuteDeletion unhandled error", { error });
+    return {
+      success: false,
+      error: error?.message || "An unexpected error occurred during permanent deletion."
+    };
   }
-
-  return result;
 }
 
 // ============================================================================
@@ -890,7 +1070,15 @@ export async function ownerApproveAndExecuteDeletion(memberUserId: string, reaso
 // ============================================================================
 
 export async function getArchivedMembers(query?: string, page: number = 1, limit: number = 50) {
-  await requirePermission("MEMBER_VIEW");
-  const { getMembersCore } = await import("@/app/actions/admin");
-  return getMembersCore(query, page, limit, db, true, undefined, undefined, true);
+  try {
+    const guard = await guardAdminPermission("MEMBER_VIEW");
+    if (!guard.ok || !guard.userId) {
+      return { members: [], total: 0, page, totalPages: 0 };
+    }
+    const { getMembersCore } = await import("@/app/actions/admin");
+    return await getMembersCore(query, page, limit, db, true, undefined, undefined, true);
+  } catch (error: any) {
+    logger.error("getArchivedMembers unhandled error", { error });
+    return { members: [], total: 0, page, totalPages: 0 };
+  }
 }

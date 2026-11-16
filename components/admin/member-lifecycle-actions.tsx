@@ -148,7 +148,12 @@ export function MemberLifecycleActions({
         setDeleteStep("otp")
       }
     } catch (err: any) {
-      setDeleteError(err?.message || "Failed to dispatch verification code.")
+      const msg = err?.message || ""
+      if (msg.includes("441") || msg.includes("Minified React error")) {
+        setDeleteError("A server communication error occurred. Please try again or refresh.")
+      } else {
+        setDeleteError(msg || "Failed to dispatch verification code.")
+      }
     } finally {
       setIsDeleting(false)
     }
@@ -176,7 +181,12 @@ export function MemberLifecycleActions({
         setDeleteStep("owner_approval")
       }
     } catch (err: any) {
-      setDeleteError(err?.message || "Verification failed.")
+      const msg = err?.message || ""
+      if (msg.includes("441") || msg.includes("Minified React error")) {
+        setDeleteError("A server communication error occurred during verification. Please try again or refresh.")
+      } else {
+        setDeleteError(msg || "Verification failed.")
+      }
     } finally {
       setIsDeleting(false)
     }
@@ -198,7 +208,12 @@ export function MemberLifecycleActions({
         }, 1500)
       }
     } catch (err: any) {
-      setDeleteError(err?.message || "Execution failed.")
+      const msg = err?.message || ""
+      if (msg.includes("441") || msg.includes("Minified React error")) {
+        setDeleteError("A server communication error occurred during execution. Please try again or refresh.")
+      } else {
+        setDeleteError(msg || "Execution failed.")
+      }
     } finally {
       setIsDeleting(false)
     }
@@ -630,7 +645,7 @@ export function MemberLifecycleActions({
                       Primary Owner Final Authorization
                     </div>
                     <p className="text-xs leading-relaxed text-rose-950">
-                      As the Primary Owner, clicking below will permanently delete <strong>{memberName}</strong> ({memberId}).
+                      As the Primary Owner, clicking below will permanently delete <strong>{memberName}</strong> ({memberId || "UNASSIGNED"}).
                       This action cannot be undone.
                     </p>
                   </div>
