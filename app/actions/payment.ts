@@ -43,7 +43,7 @@ export async function getPendingPayments() {
     throw new Error("Unauthorized")
   }
 
-  const authorized = await AuthorizationService.can(session.user.id, PERMISSIONS.PAYMENT_VIEW)
+  const authorized = await AuthorizationService.can(session.user.id, PERMISSIONS.PAYMENT_VIEW, session.user.email)
   if (!authorized) {
     throw new Error("Forbidden")
   }
@@ -68,7 +68,7 @@ export async function getPendingPayments() {
 export async function getPaymentById(id: string) {
   const session = await auth()
   if (!session?.user?.id) throw new Error("Unauthorized")
-  const authorized = await AuthorizationService.can(session.user.id, PERMISSIONS.PAYMENT_VIEW)
+  const authorized = await AuthorizationService.can(session.user.id, PERMISSIONS.PAYMENT_VIEW, session.user.email)
   if (!authorized) throw new Error("Forbidden")
   return await db.payment.findUnique({
     where: { id },
@@ -87,8 +87,8 @@ export async function resendPaymentConfirmationEmailAction(paymentId: string) {
   if (!session?.user?.id) throw new Error("Unauthorized")
 
   const authorized =
-    (await AuthorizationService.can(session.user.id, PERMISSIONS.PAYMENT_VERIFY)) ||
-    (await AuthorizationService.can(session.user.id, PERMISSIONS.PAYMENT_VIEW))
+    (await AuthorizationService.can(session.user.id, PERMISSIONS.PAYMENT_VERIFY, session.user.email)) ||
+    (await AuthorizationService.can(session.user.id, PERMISSIONS.PAYMENT_VIEW, session.user.email))
 
   if (!authorized) throw new Error("Forbidden: Administrator privilege required")
 

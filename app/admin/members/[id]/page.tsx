@@ -11,7 +11,7 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
   const { id } = await params;
   const session = await auth();
   const currentUserId = session?.user?.id;
-  const isOwner = currentUserId ? await AuthorizationService.isOwner(currentUserId) : false;
+  const isOwner = session?.user?.email === 'info.sunshineeldercare@gmail.com';
 
   const memberResult = await getMemberDetails(id)
   

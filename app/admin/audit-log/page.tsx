@@ -16,7 +16,7 @@ export default async function AdminAuditLogPage({
   const session = await auth();
   if (!session?.user?.id) redirect("/login?callbackUrl=/admin/audit-log");
 
-  const canView = await AuthorizationService.can(session.user.id, "AUDIT_VIEW");
+  const canView = await AuthorizationService.can(session.user.id, "AUDIT_VIEW", session.user.email);
   if (!canView) redirect("/admin");
 
   const params = await searchParams;

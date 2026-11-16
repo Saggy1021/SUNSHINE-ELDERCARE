@@ -3,11 +3,12 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import { PrismaAdapter } from "@auth/prisma-adapter"
 import { db } from "@/lib/db"
 import bcrypt from "bcryptjs"
+import { cache } from "react"
 
 // A fixed hash for timing attack mitigation (hash of 'dummy' with salt rounds = 10)
 const DUMMY_HASH = "$2a$10$w8uQe0bY8R4uU9m4F9w/u.bM/zHwS0E5V1q7xH0O9A3zX1sXwO0cK";
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+const nextAuthResult = NextAuth({
   adapter: PrismaAdapter(db) as any,
   session: { strategy: "jwt" },
   trustHost: true,
@@ -173,3 +174,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: "/login",
   }
 })
+
+const uncachedAuth = nextAuthResult.auth;
+
+/**
+ * Request-scoped memoized session lookup.
+ * React cache() eliminates duplicate database lookups in the jwt callback
+ * when auth() is called multiple times across layouts, server components,
+ * and server actions during a single HTTP request lifecycle.
+ */
+const cachedAuth = cache(async () => {
+  return await uncachedAuth();
+});
+
+export const auth = ((...args: Parameters<typeof uncachedAuth>) => {
+  if (args.length > 0) {
+    return (uncachedAuth as any)(...args);
+  }
+  return cachedAuth();
+}) as typeof uncachedAuth;
+
+export const handlers = nextAuthResult.handlers;
+export const signIn = nextAuthResult.signIn;
+export const signOut = nextAuthResult.signOut;
+

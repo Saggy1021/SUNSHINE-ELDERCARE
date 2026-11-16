@@ -1,5 +1,6 @@
 import { db } from '../db';
 import { AuthorizationService } from './authorization';
+import { unstable_cache, revalidatePath, revalidateTag } from 'next/cache';
 
 export class CmsService {
   // ==========================================
@@ -218,13 +219,22 @@ export class CmsService {
     return db.websiteSetting.findMany({ orderBy: { key: 'asc' } });
   }
 
-  static async getSettingsMap() {
-    const settings = await db.websiteSetting.findMany();
-    return settings.reduce((acc, s) => {
-      acc[s.key] = s.value;
-      return acc;
-    }, {} as Record<string, string>);
-  }
+  /**
+   * Cached website settings map.
+   * Eliminates a blocking 317ms Tokyo database roundtrip on every page render
+   * across the entire application (including all admin routes).
+   */
+  static getSettingsMap = unstable_cache(
+    async () => {
+      const settings = await db.websiteSetting.findMany();
+      return settings.reduce((acc, s) => {
+        acc[s.key] = s.value;
+        return acc;
+      }, {} as Record<string, string>);
+    },
+    ['website-settings-map'],
+    { revalidate: 3600, tags: ['website-settings'] }
+  );
 
   static async upsertSetting(actorUserId: string, key: string, value: string, description?: string) {
     await AuthorizationService.require(actorUserId, 'CONTENT_MANAGE');
@@ -234,6 +244,13 @@ export class CmsService {
       create: { key, value, description, updatedById: actorUserId },
       update: { value, description, updatedById: actorUserId }
     });
+
+    try {
+      (revalidateTag as any)('website-settings', 'default');
+      revalidatePath('/', 'layout');
+    } catch {
+      // Ignored outside Next.js request context
+    }
 
     await db.auditLog.create({
       data: { actorUserId, action: 'WEBSITE_SETTINGS_UPDATED', entityType: 'WEBSITE_SETTING', entityId: setting.id, metadata: { key } }

@@ -24,12 +24,12 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   ] = isOwner
     ? [true, true, true, true, true, true]
     : await Promise.all([
-        AuthorizationService.hasAdminPortalAccess(session.user.id),
-        AuthorizationService.can(session.user.id, 'CONTENT_VIEW'),
-        AuthorizationService.can(session.user.id, 'COMMUNICATION_VIEW'),
-        AuthorizationService.can(session.user.id, 'DOCUMENT_VIEW'),
-        AuthorizationService.can(session.user.id, 'ADMIN_USER_MANAGE'),
-        AuthorizationService.can(session.user.id, 'ROLE_MANAGE'),
+        AuthorizationService.hasAdminPortalAccess(session.user.id, session.user.email),
+        AuthorizationService.can(session.user.id, 'CONTENT_VIEW', session.user.email),
+        AuthorizationService.can(session.user.id, 'COMMUNICATION_VIEW', session.user.email),
+        AuthorizationService.can(session.user.id, 'DOCUMENT_VIEW', session.user.email),
+        AuthorizationService.can(session.user.id, 'ADMIN_USER_MANAGE', session.user.email),
+        AuthorizationService.can(session.user.id, 'ROLE_MANAGE', session.user.email),
       ]);
 
   if (!hasAdminAccess) {

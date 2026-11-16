@@ -19,7 +19,7 @@ async function requirePermission(permission: string) {
   const isOwner = session.user.email === 'info.sunshineeldercare@gmail.com';
   
   try {
-    await RateLimitService.checkLimit('ADMINISTRATIVE');
+    await RateLimitService.checkLimit('ADMINISTRATIVE', `user:${session.user.id}`);
   } catch (err: any) {
     if (err?.name === 'RateLimitError') {
       throw new Error('Too many administrative requests. Please wait a moment and try again.');
@@ -29,7 +29,7 @@ async function requirePermission(permission: string) {
   }
 
   if (!isOwner) {
-    await AuthorizationService.require(session.user.id, permission);
+    await AuthorizationService.require(session.user.id, permission, session.user.email);
   }
   return session.user.id
 }
@@ -564,7 +564,8 @@ export async function getMembers(
   onlyArchived: boolean = false
 ) {
   const sessionUser = await requirePermission("MEMBER_VIEW");
-  const hasSensitiveView = await AuthorizationService.can(sessionUser, "MEMBER_SENSITIVE_VIEW");
+  const session = await auth();
+  const hasSensitiveView = await AuthorizationService.can(sessionUser, "MEMBER_SENSITIVE_VIEW", session?.user?.email || undefined);
   return getMembersCore(query, page, limit, db, hasSensitiveView, sortField, sortDirection, onlyArchived);
 }
 
@@ -1145,9 +1146,10 @@ export async function adminUpdateMember(formData: FormData) {
 
 export async function getMemberDetails(userId: string) {
   const sessionUser = await requirePermission("MEMBER_VIEW")
+  const session = await auth()
 
   // Check if they have sensitive view
-  const hasSensitiveView = await AuthorizationService.can(sessionUser, "MEMBER_SENSITIVE_VIEW");
+  const hasSensitiveView = await AuthorizationService.can(sessionUser, "MEMBER_SENSITIVE_VIEW", session?.user?.email || undefined);
 
   // Parallelize relation queries across connection pool to eliminate sequential waterfalls
   const [

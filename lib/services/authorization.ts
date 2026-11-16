@@ -1,10 +1,12 @@
 import { db } from "../db";
+import { cache } from "react";
 
 export class AuthorizationService {
   /**
    * Retrieves all permissions assigned to a user via their roles.
+   * Memoized per request lifecycle to prevent duplicate N+1 queries.
    */
-  static async getUserPermissions(userId: string): Promise<Set<string>> {
+  static getUserPermissions = cache(async (userId: string): Promise<Set<string>> => {
     const userRoles = await db.userRole.findMany({
       where: { userId },
       include: {
@@ -27,14 +29,16 @@ export class AuthorizationService {
       }
     }
     return perms;
-  }
+  });
 
   /**
    * Checks if a user has a specific permission.
+   * Optional userEmail short-circuits owner checks without database roundtrips.
    */
-  static async can(userId: string, permissionCode: string): Promise<boolean> {
-    const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } });
-    if (user?.email === 'info.sunshineeldercare@gmail.com') return true;
+  static async can(userId: string, permissionCode: string, userEmail?: string | null): Promise<boolean> {
+    if (userEmail === 'info.sunshineeldercare@gmail.com') return true;
+    
+    if (await this.isOwner(userId)) return true;
     
     const permissions = await this.getUserPermissions(userId);
     return permissions.has(permissionCode);
@@ -43,8 +47,8 @@ export class AuthorizationService {
   /**
    * Requires a specific permission. Throws an error if not authorized.
    */
-  static async require(userId: string, permissionCode: string): Promise<void> {
-    const hasPerm = await this.can(userId, permissionCode);
+  static async require(userId: string, permissionCode: string, userEmail?: string | null): Promise<void> {
+    const hasPerm = await this.can(userId, permissionCode, userEmail);
     if (!hasPerm) {
       throw new Error(`Unauthorized: Missing permission ${permissionCode}`);
     }
@@ -53,8 +57,8 @@ export class AuthorizationService {
   /**
    * Checks if a user has ALL of the given permissions.
    */
-  static async requireAll(userId: string, permissionCodes: string[]): Promise<void> {
-    if (await this.isOwner(userId)) return;
+  static async requireAll(userId: string, permissionCodes: string[], userEmail?: string | null): Promise<void> {
+    if (userEmail === 'info.sunshineeldercare@gmail.com' || await this.isOwner(userId)) return;
 
     const permissions = await this.getUserPermissions(userId);
     for (const code of permissionCodes) {
@@ -67,8 +71,8 @@ export class AuthorizationService {
   /**
    * Checks if a user has ANY of the given permissions.
    */
-  static async requireAny(userId: string, permissionCodes: string[]): Promise<void> {
-    if (await this.isOwner(userId)) return;
+  static async requireAny(userId: string, permissionCodes: string[], userEmail?: string | null): Promise<void> {
+    if (userEmail === 'info.sunshineeldercare@gmail.com' || await this.isOwner(userId)) return;
 
     const permissions = await this.getUserPermissions(userId);
     const hasAny = permissionCodes.some(code => permissions.has(code));
@@ -78,15 +82,16 @@ export class AuthorizationService {
   }
 
   /**
-   * Checks if the user has the 'Owner' role
+   * Checks if the user has the 'Owner' role.
+   * Memoized per request lifecycle.
    */
-  static async isOwner(userId: string): Promise<boolean> {
+  static isOwner = cache(async (userId: string): Promise<boolean> => {
     const user = await db.user.findUnique({
       where: { id: userId },
       select: { email: true }
     });
     return user?.email === 'info.sunshineeldercare@gmail.com';
-  }
+  });
 
   /**
    * Enforces that the user is an Owner
@@ -102,8 +107,8 @@ export class AuthorizationService {
    * Determines if a user should be routed to the Admin portal
    * based on having any core administrative permissions.
    */
-  static async hasAdminPortalAccess(userId: string): Promise<boolean> {
-    if (await this.isOwner(userId)) return true;
+  static async hasAdminPortalAccess(userId: string, userEmail?: string | null): Promise<boolean> {
+    if (userEmail === 'info.sunshineeldercare@gmail.com' || await this.isOwner(userId)) return true;
     
     // Core permissions that justify access to /admin
     const adminPerms = [
