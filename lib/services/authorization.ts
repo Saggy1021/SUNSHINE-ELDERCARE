@@ -1,42 +1,53 @@
+import { cache } from "react";
 import { db } from "../db";
 
-export class AuthorizationService {
-  /**
-   * Retrieves all permissions assigned to a user via their roles.
-   * Caching could be introduced here if performance requires it,
-   * but for now it performs a direct DB lookup to ensure safety.
-   */
-  static async getUserPermissions(userId: string): Promise<Set<string>> {
-    const userRoles = await db.userRole.findMany({
-      where: { userId },
-      include: {
-        role: {
-          include: {
-            permissions: {
-              include: {
-                permission: true
-              }
+const getCachedUserEmail = cache(async (userId: string): Promise<string | null> => {
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { email: true }
+  });
+  return user?.email || null;
+});
+
+const getCachedUserPermissions = cache(async (userId: string): Promise<Set<string>> => {
+  const userRoles = await db.userRole.findMany({
+    where: { userId },
+    include: {
+      role: {
+        include: {
+          permissions: {
+            include: {
+              permission: true
             }
           }
         }
       }
-    });
-
-    const perms = new Set<string>();
-    for (const ur of userRoles) {
-      for (const rp of ur.role.permissions) {
-        perms.add(rp.permission.code);
-      }
     }
-    return perms;
+  });
+
+  const perms = new Set<string>();
+  for (const ur of userRoles) {
+    for (const rp of ur.role.permissions) {
+      perms.add(rp.permission.code);
+    }
+  }
+  return perms;
+});
+
+export class AuthorizationService {
+  /**
+   * Retrieves all permissions assigned to a user via their roles.
+   * Uses React request-scoped caching to deduplicate queries within a render pass.
+   */
+  static async getUserPermissions(userId: string): Promise<Set<string>> {
+    return getCachedUserPermissions(userId);
   }
 
   /**
    * Checks if a user has a specific permission.
    */
   static async can(userId: string, permissionCode: string): Promise<boolean> {
-    const user = await db.user.findUnique({ where: { id: userId }, select: { email: true }});
-    if (user?.email === 'info.sunshineeldercare@gmail.com') return true;
+    if (await this.isOwner(userId)) return true;
     
     const permissions = await this.getUserPermissions(userId);
     return permissions.has(permissionCode);
@@ -83,11 +94,8 @@ export class AuthorizationService {
    * Checks if the user has the 'Owner' role
    */
   static async isOwner(userId: string): Promise<boolean> {
-    const user = await db.user.findUnique({
-      where: { id: userId },
-      select: { email: true }
-    });
-    return user?.email === 'info.sunshineeldercare@gmail.com';
+    const email = await getCachedUserEmail(userId);
+    return email === 'info.sunshineeldercare@gmail.com';
   }
 
   /**

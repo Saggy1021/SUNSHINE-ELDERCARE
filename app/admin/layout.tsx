@@ -13,7 +13,22 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     redirect("/login?callbackUrl=/admin")
   }
   
-  const hasAdminAccess = await AuthorizationService.hasAdminPortalAccess(session.user.id);
+  const [
+    hasAdminAccess,
+    hasContentView,
+    hasCommunicationView,
+    hasDocumentView,
+    hasAdminUserManage,
+    hasRoleManage,
+  ] = await Promise.all([
+    AuthorizationService.hasAdminPortalAccess(session.user.id),
+    AuthorizationService.can(session.user.id, 'CONTENT_VIEW'),
+    AuthorizationService.can(session.user.id, 'COMMUNICATION_VIEW'),
+    AuthorizationService.can(session.user.id, 'DOCUMENT_VIEW'),
+    AuthorizationService.can(session.user.id, 'ADMIN_USER_MANAGE'),
+    AuthorizationService.can(session.user.id, 'ROLE_MANAGE'),
+  ]);
+
   if (!hasAdminAccess) {
     // If they don't have admin access, check if they are an employee (for the operational portal)
     if (
@@ -39,27 +54,22 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     { name: "Audit Log", href: "/admin/audit-log", icon: <Shield className="h-4 w-4" /> },
   ]
 
-  const hasContentView = await AuthorizationService.can(session.user.id, 'CONTENT_VIEW');
   if (hasContentView) {
     navItems.push({ name: "Content (CMS)", href: "/admin/content", icon: <ClipboardList className="h-4 w-4" /> });
   }
 
-  const hasCommunicationView = await AuthorizationService.can(session.user.id, 'COMMUNICATION_VIEW');
   if (hasCommunicationView) {
     navItems.push({ name: "Communications", href: "/admin/communications", icon: <MessageSquare className="h-4 w-4" /> });
   }
 
-  const hasDocumentView = await AuthorizationService.can(session.user.id, 'DOCUMENT_VIEW');
   if (hasDocumentView) {
     navItems.push({ name: "Documents", href: "/admin/documents", icon: <ClipboardList className="h-4 w-4" /> });
   }
 
-  const hasAdminUserManage = await AuthorizationService.can(session.user.id, 'ADMIN_USER_MANAGE');
   if (hasAdminUserManage) {
     navItems.push({ name: "Employees", href: "/admin/employees", icon: <Users className="h-4 w-4" /> });
   }
 
-  const hasRoleManage = await AuthorizationService.can(session.user.id, 'ROLE_MANAGE');
   if (hasRoleManage) {
     navItems.push({ name: "Roles", href: "/admin/roles", icon: <Shield className="h-4 w-4" /> });
   }

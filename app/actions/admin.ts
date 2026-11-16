@@ -2,7 +2,7 @@
 
 import { auth } from "@/auth"
 import { db } from "@/lib/db"
-import { revalidatePath } from "next/cache"
+import { revalidatePath, revalidateTag, unstable_cache } from "next/cache"
 import { redirect } from "next/navigation"
 import { notificationService } from "@/lib/services/notification"
 import { AuthorizationService } from "@/lib/services/authorization"
@@ -16,8 +16,10 @@ async function requirePermission(permission: string) {
   if (!session?.user?.id) {
     redirect('/login')
   }
-  await RateLimitService.checkLimit('ADMINISTRATIVE');
-  await AuthorizationService.require(session.user.id, permission)
+  await Promise.all([
+    RateLimitService.checkLimit('ADMINISTRATIVE'),
+    AuthorizationService.require(session.user.id, permission)
+  ]);
   return session.user.id
 }
 
@@ -36,6 +38,99 @@ async function logAudit(actorId: string, action: string, entityType: string, ent
 
 // --- Dashboard & Metrics Core Functions ---
 export async function getAdminDashboardMetricsCore(database: any = db, now: Date = new Date()) {
+  const canUseGroupBy = typeof database.subscription?.groupBy === 'function';
+
+  if (canUseGroupBy) {
+    const [
+      totalMembers,
+      activeMembers,
+      pendingRenewals,
+      subGroups,
+      newInquiries,
+      unresolvedFeedback,
+      pendingPayments
+    ] = await Promise.all([
+      // Total Members: Count eligible members (role MEMBER, has memberProfile, or has subscriptions)
+      // excluding administrative accounts (Owner, Tanish, Sagnik, and care coordinator accounts) and archived accounts.
+      database.user.count({
+        where: {
+          email: { notIn: DASHBOARD_EXCLUDED_EMAILS },
+          status: { not: "ARCHIVED" },
+          role: { not: "ADMIN" },
+          userRoles: { none: { role: { name: { in: ["Owner", "Admin"] } } } },
+          OR: [
+            { role: "MEMBER" },
+            { memberProfile: { isNot: null } },
+            { subscriptions: { some: {} } },
+          ],
+        },
+      }),
+      // Active Memberships: Count only currently active memberships belonging to eligible members
+      // where subscription status is ACTIVE and within validity dates (startDate <= now <= endDate).
+      // Exclude demo/test accounts without genuine active membership and archived members.
+      // Avoid counting multiple subscriptions for one member more than once (counts distinct users).
+      database.user.count({
+        where: {
+          email: {
+            notIn: DASHBOARD_EXCLUDED_EMAILS,
+            not: { endsWith: "@example.com" },
+          },
+          status: { not: "ARCHIVED" },
+          role: { not: "ADMIN" },
+          userRoles: { none: { role: { name: { in: ["Owner", "Admin"] } } } },
+          memberProfile: { isNot: null },
+          subscriptions: {
+            some: {
+              status: "ACTIVE",
+              startDate: { lte: now },
+              endDate: { gte: now },
+            },
+          },
+        },
+      }),
+      database.renewalRequest.count({
+        where: {
+          status: "SUBMITTED",
+          user: { email: { notIn: DASHBOARD_EXCLUDED_EMAILS } },
+        },
+      }),
+      database.subscription.groupBy({
+        by: ['status'],
+        where: {
+          status: { in: ['SCHEDULED', 'EXPIRING', 'EXPIRED'] },
+          user: {
+            email: { notIn: DASHBOARD_EXCLUDED_EMAILS },
+            role: { not: "ADMIN" },
+          },
+        },
+        _count: { status: true },
+      }),
+      database.inquiry.count({ where: { status: "NEW" } }),
+      database.feedback.count({ where: { status: { in: ["SUBMITTED", "UNDER_REVIEW"] } } }),
+      database.payment.count({
+        where: {
+          status: "VERIFICATION_PENDING",
+          user: { email: { notIn: DASHBOARD_EXCLUDED_EMAILS } },
+        },
+      }),
+    ]);
+
+    const statusMap = new Map(subGroups.map((g: any) => [g.status, g._count?.status || 0]));
+
+    return {
+      totalMembers,
+      activeMembers,
+      pendingRenewals,
+      scheduledMemberships: statusMap.get("SCHEDULED") || 0,
+      expiringMemberships: statusMap.get("EXPIRING") || 0,
+      expiredMemberships: statusMap.get("EXPIRED") || 0,
+      newInquiries,
+      unresolvedFeedback,
+      pendingPayments
+    };
+  }
+
+  // Fallback for mock testing database
   const [
     totalMembers,
     activeMembers,
@@ -47,8 +142,6 @@ export async function getAdminDashboardMetricsCore(database: any = db, now: Date
     unresolvedFeedback,
     pendingPayments
   ] = await Promise.all([
-    // Total Members: Count eligible members (role MEMBER, has memberProfile, or has subscriptions)
-    // excluding administrative accounts (Owner, Tanish, Sagnik, and care coordinator accounts) and archived accounts.
     database.user.count({
       where: {
         email: { notIn: DASHBOARD_EXCLUDED_EMAILS },
@@ -62,10 +155,6 @@ export async function getAdminDashboardMetricsCore(database: any = db, now: Date
         ],
       },
     }),
-    // Active Memberships: Count only currently active memberships belonging to eligible members
-    // where subscription status is ACTIVE and within validity dates (startDate <= now <= endDate).
-    // Exclude demo/test accounts without genuine active membership and archived members.
-    // Avoid counting multiple subscriptions for one member more than once (counts distinct users).
     database.user.count({
       where: {
         email: {
@@ -126,7 +215,7 @@ export async function getAdminDashboardMetricsCore(database: any = db, now: Date
         user: { email: { notIn: DASHBOARD_EXCLUDED_EMAILS } },
       },
     }),
-  ])
+  ]);
 
   return {
     totalMembers,
@@ -138,12 +227,23 @@ export async function getAdminDashboardMetricsCore(database: any = db, now: Date
     newInquiries,
     unresolvedFeedback,
     pendingPayments
-  }
+  };
 }
 
+const getCachedAdminDashboardMetrics = unstable_cache(
+  async () => {
+    return getAdminDashboardMetricsCore(db);
+  },
+  ["admin-dashboard-metrics"],
+  {
+    revalidate: 15,
+    tags: ["admin-dashboard-metrics"],
+  }
+);
+
 export async function getAdminDashboardMetrics() {
-  await requirePermission("MEMBER_VIEW") // Any basic admin view permission
-  return getAdminDashboardMetricsCore(db)
+  await requirePermission("MEMBER_VIEW");
+  return getCachedAdminDashboardMetrics();
 }
 
 export async function getNeedsAttentionQueueCore(database: any = db) {
@@ -153,18 +253,28 @@ export async function getNeedsAttentionQueueCore(database: any = db) {
         status: "SUBMITTED",
         user: { email: { notIn: DASHBOARD_EXCLUDED_EMAILS } },
       },
-      include: { user: { select: { name: true, email: true } } },
+      select: {
+        id: true,
+        planName: true,
+        durationMonths: true,
+        user: { select: { name: true, email: true } },
+      },
       orderBy: { createdAt: 'asc' },
       take: 5
     }),
     database.inquiry.findMany({
       where: { status: "NEW" },
+      select: { id: true, fullName: true, message: true },
       orderBy: { createdAt: 'desc' },
       take: 5
     }),
     database.feedback.findMany({
       where: { status: { in: ["SUBMITTED", "UNDER_REVIEW"] } },
-      include: { user: { select: { name: true, email: true } } },
+      select: {
+        id: true,
+        message: true,
+        user: { select: { name: true, email: true } },
+      },
       orderBy: { createdAt: 'desc' },
       take: 5
     }),
@@ -173,11 +283,17 @@ export async function getNeedsAttentionQueueCore(database: any = db) {
         status: "VERIFICATION_PENDING",
         user: { email: { notIn: DASHBOARD_EXCLUDED_EMAILS } },
       },
-      include: { user: { select: { name: true, email: true } }, invoice: true },
+      select: {
+        id: true,
+        amount: true,
+        paymentMethod: true,
+        user: { select: { name: true, email: true } },
+        invoice: { select: { id: true, invoiceNumber: true } },
+      },
       orderBy: { createdAt: 'desc' },
       take: 5
     })
-  ])
+  ]);
 
   return { pendingRenewals, newInquiries, unresolvedFeedback, pendingPayments }
 }
@@ -186,6 +302,26 @@ export async function getNeedsAttentionQueue() {
   await requirePermission("MEMBER_VIEW")
   return getNeedsAttentionQueueCore(db)
 }
+
+const getCachedGenuineMembers = unstable_cache(
+  async () => {
+    return db.user.findMany({
+      where: {
+        email: { notIn: [...EXCLUDED_MEMBER_EMAILS, ...ADMIN_DISPLAY_EMAILS] },
+        status: { not: "ARCHIVED" },
+        OR: [
+          { role: "MEMBER" },
+          { memberProfile: { memberId: { not: null } } },
+          { subscriptions: { some: {} } },
+        ],
+      },
+      select: { id: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  },
+  ["genuine-member-serials"],
+  { revalidate: 60, tags: ["genuine-member-serials"] }
+);
 
 // --- Members Core Query ---
 export async function getMembersCore(
@@ -248,6 +384,22 @@ export async function getMembersCore(
       ]
     };
   }
+
+  const fetchGenuineMembers = database === db
+    ? getCachedGenuineMembers()
+    : database.user.findMany({
+        where: {
+          email: { notIn: [...EXCLUDED_MEMBER_EMAILS, ...ADMIN_DISPLAY_EMAILS] },
+          status: { not: "ARCHIVED" },
+          OR: [
+            { role: "MEMBER" },
+            { memberProfile: { memberId: { not: null } } },
+            { subscriptions: { some: {} } },
+          ],
+        },
+        select: { id: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+      });
 
   const [members, total, genuineMembers, archivedCount] = await Promise.all([
     database.user.findMany({
@@ -337,22 +489,7 @@ export async function getMembersCore(
       take: limit
     }),
     database.user.count({ where }),
-    // Stable serial number calculation for genuine members:
-    // Prabir is #1, next genuine members receive 2, 3...
-    // Admin accounts (Tanish, Sagnik) receive null (displaying '—').
-    database.user.findMany({
-      where: {
-        email: { notIn: [...EXCLUDED_MEMBER_EMAILS, ...ADMIN_DISPLAY_EMAILS] },
-        status: { not: "ARCHIVED" },
-        OR: [
-          { role: "MEMBER" },
-          { memberProfile: { memberId: { not: null } } },
-          { subscriptions: { some: {} } },
-        ],
-      },
-      select: { id: true, createdAt: true },
-      orderBy: { createdAt: 'asc' },
-    }),
+    fetchGenuineMembers,
     database.user.count({
       where: {
         email: { notIn: EXCLUDED_MEMBER_EMAILS },
@@ -1036,87 +1173,126 @@ export async function getMemberDetails(userId: string) {
   // Check if they have sensitive view
   const hasSensitiveView = await AuthorizationService.can(sessionUser, "MEMBER_SENSITIVE_VIEW");
 
-  const user = await db.user.findUnique({
-    where: { id: userId },
-    include: {
-      memberProfile: {
-        include: {
-          sponsor: true,
-          insuranceDetails: true,
-          medicalAuth: true,
-          idProofDocument: true,
-          spouseIdProofDocument: true,
-        }
-      },
-      subscriptions: {
-        include: { carePlan: true, addOns: { include: { addOn: true } }, customPlan: true },
-        orderBy: { createdAt: 'desc' }
-      },
-      renewalRequests: {
-        orderBy: { createdAt: 'desc' }
-      },
-      emergencyContact: true,
-      feedback: {
-        orderBy: { createdAt: 'desc' }
-      },
-
-      invoices: {
-        where: { invoiceNumber: { not: null } },
-        orderBy: { issueDate: 'desc' }
-      },
-      receipts: {
-        orderBy: { createdAt: 'desc' }
-      },
-      payments: {
-        orderBy: { createdAt: 'desc' }
-      },
-      ownedDocuments: {
-        orderBy: { createdAt: 'desc' }
+  // Parallelize relation queries across connection pool to eliminate sequential waterfalls
+  const [
+    user,
+    memberProfile,
+    subscriptions,
+    renewalRequests,
+    emergencyContact,
+    feedback,
+    invoices,
+    receipts,
+    payments,
+    ownedDocuments,
+    auditLogs
+  ] = await Promise.all([
+    db.user.findUnique({ where: { id: userId } }),
+    db.memberProfile.findUnique({
+      where: { userId },
+      include: {
+        sponsor: true,
+        insuranceDetails: true,
+        medicalAuth: true,
+        idProofDocument: true,
+        spouseIdProofDocument: true,
       }
-    }
-  })
+    }),
+    db.subscription.findMany({
+      where: { userId },
+      include: { carePlan: true, addOns: { include: { addOn: true } }, customPlan: true },
+      orderBy: { createdAt: 'desc' }
+    }),
+    db.renewalRequest.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' }
+    }),
+    db.emergencyContact.findUnique({ where: { userId } }),
+    db.feedback.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' }
+    }),
+    db.invoice.findMany({
+      where: { userId, invoiceNumber: { not: null } },
+      orderBy: { issueDate: 'desc' }
+    }),
+    db.receipt.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' }
+    }),
+    db.payment.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' }
+    }),
+    db.memberDocument.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' }
+    }),
+    db.auditLog.findMany({
+      where: {
+        OR: [
+          { actorUserId: userId },
+          { entityId: userId, entityType: 'USER' },
+        ]
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20
+    })
+  ]);
 
   if (!user) {
     return null;
   }
 
-  let auditLogs: any[] = []
-  auditLogs = await db.auditLog.findMany({
-    where: {
-      OR: [
-        { actorUserId: userId },
-        { entityId: userId, entityType: 'USER' },
-        { entityId: user.memberProfile?.id || 'NO_ID', entityType: 'MEMBER_PROFILE' }
-      ]
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 20
-  })
+  // Also include profile-level audit logs if present
+  if (memberProfile?.id) {
+    const profileLogs = await db.auditLog.findMany({
+      where: { entityId: memberProfile.id, entityType: 'MEMBER_PROFILE' },
+      orderBy: { createdAt: 'desc' },
+      take: 10
+    });
+    auditLogs.push(...profileLogs);
+    auditLogs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  const fullUser: any = {
+    ...user,
+    memberProfile,
+    subscriptions,
+    renewalRequests,
+    emergencyContact,
+    feedback,
+    invoices,
+    receipts,
+    payments,
+    ownedDocuments,
+    auditLogs
+  };
 
   if (!hasSensitiveView) {
-    if (user.memberProfile) {
-      user.memberProfile.idProofNumber = null as any;
-      user.memberProfile.spouseIdProofNumber = null as any;
-      user.memberProfile.idProofDocument = null as any;
-      user.memberProfile.spouseIdProofDocument = null as any;
+    if (fullUser.memberProfile) {
+      fullUser.memberProfile.idProofNumber = null as any;
+      fullUser.memberProfile.spouseIdProofNumber = null as any;
+      fullUser.memberProfile.idProofDocument = null as any;
+      fullUser.memberProfile.spouseIdProofDocument = null as any;
     }
-    if (user.ownedDocuments) {
-      user.ownedDocuments = user.ownedDocuments.filter((d: any) => d.documentType !== 'ID_PROOF');
+    if (fullUser.ownedDocuments) {
+      fullUser.ownedDocuments = fullUser.ownedDocuments.filter((d: any) => d.documentType !== 'ID_PROOF');
     }
-    if (user.memberProfile?.insuranceDetails) {
-      user.memberProfile.insuranceDetails.policyNumber = "HIDDEN";
-      user.memberProfile.insuranceDetails.coverageAmount = "HIDDEN";
+    if (fullUser.memberProfile?.insuranceDetails) {
+      fullUser.memberProfile.insuranceDetails.policyNumber = "HIDDEN";
+      fullUser.memberProfile.insuranceDetails.coverageAmount = "HIDDEN";
     }
-    if (user.memberProfile?.medicalAuth) {
-      user.memberProfile.medicalAuth.hospitalForSos = "HIDDEN";
+    if (fullUser.memberProfile?.medicalAuth) {
+      fullUser.memberProfile.medicalAuth.hospitalForSos = "HIDDEN";
     }
-    if (user.emergencyContact) {
-      user.emergencyContact.phone = "HIDDEN";
-      user.emergencyContact.alternatePhone = "HIDDEN";
+    if (fullUser.emergencyContact) {
+      fullUser.emergencyContact.phone = "HIDDEN";
+      fullUser.emergencyContact.alternatePhone = "HIDDEN";
     }
   }
 
-  return { ...user, auditLogs };
+  return fullUser;
 }
 
 // --- Renewal Requests ---

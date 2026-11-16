@@ -47,75 +47,74 @@ export default async function CareOperationsPage() {
 
   const canManage = await AuthorizationService.can(session.user.id, PERMISSIONS.CARE_CASE_MANAGE);
 
-  // Security: project only needed elder fields, excluding user password hashes and credentials
-  const cases = await db.careCase.findMany({
-    where: { status: "ACTIVE" },
-    select: {
-      id: true,
-      elder: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          user: {
-            select: {
-              email: true,
+  // Parallel query execution across connection pool for active cases, active employees, and operations
+  const [cases, employees, operations] = await Promise.all([
+    db.careCase.findMany({
+      where: { status: "ACTIVE" },
+      select: {
+        id: true,
+        elder: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            user: {
+              select: {
+                email: true,
+              },
             },
           },
         },
       },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  const employees = await db.employee.findMany({
-    where: { status: "ACTIVE" },
-    select: {
-      id: true,
-      employeeId: true,
-      firstName: true,
-      lastName: true,
-      designation: true,
-    },
-    orderBy: { firstName: "asc" },
-  });
-
-  // Security & Stability: select only required fields and relations
-  const operations = await db.careVisit.findMany({
-    orderBy: { scheduledStart: "desc" },
-    select: {
-      id: true,
-      status: true,
-      scheduledStart: true,
-      scheduledEnd: true,
-      operationalNotes: true,
-      careCase: {
-        select: {
-          id: true,
-          elder: {
-            select: {
-              firstName: true,
-              lastName: true,
+      orderBy: { createdAt: "desc" },
+    }),
+    db.employee.findMany({
+      where: { status: "ACTIVE" },
+      select: {
+        id: true,
+        employeeId: true,
+        firstName: true,
+        lastName: true,
+        designation: true,
+      },
+      orderBy: { firstName: "asc" },
+    }),
+    db.careVisit.findMany({
+      orderBy: { scheduledStart: "desc" },
+      select: {
+        id: true,
+        status: true,
+        scheduledStart: true,
+        scheduledEnd: true,
+        operationalNotes: true,
+        careCase: {
+          select: {
+            id: true,
+            elder: {
+              select: {
+                firstName: true,
+                lastName: true,
+              },
+            },
+          },
+        },
+        assignments: {
+          select: {
+            id: true,
+            employee: {
+              select: {
+                id: true,
+                employeeId: true,
+                firstName: true,
+                lastName: true,
+              },
             },
           },
         },
       },
-      assignments: {
-        select: {
-          id: true,
-          employee: {
-            select: {
-              id: true,
-              employeeId: true,
-              firstName: true,
-              lastName: true,
-            },
-          },
-        },
-      },
-    },
-    take: 100,
-  });
+      take: 100,
+    }),
+  ]);
 
   // Pre-serialize dates to ISO strings to guarantee deterministic server and client hydration
   const serializedOperations = operations.map((op) => ({
