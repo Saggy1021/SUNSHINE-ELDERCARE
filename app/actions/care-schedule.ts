@@ -772,19 +772,43 @@ export async function updateCareVisitDetails(
 
 /**
  * Reschedules a visit to a new start/end date and time with conflict detection and optional employee reassignment.
+ * Accepts both combined strings (newStartStr, newEndStr) or separate (date, startTime, endTime).
  */
 export async function rescheduleCareVisit(
   visitId: string,
-  newStartStr: string,
-  newEndStr: string,
-  reason?: string,
-  assignedEmpId?: string | null
+  param2: string,
+  param3: string,
+  param4?: string,
+  param5?: string | null,
+  param6?: string | null
 ): Promise<{ success: boolean; error?: string }> {
   const admin = await requireSchedulePermission(true);
 
-  // Parse strictly as Asia/Kolkata date & time to UTC
-  const start = parseISTDateTimeToUTC(newStartStr);
-  const end = parseISTDateTimeToUTC(newEndStr);
+  let start: Date;
+  let end: Date;
+  let reason: string | undefined;
+  let assignedEmpId: string | null | undefined;
+
+  // Check if called as: (visitId, date, startTime, endTime, reason?, assignedEmpId?)
+  if (
+    param4 &&
+    !param2.includes("T") &&
+    /^\d{4}-\d{1,2}-\d{1,2}$/.test(param2.trim()) &&
+    /^\d{1,2}:\d{2}/.test(param3.trim()) &&
+    /^\d{1,2}:\d{2}/.test(param4.trim())
+  ) {
+    start = parseISTDateTimeToUTC(param2, param3);
+    end = parseISTDateTimeToUTC(param2, param4);
+    reason = typeof param5 === "string" ? param5 : undefined;
+    assignedEmpId = param6 !== undefined ? param6 : undefined;
+  } else {
+    // Standard signature: (visitId, newStartStr, newEndStr, reason?, assignedEmpId?)
+    start = parseISTDateTimeToUTC(param2);
+    end = parseISTDateTimeToUTC(param3);
+    reason = typeof param4 === "string" ? param4 : undefined;
+    assignedEmpId = param5 !== undefined ? param5 : undefined;
+  }
+
   if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
     return { success: false, error: "Invalid reschedule time range. End time must be after start time." };
   }

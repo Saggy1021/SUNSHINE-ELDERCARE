@@ -1385,6 +1385,10 @@ export function VisitScheduleCalendar({
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
+                if (rescheduleEndTime <= rescheduleStartTime) {
+                  setActionError("Invalid reschedule time range. End time must be after start time.");
+                  return;
+                }
                 setActionLoading(true);
                 setActionError(null);
                 const fd = new FormData(e.currentTarget);
@@ -1454,8 +1458,7 @@ export function VisitScheduleCalendar({
 
               {/* Employee Availability & Conflict Banner */}
               {(() => {
-                const assignedPerson = selectedVisit.assignedEmployee || selectedVisit.assignedCaregiver;
-                const activeEmpId = rescheduleAssignedEmp || assignedPerson?.id;
+                const activeEmpId = rescheduleAssignedEmp;
                 const empAvail = rescheduleEmpAvailability.find((a) => a.employeeId === activeEmpId);
                 const isConflict = Boolean(activeEmpId && empAvail && !empAvail.available);
 

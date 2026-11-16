@@ -483,6 +483,309 @@ const adminBVisitEmp2 = simulateServerSideAssignment(
 assert.ok(adminBVisitEmp2.id, "Alternative available employee assignment must succeed");
 console.log("  ✓ PASS: Server-side transactional conflict check strictly protects against collisions.");
 
+// ============================================================================
+// RESCHEDULE SIMULATION HELPER
+// ============================================================================
+function simulateServerSideReschedule(
+  visitId: string,
+  param2: string,
+  param3: string,
+  param4?: string,
+  param5?: string | null,
+  param6?: string | null,
+  options?: {
+    employees?: MockEmployee[];
+    existingVisits?: MockVisit[];
+  }
+) {
+  let start: Date;
+  let end: Date;
+  let reason: string | undefined;
+  let assignedEmpId: string | null | undefined;
+
+  if (
+    param4 &&
+    !param2.includes("T") &&
+    /^\d{4}-\d{1,2}-\d{1,2}$/.test(param2.trim()) &&
+    /^\d{1,2}:\d{2}/.test(param3.trim()) &&
+    /^\d{1,2}:\d{2}/.test(param4.trim())
+  ) {
+    start = parseISTDateTimeToUTC(param2, param3);
+    end = parseISTDateTimeToUTC(param2, param4);
+    reason = typeof param5 === "string" ? param5 : undefined;
+    assignedEmpId = param6 !== undefined ? param6 : undefined;
+  } else {
+    start = parseISTDateTimeToUTC(param2);
+    end = parseISTDateTimeToUTC(param3);
+    reason = typeof param4 === "string" ? param4 : undefined;
+    assignedEmpId = param5 !== undefined ? param5 : undefined;
+  }
+
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
+    throw new Error("Invalid reschedule time range. End time must be after start time.");
+  }
+
+  const existingVisits = options?.existingVisits || [];
+  const employees = options?.employees || mockEmployees;
+
+  const existing = existingVisits.find((v) => v.id === visitId);
+  if (!existing) throw new Error("Visit not found.");
+
+  const targetEmpId = assignedEmpId !== undefined ? (assignedEmpId || null) : existing.assignedEmpId;
+
+  if (targetEmpId && ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"].includes(existing.status)) {
+    const emp = employees.find((e) => e.id === targetEmpId);
+    if (!emp || emp.status !== "ACTIVE") {
+      throw new Error("The selected employee is not active or does not exist.");
+    }
+
+    const conflict = existingVisits.find(
+      (v) =>
+        v.id !== visitId &&
+        ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"].includes(v.status) &&
+        checkIntervalOverlap(v.scheduledStart, v.scheduledEnd, start, end) &&
+        (v.assignedEmpId === targetEmpId || v.assignments?.some((a) => a.employeeId === targetEmpId))
+    );
+
+    if (conflict) {
+      throw new Error(
+        "This employee has already been assigned to another visit during the selected time. Please select another employee."
+      );
+    }
+  }
+
+  existing.scheduledStart = start;
+  existing.scheduledEnd = end;
+  if (assignedEmpId !== undefined) existing.assignedEmpId = targetEmpId;
+  return existing;
+}
+
+// ============================================================================
+// TEST SCENARIO 16: Rescheduling 09:30 AM–10:30 AM IST (Combined String & Multi-Param)
+// ============================================================================
+console.log("\n--- SCENARIO 16: Reschedule 09:30 AM–10:30 AM IST ---");
+const visitFor0930: MockVisit = {
+  id: "visit_prabir_sim",
+  assignedEmpId: "emp_1",
+  scheduledStart: parseISTDateTimeToUTC("2026-11-17", "18:30"), // Old 6:30 PM
+  scheduledEnd: parseISTDateTimeToUTC("2026-11-17", "19:30"),
+  status: "CONFIRMED",
+};
+
+// Reschedule via combined string (as emitted by VisitScheduleCalendar form)
+const reschedCombined = simulateServerSideReschedule(
+  "visit_prabir_sim",
+  "2026-11-17T09:30:00",
+  "2026-11-17T10:30:00",
+  "Member requested morning slot",
+  "emp_1",
+  null,
+  { existingVisits: [visitFor0930] }
+);
+assert.strictEqual(
+  reschedCombined.scheduledStart.toISOString(),
+  "2026-11-17T04:00:00.000Z",
+  "09:30 AM IST must parse to 04:00:00.000Z UTC"
+);
+assert.strictEqual(
+  reschedCombined.scheduledEnd.toISOString(),
+  "2026-11-17T05:00:00.000Z",
+  "10:30 AM IST must parse to 05:00:00.000Z UTC"
+);
+assert.strictEqual(
+  formatTimeIST(reschedCombined.scheduledStart),
+  "9:30 am",
+  "Formatted start time in IST must be 9:30 am"
+);
+assert.strictEqual(
+  formatTimeIST(reschedCombined.scheduledEnd),
+  "10:30 am",
+  "Formatted end time in IST must be 10:30 am"
+);
+console.log("  ✓ PASS: 09:30 AM–10:30 AM IST correctly parsed, validated, and saved.");
+
+// ============================================================================
+// TEST SCENARIO 17: Rescheduling 01:00 PM–02:00 PM IST
+// ============================================================================
+console.log("\n--- SCENARIO 17: Reschedule 01:00 PM–02:00 PM IST ---");
+const resched1pm = simulateServerSideReschedule(
+  "visit_prabir_sim",
+  "2026-11-17T13:00:00",
+  "2026-11-17T14:00:00",
+  "Afternoon appointment",
+  "emp_1",
+  null,
+  { existingVisits: [visitFor0930] }
+);
+assert.strictEqual(
+  resched1pm.scheduledStart.toISOString(),
+  "2026-11-17T07:30:00.000Z",
+  "1:00 PM IST must parse to 07:30:00.000Z UTC"
+);
+assert.strictEqual(
+  resched1pm.scheduledEnd.toISOString(),
+  "2026-11-17T08:30:00.000Z",
+  "2:00 PM IST must parse to 08:30:00.000Z UTC"
+);
+assert.strictEqual(formatTimeIST(resched1pm.scheduledStart), "1:00 pm");
+assert.strictEqual(formatTimeIST(resched1pm.scheduledEnd), "2:00 pm");
+console.log("  ✓ PASS: 01:00 PM–02:00 PM IST correctly parsed, validated, and saved.");
+
+// ============================================================================
+// TEST SCENARIO 18: Morning and Evening Appointments
+// ============================================================================
+console.log("\n--- SCENARIO 18: Morning and Evening Appointments ---");
+// Early morning: 08:00 AM–09:00 AM IST
+const earlyMorning = simulateServerSideReschedule(
+  "visit_prabir_sim",
+  "2026-11-17T08:00:00",
+  "2026-11-17T09:00:00",
+  "Early morning",
+  "emp_1",
+  null,
+  { existingVisits: [visitFor0930] }
+);
+assert.strictEqual(earlyMorning.scheduledStart.toISOString(), "2026-11-17T02:30:00.000Z");
+assert.strictEqual(formatTimeIST(earlyMorning.scheduledStart), "8:00 am");
+
+// Evening: 06:30 PM–07:30 PM IST (18:30–19:30)
+const evening = simulateServerSideReschedule(
+  "visit_prabir_sim",
+  "2026-11-17T18:30:00",
+  "2026-11-17T19:30:00",
+  "Evening visit",
+  "emp_1",
+  null,
+  { existingVisits: [visitFor0930] }
+);
+assert.strictEqual(evening.scheduledStart.toISOString(), "2026-11-17T13:00:00.000Z");
+assert.strictEqual(formatTimeIST(evening.scheduledStart), "6:30 pm");
+console.log("  ✓ PASS: Morning (8:00 AM) and evening (6:30 PM) appointments accurately serialized.");
+
+// ============================================================================
+// TEST SCENARIO 19: Same-Day Rescheduling
+// ============================================================================
+console.log("\n--- SCENARIO 19: Same-Day Rescheduling ---");
+// Moving a visit on 2026-11-17 from evening (18:30) to morning (09:30) on the same date
+const sameDayResched = simulateServerSideReschedule(
+  "visit_prabir_sim",
+  "2026-11-17T09:30:00",
+  "2026-11-17T10:30:00",
+  "Same day shift",
+  "emp_1",
+  null,
+  { existingVisits: [visitFor0930] }
+);
+assert.strictEqual(formatDateKey(sameDayResched.scheduledStart), "2026-11-17");
+assert.strictEqual(formatTimeIST(sameDayResched.scheduledStart), "9:30 am");
+console.log("  ✓ PASS: Same-day rescheduling maintains date invariant and updates time.");
+
+// ============================================================================
+// TEST SCENARIO 20: Rescheduling Across Dates
+// ============================================================================
+console.log("\n--- SCENARIO 20: Rescheduling Across Dates ---");
+// Moving visit from 2026-11-17 to 2026-11-20 11:00 AM–12:00 PM IST
+const crossDateResched = simulateServerSideReschedule(
+  "visit_prabir_sim",
+  "2026-11-20T11:00:00",
+  "2026-11-20T12:00:00",
+  "Cross date reschedule",
+  "emp_1",
+  null,
+  { existingVisits: [visitFor0930] }
+);
+assert.strictEqual(crossDateResched.scheduledStart.toISOString(), "2026-11-20T05:30:00.000Z");
+assert.strictEqual(formatDateKey(crossDateResched.scheduledStart), "2026-11-20");
+assert.strictEqual(formatTimeIST(crossDateResched.scheduledStart), "11:00 am");
+console.log("  ✓ PASS: Cross-date rescheduling properly transitions date and time.");
+
+// ============================================================================
+// TEST SCENARIO 21: Existing Visit Excluded From Its Own Availability Check
+// ============================================================================
+console.log("\n--- SCENARIO 21: Existing Visit Excluded From Its Own Check ---");
+// Visit is currently 09:30–10:30. Rescheduling by 15 mins to 09:45–10:45 with same employee.
+// This overlaps with its previous 09:30–10:30 slot, but because it excludes itself, it must succeed!
+visitFor0930.scheduledStart = parseISTDateTimeToUTC("2026-11-17", "09:30");
+visitFor0930.scheduledEnd = parseISTDateTimeToUTC("2026-11-17", "10:30");
+
+const selfExcludedResched = simulateServerSideReschedule(
+  "visit_prabir_sim",
+  "2026-11-17T09:45:00",
+  "2026-11-17T10:45:00",
+  "Slight shift",
+  "emp_1",
+  null,
+  { existingVisits: [visitFor0930] }
+);
+assert.strictEqual(formatTimeIST(selfExcludedResched.scheduledStart), "9:45 am");
+console.log("  ✓ PASS: Self-exclusion allows modifying visit without colliding with its own previous slot.");
+
+// ============================================================================
+// TEST SCENARIO 22: Genuine Overlapping Appointments Rejected
+// ============================================================================
+console.log("\n--- SCENARIO 22: Genuine Overlapping Appointments Rejected ---");
+const otherOccupiedVisit: MockVisit = {
+  id: "visit_other_occupied",
+  assignedEmpId: "emp_1",
+  scheduledStart: parseISTDateTimeToUTC("2026-11-17", "14:00"),
+  scheduledEnd: parseISTDateTimeToUTC("2026-11-17", "15:00"),
+  status: "SCHEDULED",
+};
+
+assert.throws(
+  () => {
+    simulateServerSideReschedule(
+      "visit_prabir_sim",
+      "2026-11-17T14:15:00", // Collides with otherOccupiedVisit
+      "2026-11-17T15:15:00",
+      "Conflicting move",
+      "emp_1",
+      null,
+      { existingVisits: [visitFor0930, otherOccupiedVisit] }
+    );
+  },
+  /This employee has already been assigned to another visit during the selected time/,
+  "Attempting to reschedule into another occupied appointment slot must be blocked"
+);
+console.log("  ✓ PASS: Genuine employee conflicts with OTHER visits are strictly rejected.");
+
+// ============================================================================
+// TEST SCENARIO 23: Inverted and Invalid Time Ranges Rejected
+// ============================================================================
+console.log("\n--- SCENARIO 23: Inverted and Invalid Time Ranges Rejected ---");
+assert.throws(
+  () => {
+    simulateServerSideReschedule(
+      "visit_prabir_sim",
+      "2026-11-17T10:30:00",
+      "2026-11-17T09:30:00", // Inverted (end before start)
+      "Invalid inversion",
+      "emp_1",
+      null,
+      { existingVisits: [visitFor0930] }
+    );
+  },
+  /Invalid reschedule time range\. End time must be after start time\./,
+  "Inverted end time must trigger exact authorative validation message"
+);
+
+assert.throws(
+  () => {
+    simulateServerSideReschedule(
+      "visit_prabir_sim",
+      "2026-11-17T09:30:00",
+      "2026-11-17T09:30:00", // Equal start and end
+      "Zero duration",
+      "emp_1",
+      null,
+      { existingVisits: [visitFor0930] }
+    );
+  },
+  /Invalid reschedule time range\. End time must be after start time\./,
+  "Zero duration must trigger validation message"
+);
+console.log("  ✓ PASS: Inverted and zero-duration time ranges authoritative validation verified.");
+
 console.log("\n================================================================");
-console.log("🎉 ALL 15 VISIT SCHEDULE & CONFLICT DETECTION TESTS PASSED (100%)");
+console.log("🎉 ALL 23 VISIT SCHEDULE & RESCHEDULING TESTS PASSED (100%)");
 console.log("================================================================\n");

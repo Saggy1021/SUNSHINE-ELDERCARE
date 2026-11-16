@@ -88,37 +88,79 @@ export function formatTimeInputIST(dateInput: Date | string): string {
  * Parses user input date (YYYY-MM-DD) and time (HH:mm in 24h or 12h) entered as IST,
  * returning the corresponding UTC Date object for database storage.
  *
- * Example:
+ * Supports:
  *   parseISTDateTimeToUTC("2026-11-17", "13:00") -> 2026-11-17T07:30:00.000Z
- *   parseISTDateTimeToUTC("2026-11-17", "1:00 PM") -> 2026-11-17T07:30:00.000Z
+ *   parseISTDateTimeToUTC("2026-11-17", "09:30 AM") -> 2026-11-17T04:00:00.000Z
+ *   parseISTDateTimeToUTC("2026-11-17T09:30:00") -> 2026-11-17T04:00:00.000Z
+ *   parseISTDateTimeToUTC("2026-11-17 09:30") -> 2026-11-17T04:00:00.000Z
+ *   parseISTDateTimeToUTC("2026-11-17T04:00:00.000Z") -> preserves existing UTC ISO
+ *   parseISTDateTimeToUTC("2026-11-17T09:30:00+05:30") -> parses ISO with explicit offset
  */
 export function parseISTDateTimeToUTC(dateInput: string, timeInput?: string): Date {
-  if (!dateInput) return new Date(NaN);
+  if (!dateInput || typeof dateInput !== "string") return new Date(NaN);
+  const trimmedDate = dateInput.trim();
+  if (!trimmedDate) return new Date(NaN);
 
-  // If already a full ISO string with timezone offset (Z or +), parse directly
-  if (dateInput.includes("T") && (dateInput.includes("Z") || dateInput.includes("+"))) {
-    return new Date(dateInput);
+  // If already an ISO string with explicit timezone offset after T (Z or + or -)
+  if (trimmedDate.includes("T")) {
+    const afterT = trimmedDate.split("T")[1];
+    if (afterT && (afterT.includes("Z") || afterT.includes("+") || afterT.includes("-"))) {
+      const parsed = new Date(trimmedDate);
+      if (!isNaN(parsed.getTime())) return parsed;
+    }
   }
 
-  let cleanTime = (timeInput || "00:00").trim();
-  // Check for 12-hour AM/PM format
-  const match12 = cleanTime.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)$/i);
+  let datePart = trimmedDate;
+  let rawTime = (timeInput || "").trim();
+
+  // If timeInput was not passed (or empty), check if dateInput contains both date and time (separated by 'T' or whitespace)
+  if (!rawTime) {
+    if (trimmedDate.includes("T")) {
+      const parts = trimmedDate.split("T");
+      datePart = parts[0];
+      rawTime = parts[1] || "";
+    } else if (trimmedDate.includes(" ")) {
+      const firstSpace = trimmedDate.indexOf(" ");
+      datePart = trimmedDate.slice(0, firstSpace);
+      rawTime = trimmedDate.slice(firstSpace + 1);
+    } else {
+      rawTime = "00:00";
+    }
+  }
+
+  rawTime = rawTime.trim();
+
+  // Check for 12-hour AM/PM format (e.g. "09:30 AM", "9:30 am", "1:00 PM")
+  const match12 = rawTime.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)$/i);
+  let cleanTime = "";
   if (match12) {
     let hours = parseInt(match12[1], 10);
     const minutes = match12[2];
+    const seconds = match12[3] || "00";
     const isPm = match12[4].toLowerCase() === "pm";
     if (isPm && hours < 12) hours += 12;
     if (!isPm && hours === 12) hours = 0;
-    cleanTime = `${String(hours).padStart(2, "0")}:${minutes}:00`;
+    cleanTime = `${String(hours).padStart(2, "0")}:${minutes}:${seconds}`;
   } else {
-    // 24-hour format
-    const parts = cleanTime.split(":");
-    const h = String(parseInt(parts[0] || "0", 10)).padStart(2, "0");
-    const m = String(parseInt(parts[1] || "0", 10)).padStart(2, "0");
-    cleanTime = `${h}:${m}:00`;
+    // 24-hour format: "09:30", "09:30:00", "9:30", "13:00"
+    const match24 = rawTime.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (match24) {
+      const h = String(parseInt(match24[1], 10)).padStart(2, "0");
+      const m = match24[2];
+      const s = match24[3] || "00";
+      cleanTime = `${h}:${m}:${s}`;
+    } else {
+      cleanTime = "00:00:00";
+    }
   }
 
-  const cleanDate = dateInput.trim().split("T")[0];
+  // Extract clean YYYY-MM-DD
+  const cleanDateMatch = datePart.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (!cleanDateMatch) {
+    return new Date(NaN);
+  }
+  const cleanDate = `${cleanDateMatch[1]}-${String(cleanDateMatch[2]).padStart(2, "0")}-${String(cleanDateMatch[3]).padStart(2, "0")}`;
+
   // Strictly append Asia/Kolkata offset (+05:30)
   return new Date(`${cleanDate}T${cleanTime}+05:30`);
 }
