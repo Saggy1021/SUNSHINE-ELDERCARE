@@ -41,24 +41,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           try {
             await RateLimitService.checkLimit('AUTHENTICATION')
           } catch (ipError: any) {
-            if (ipError.name === 'RateLimitError') {
+            if (ipError?.name === 'RateLimitError') {
               throw new Error('Too many login attempts from your IP. Please try again later.')
             }
-            throw ipError
+            console.warn('[auth] RateLimit check warning:', ipError?.message || ipError)
           }
 
           // 2. Email-level rate limiting: strictly limits verification attempts against this email
           try {
             await RateLimitService.checkLimit('OTP_VERIFICATION', normalizedEmail)
           } catch (e: any) {
-            if (e.name === 'RateLimitError') {
+            if (e?.name === 'RateLimitError') {
               // Delete active tokens on rate limit violation to prevent brute forcing of this token
               await db.verificationToken.deleteMany({
                 where: { identifier: `login_${normalizedEmail}` }
               })
               throw new Error('Too many failed attempts. OTP invalidated. Please request a new one.')
             }
-            throw e
+            console.warn('[auth] Email rate limit check warning:', e?.message || e)
           }
 
           const { verifyLoginOtpToken } = await import('@/lib/auth/tokens')

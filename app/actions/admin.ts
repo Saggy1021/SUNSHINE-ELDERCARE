@@ -17,10 +17,20 @@ async function requirePermission(permission: string) {
     redirect('/login')
   }
   const isOwner = session.user.email === 'info.sunshineeldercare@gmail.com';
-  await Promise.all([
-    RateLimitService.checkLimit('ADMINISTRATIVE'),
-    isOwner ? Promise.resolve() : AuthorizationService.require(session.user.id, permission)
-  ]);
+  
+  try {
+    await RateLimitService.checkLimit('ADMINISTRATIVE');
+  } catch (err: any) {
+    if (err?.name === 'RateLimitError') {
+      throw new Error('Too many administrative requests. Please wait a moment and try again.');
+    }
+    // Non-fatal store warning in serverless environment
+    console.warn('[requirePermission] RateLimit store warning:', err?.message || err);
+  }
+
+  if (!isOwner) {
+    await AuthorizationService.require(session.user.id, permission);
+  }
   return session.user.id
 }
 

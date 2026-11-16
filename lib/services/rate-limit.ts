@@ -182,15 +182,8 @@ export class RateLimitService {
       }
     } catch (error) {
       if (error instanceof RateLimitError) throw error;
-      if (error instanceof ConfigurationError) throw error; 
 
-      logger.error('RateLimitStore failure', { error });
-      
-      if (SECURITY_CRITICAL_CATEGORIES.has(category)) {
-        throw new ServiceUnavailableError('Rate limit service temporarily unavailable');
-      } else {
-        logger.warn(`Bypassing rate limit for ${category} due to store failure`);
-      }
+      logger.warn(`RateLimitStore failure for ${category}, falling back gracefully`, { error: (error as any)?.message || error });
     }
   }
 
