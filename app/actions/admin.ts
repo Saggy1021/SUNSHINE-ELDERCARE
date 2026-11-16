@@ -8,7 +8,7 @@ import { notificationService } from "@/lib/services/notification"
 import { AuthorizationService } from "@/lib/services/authorization"
 import { RateLimitService } from "@/lib/services/rate-limit"
 import { calculateMembershipEndDate } from "@/lib/services/dates"
-import { EXCLUDED_MEMBER_EMAILS, ADMIN_DISPLAY_EMAILS } from "@/lib/constants/members"
+import { EXCLUDED_MEMBER_EMAILS, ADMIN_DISPLAY_EMAILS, DASHBOARD_EXCLUDED_EMAILS } from "@/lib/constants/members"
 
 // --- Authorization Helper ---
 async function requirePermission(permission: string) {
@@ -34,10 +34,8 @@ async function logAudit(actorId: string, action: string, entityType: string, ent
   })
 }
 
-// --- Dashboard & Metrics ---
-export async function getAdminDashboardMetrics() {
-  await requirePermission("MEMBER_VIEW") // Any basic admin view permission
-
+// --- Dashboard & Metrics Core Functions ---
+export async function getAdminDashboardMetricsCore(database: any = db, now: Date = new Date()) {
   const [
     totalMembers,
     activeMembers,
@@ -49,15 +47,83 @@ export async function getAdminDashboardMetrics() {
     unresolvedFeedback,
     pendingPayments
   ] = await Promise.all([
-    db.user.count(),
-    db.subscription.count({ where: { status: "ACTIVE" } }),
-    db.renewalRequest.count({ where: { status: "SUBMITTED" } }),
-    db.subscription.count({ where: { status: "SCHEDULED" } }),
-    db.subscription.count({ where: { status: "EXPIRING" } }),
-    db.subscription.count({ where: { status: "EXPIRED" } }),
-    db.inquiry.count({ where: { status: "NEW" } }),
-    db.feedback.count({ where: { status: { in: ["SUBMITTED", "UNDER_REVIEW"] } } }),
-    db.payment.count({ where: { status: "VERIFICATION_PENDING" } })
+    // Total Members: Count eligible members (role MEMBER, has memberProfile, or has subscriptions)
+    // excluding administrative accounts (Owner, Tanish, Sagnik, and care coordinator accounts).
+    database.user.count({
+      where: {
+        email: { notIn: DASHBOARD_EXCLUDED_EMAILS },
+        role: { not: "ADMIN" },
+        userRoles: { none: { role: { name: { in: ["Owner", "Admin"] } } } },
+        OR: [
+          { role: "MEMBER" },
+          { memberProfile: { isNot: null } },
+          { subscriptions: { some: {} } },
+        ],
+      },
+    }),
+    // Active Memberships: Count only currently active memberships belonging to eligible members
+    // where subscription status is ACTIVE and within validity dates (startDate <= now <= endDate).
+    // Exclude demo/test accounts without genuine active membership.
+    // Avoid counting multiple subscriptions for one member more than once (counts distinct users).
+    database.user.count({
+      where: {
+        email: {
+          notIn: DASHBOARD_EXCLUDED_EMAILS,
+          not: { endsWith: "@example.com" },
+        },
+        role: { not: "ADMIN" },
+        userRoles: { none: { role: { name: { in: ["Owner", "Admin"] } } } },
+        memberProfile: { isNot: null },
+        subscriptions: {
+          some: {
+            status: "ACTIVE",
+            startDate: { lte: now },
+            endDate: { gte: now },
+          },
+        },
+      },
+    }),
+    database.renewalRequest.count({
+      where: {
+        status: "SUBMITTED",
+        user: { email: { notIn: DASHBOARD_EXCLUDED_EMAILS } },
+      },
+    }),
+    database.subscription.count({
+      where: {
+        status: "SCHEDULED",
+        user: {
+          email: { notIn: DASHBOARD_EXCLUDED_EMAILS },
+          role: { not: "ADMIN" },
+        },
+      },
+    }),
+    database.subscription.count({
+      where: {
+        status: "EXPIRING",
+        user: {
+          email: { notIn: DASHBOARD_EXCLUDED_EMAILS },
+          role: { not: "ADMIN" },
+        },
+      },
+    }),
+    database.subscription.count({
+      where: {
+        status: "EXPIRED",
+        user: {
+          email: { notIn: DASHBOARD_EXCLUDED_EMAILS },
+          role: { not: "ADMIN" },
+        },
+      },
+    }),
+    database.inquiry.count({ where: { status: "NEW" } }),
+    database.feedback.count({ where: { status: { in: ["SUBMITTED", "UNDER_REVIEW"] } } }),
+    database.payment.count({
+      where: {
+        status: "VERIFICATION_PENDING",
+        user: { email: { notIn: DASHBOARD_EXCLUDED_EMAILS } },
+      },
+    }),
   ])
 
   return {
@@ -73,29 +139,38 @@ export async function getAdminDashboardMetrics() {
   }
 }
 
-export async function getNeedsAttentionQueue() {
-  await requirePermission("MEMBER_VIEW")
+export async function getAdminDashboardMetrics() {
+  await requirePermission("MEMBER_VIEW") // Any basic admin view permission
+  return getAdminDashboardMetricsCore(db)
+}
 
+export async function getNeedsAttentionQueueCore(database: any = db) {
   const [pendingRenewals, newInquiries, unresolvedFeedback, pendingPayments] = await Promise.all([
-    db.renewalRequest.findMany({
-      where: { status: "SUBMITTED" },
+    database.renewalRequest.findMany({
+      where: {
+        status: "SUBMITTED",
+        user: { email: { notIn: DASHBOARD_EXCLUDED_EMAILS } },
+      },
       include: { user: { select: { name: true, email: true } } },
       orderBy: { createdAt: 'asc' },
       take: 5
     }),
-    db.inquiry.findMany({
+    database.inquiry.findMany({
       where: { status: "NEW" },
       orderBy: { createdAt: 'desc' },
       take: 5
     }),
-    db.feedback.findMany({
+    database.feedback.findMany({
       where: { status: { in: ["SUBMITTED", "UNDER_REVIEW"] } },
       include: { user: { select: { name: true, email: true } } },
       orderBy: { createdAt: 'desc' },
       take: 5
     }),
-    db.payment.findMany({
-      where: { status: "VERIFICATION_PENDING" },
+    database.payment.findMany({
+      where: {
+        status: "VERIFICATION_PENDING",
+        user: { email: { notIn: DASHBOARD_EXCLUDED_EMAILS } },
+      },
       include: { user: { select: { name: true, email: true } }, invoice: true },
       orderBy: { createdAt: 'desc' },
       take: 5
@@ -103,6 +178,11 @@ export async function getNeedsAttentionQueue() {
   ])
 
   return { pendingRenewals, newInquiries, unresolvedFeedback, pendingPayments }
+}
+
+export async function getNeedsAttentionQueue() {
+  await requirePermission("MEMBER_VIEW")
+  return getNeedsAttentionQueueCore(db)
 }
 
 // --- Members Core Query ---
@@ -437,6 +517,7 @@ export async function updateMembershipStartDate(
   const sessionUserId = await requirePermission("MEMBER_MANAGE");
   const result = await updateMembershipStartDateCore(subscriptionId, newStartDateStr, sessionUserId, db);
   if (result.success) {
+    revalidatePath("/admin");
     revalidatePath("/admin/members");
     const sub = await db.subscription.findUnique({ where: { id: subscriptionId }, select: { userId: true } });
     if (sub?.userId) {
@@ -928,6 +1009,7 @@ export async function adminUpdateMember(formData: FormData) {
 
   const result = await adminUpdateMemberCore(input, sessionUser, db, hasSensitiveView);
   if (result.success && result.userId) {
+    revalidatePath("/admin");
     revalidatePath("/admin/members");
     revalidatePath(`/admin/members/${result.userId}`);
     revalidatePath(`/admin/members/${result.userId}/edit`);
@@ -1102,6 +1184,7 @@ export async function approveRenewalRequest(formData: FormData) {
     variant: request.variantType 
   })
   
+  revalidatePath('/admin')
   revalidatePath('/admin/renewals')
   notificationService.onRenewalApproved(request).catch(() => {})
 }
@@ -1120,6 +1203,7 @@ export async function rejectRenewalRequest(requestId: string) {
 
   await logAudit(adminId, "RENEWAL_REJECTED", "RenewalRequest", requestId)
   
+  revalidatePath('/admin')
   revalidatePath('/admin/renewals')
   notificationService.onRenewalRejected(request).catch(() => {})
 }
@@ -1134,6 +1218,7 @@ export async function updateInquiryStatus(id: string, status: string) {
   const adminId = await requirePermission("INQUIRY_MANAGE")
   await db.inquiry.update({ where: { id }, data: { status } })
   await logAudit(adminId, "INQUIRY_STATUS_CHANGED", "Inquiry", id, { status })
+  revalidatePath('/admin')
   revalidatePath('/admin/inquiries')
 }
 
@@ -1150,6 +1235,7 @@ export async function updateFeedbackStatus(id: string, status: string) {
   const adminId = await requirePermission("FEEDBACK_MANAGE")
   await db.feedback.update({ where: { id }, data: { status } })
   await logAudit(adminId, "FEEDBACK_STATUS_CHANGED", "Feedback", id, { status })
+  revalidatePath('/admin')
   revalidatePath('/admin/feedback')
 }
 

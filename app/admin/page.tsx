@@ -2,6 +2,9 @@ import { getAdminDashboardMetrics, getNeedsAttentionQueue } from "@/app/actions/
 import Link from "next/link"
 import { Users, Activity, AlertCircle, RefreshCw, ClipboardList, MessageSquare, ArrowRight, Clock, ShieldCheck } from "lucide-react"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 export default async function AdminDashboardPage() {
   const [metrics, queue] = await Promise.all([
     getAdminDashboardMetrics(),
@@ -81,7 +84,7 @@ export default async function AdminDashboardPage() {
                 </div>
               ) : (
                 <ul className="space-y-2.5">
-                  {queue.pendingRenewals.map(req => (
+                  {queue.pendingRenewals.map((req: any) => (
                     <li key={req.id} className="flex justify-between items-center bg-white p-3.5 rounded-lg border border-slate-200/70 hover:border-slate-300 transition-colors shadow-xs">
                       <div>
                         <p className="font-medium text-slate-900 text-sm">{req.user.name || req.user.email}</p>
@@ -108,7 +111,7 @@ export default async function AdminDashboardPage() {
                 </div>
               ) : (
                 <ul className="space-y-2.5">
-                  {queue.pendingPayments.map(payment => (
+                  {queue.pendingPayments.map((payment: any) => (
                     <li key={payment.id} className="flex justify-between items-center bg-white p-3.5 rounded-lg border border-slate-200/70 hover:border-slate-300 transition-colors shadow-xs">
                       <div>
                         <p className="font-medium text-slate-900 text-sm">{payment.user.name || payment.user.email}</p>
@@ -135,7 +138,7 @@ export default async function AdminDashboardPage() {
                 </div>
               ) : (
                 <ul className="space-y-2.5">
-                  {queue.unresolvedFeedback.map(fb => (
+                  {queue.unresolvedFeedback.map((fb: any) => (
                     <li key={fb.id} className="flex justify-between items-center bg-white p-3.5 rounded-lg border border-slate-200/70 hover:border-slate-300 transition-colors shadow-xs">
                       <div className="min-w-0 pr-2">
                         <p className="font-medium text-slate-900 text-sm truncate">{fb.user.name || fb.user.email}</p>
@@ -186,7 +189,7 @@ export default async function AdminDashboardPage() {
               </div>
             ) : (
               <ul className="space-y-2.5">
-                {queue.newInquiries.map(inq => (
+                {queue.newInquiries.map((inq: any) => (
                   <li key={inq.id} className="flex justify-between items-center bg-white p-3.5 rounded-lg border border-slate-200/70 hover:border-slate-300 transition-colors shadow-xs">
                     <div className="min-w-0 pr-2">
                       <p className="font-medium text-slate-900 text-sm truncate">{inq.fullName}</p>

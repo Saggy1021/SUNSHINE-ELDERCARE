@@ -2,6 +2,7 @@
 
 import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
+import { revalidatePath } from 'next/cache'
 import { AuthorizationService } from '@/lib/services/authorization'
 import { RateLimitService } from '@/lib/services/rate-limit'
 import { executeAdminOnboardMember } from '@/lib/services/admin-onboarding'
@@ -35,5 +36,10 @@ export async function adminOnboardMember(formData: FormData) {
     await AuthorizationService.require(session.user.id, 'FINANCIAL_OVERRIDE')
   }
 
-  return executeAdminOnboardMember(formData, session.user.id)
+  const result = await executeAdminOnboardMember(formData, session.user.id)
+  if (result.success) {
+    revalidatePath('/admin')
+    revalidatePath('/admin/members')
+  }
+  return result
 }
