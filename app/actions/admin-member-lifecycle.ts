@@ -43,8 +43,11 @@ async function logAudit(actorId: string, action: string, entityType: string, ent
 export interface DeletionEligibilityResult {
   eligible: boolean;
   hasFinancialDependencies?: boolean;
+  hasPendingSubscriptionsOnly?: boolean;
+  pendingSubscriptionCount?: number;
   dependencies?: string[];
   reason?: string;
+  eligibleNotice?: string;
   recommendedAction?: "ARCHIVE" | "NONE";
   member?: any;
 }
@@ -52,8 +55,17 @@ export interface DeletionEligibilityResult {
 /**
  * Inspects all foreign key and legal dependencies for a member.
  * Permanent deletion must NEVER silently cascade-delete financial records.
- * If invoices, payments, receipts, subscriptions or legal records exist:
- * blocks deletion, lists specific dependencies, and offers archiving instead.
+ * Rules:
+ * - No subscription records and no protected dependencies -> Allow deletion
+ * - Only PENDING subscriptions with no associated financial or legal records -> Allow deletion
+ * - ACTIVE subscription -> Block deletion
+ * - EXPIRED subscription -> Block deletion
+ * - CANCELLED or historical subscription -> Block deletion
+ * - Any invoice record, including unpaid or draft invoices -> Block deletion
+ * - Any payment or payment verification record -> Block deletion
+ * - Any receipt -> Block deletion
+ * - Any legally or statutorily required document or record -> Block deletion
+ * - Unknown or unexpected subscription status -> Block deletion safely
  */
 export async function checkMemberDeletionEligibilityCore(
   memberUserId: string,
@@ -66,7 +78,16 @@ export async function checkMemberDeletionEligibilityCore(
       invoices: { select: { id: true, invoiceNumber: true, status: true, total: true } },
       payments: { select: { id: true, amount: true, status: true } },
       receipts: { select: { id: true, receiptNumber: true } },
-      subscriptions: { select: { id: true, status: true, startDate: true, endDate: true } },
+      subscriptions: {
+        select: {
+          id: true,
+          status: true,
+          startDate: true,
+          endDate: true,
+          careCases: { select: { id: true } },
+          documents: { select: { id: true } },
+        }
+      },
       ownedDocuments: { select: { id: true, displayName: true } },
       userRoles: { include: { role: true } },
     }
@@ -90,29 +111,97 @@ export async function checkMemberDeletionEligibilityCore(
 
   const dependencies: string[] = [];
 
-  if (member.subscriptions?.length > 0) {
-    const statuses = Array.from(new Set(member.subscriptions.map((s: any) => s.status))).join(', ');
-    dependencies.push(`${member.subscriptions.length} subscription(s) [${statuses}]`);
-  }
+  // 1. Invoices: Any invoice record (including unpaid, draft, cancelled, or paid) blocks deletion
   if (member.invoices?.length > 0) {
-    dependencies.push(`${member.invoices.length} invoice(s)`);
-  }
-  if (member.payments?.length > 0) {
-    dependencies.push(`${member.payments.length} payment record(s)`);
-  }
-  if (member.receipts?.length > 0) {
-    dependencies.push(`${member.receipts.length} receipt(s)`);
-  }
-  if (member.ownedDocuments?.length > 0) {
-    dependencies.push(`${member.ownedDocuments.length} uploaded document(s)`);
+    const statuses = Array.from(new Set(member.invoices.map((inv: any) => inv.status || 'RECORDED'))).join(', ');
+    dependencies.push(`${member.invoices.length} invoice(s) [${statuses}]`);
   }
 
+  // 2. Payments: Any payment or payment verification record blocks deletion
+  if (member.payments?.length > 0) {
+    const statuses = Array.from(new Set(member.payments.map((p: any) => p.status || 'RECORDED'))).join(', ');
+    dependencies.push(`${member.payments.length} payment record(s) [${statuses}]`);
+  }
+
+  // 3. Receipts: Any statutory receipt blocks deletion
+  if (member.receipts?.length > 0) {
+    dependencies.push(`${member.receipts.length} statutory receipt(s)`);
+  }
+
+  // 4. Documents & Legal Records: Any legally or statutorily required document blocks deletion
+  if (member.ownedDocuments?.length > 0) {
+    dependencies.push(`${member.ownedDocuments.length} legal/compliance document(s)`);
+  }
+
+  // 5. Subscriptions:
+  // - No subscriptions: Permitted
+  // - Only PENDING subscriptions with no associated financial or legal records: Permitted
+  // - ACTIVE subscription: Block
+  // - EXPIRED subscription: Block
+  // - CANCELLED or historical subscription: Block
+  // - Unknown / unexpected subscription status: Block safely
+  // - Subscriptions with operational care cases or documents: Block
+  let pendingCount = 0;
+  if (member.subscriptions && member.subscriptions.length > 0) {
+    const activeSubs: any[] = [];
+    const expiredSubs: any[] = [];
+    const cancelledSubs: any[] = [];
+    const otherProtectedSubs: any[] = [];
+    const unknownSubs: any[] = [];
+
+    for (const sub of member.subscriptions) {
+      if (sub.careCases && sub.careCases.length > 0) {
+        dependencies.push(`${sub.careCases.length} care case(s) linked to subscription ${sub.id}`);
+      }
+      if (sub.documents && sub.documents.length > 0) {
+        dependencies.push(`${sub.documents.length} document(s) linked to subscription ${sub.id}`);
+      }
+
+      const status = sub.status;
+      if (status === "PENDING") {
+        pendingCount++;
+      } else if (status === "ACTIVE") {
+        activeSubs.push(sub);
+      } else if (status === "EXPIRED") {
+        expiredSubs.push(sub);
+      } else if (status === "CANCELLED") {
+        cancelledSubs.push(sub);
+      } else if (["SCHEDULED", "APPROVED", "SUSPENDED", "EXPIRING"].includes(status)) {
+        otherProtectedSubs.push(sub);
+      } else {
+        // Unknown or unexpected status -> must block safely
+        unknownSubs.push(sub);
+      }
+    }
+
+    if (activeSubs.length > 0) {
+      dependencies.push(`${activeSubs.length} active subscription(s) [ACTIVE]`);
+    }
+    if (expiredSubs.length > 0) {
+      dependencies.push(`${expiredSubs.length} expired subscription(s) [EXPIRED]`);
+    }
+    if (cancelledSubs.length > 0) {
+      dependencies.push(`${cancelledSubs.length} historical subscription(s) [CANCELLED]`);
+    }
+    if (otherProtectedSubs.length > 0) {
+      const statuses = Array.from(new Set(otherProtectedSubs.map((s) => s.status))).join(', ');
+      dependencies.push(`${otherProtectedSubs.length} non-pending subscription(s) [${statuses}]`);
+    }
+    if (unknownSubs.length > 0) {
+      const statuses = Array.from(new Set(unknownSubs.map((s) => s.status || 'UNKNOWN'))).join(', ');
+      dependencies.push(`${unknownSubs.length} subscription(s) with unrecognized status [${statuses}]`);
+    }
+  }
+
+  // If ANY protected dependency exists:
   if (dependencies.length > 0) {
     return {
       eligible: false,
       hasFinancialDependencies: true,
+      hasPendingSubscriptionsOnly: false,
+      pendingSubscriptionCount: pendingCount,
       dependencies,
-      reason: `Permanent deletion blocked: Member has legally required financial and compliance records: ${dependencies.join(', ')}. Financial and audit records cannot be permanently destroyed. Please use 'Archive Member' instead.`,
+      reason: `Permanent deletion blocked: Member has protected dependencies: ${dependencies.join(', ')}. Financial, operational, and audit records cannot be permanently destroyed. Please use 'Archive Member' instead.`,
       recommendedAction: "ARCHIVE",
       member: {
         id: member.id,
@@ -123,8 +212,16 @@ export async function checkMemberDeletionEligibilityCore(
     };
   }
 
+  const hasPendingOnly = pendingCount > 0;
   return {
     eligible: true,
+    hasFinancialDependencies: false,
+    hasPendingSubscriptionsOnly: hasPendingOnly,
+    pendingSubscriptionCount: pendingCount,
+    eligibleNotice: hasPendingOnly
+      ? "This member has only pending subscription records and no protected financial or legal dependencies. Permanent deletion is available after the required security verification."
+      : "This member has no subscriptions and no protected financial or legal dependencies. Permanent deletion is available after the required security verification.",
+    recommendedAction: "NONE",
     member: {
       id: member.id,
       name: member.name,
@@ -664,43 +761,105 @@ export async function ownerApproveAndExecuteDeletionCore(
   const memberEmail = member.email;
 
   // Execute deletion in transaction, preserving audit history
-  await database.$transaction(async (tx: any) => {
-    // 1. Delete dependent profile records
-    if (member.memberProfile?.id) {
-      await tx.sponsor?.deleteMany({ where: { memberProfileId: member.memberProfile.id } }).catch(() => {});
-      await tx.insuranceDetails?.deleteMany({ where: { memberProfileId: member.memberProfile.id } }).catch(() => {});
-      await tx.medicalAuthorization?.deleteMany({ where: { memberProfileId: member.memberProfile.id } }).catch(() => {});
-      await tx.memberProfile.delete({ where: { id: member.memberProfile.id } });
-    }
-
-    // 2. Delete non-financial direct child relations
-    await tx.emergencyContact?.deleteMany({ where: { userId: memberUserId } }).catch(() => {});
-    await tx.userRole?.deleteMany({ where: { userId: memberUserId } }).catch(() => {});
-    await tx.account?.deleteMany({ where: { userId: memberUserId } }).catch(() => {});
-    await tx.session?.deleteMany({ where: { userId: memberUserId } }).catch(() => {});
-    await tx.verificationToken?.deleteMany({ where: { identifier: { startsWith: `del_` } } }).catch(() => {});
-
-    // 3. Delete user record
-    await tx.user.delete({ where: { id: memberUserId } });
-
-    // 4. Record permanent deletion in AuditLog (entityId preserved; actorUserId = Owner)
-    await tx.auditLog.create({
-      data: {
-        actorUserId,
-        action: "MEMBER_PERMANENTLY_DELETED",
-        entityType: "User",
-        entityId: memberUserId,
-        metadata: {
-          deletedMemberName: memberName,
-          deletedMemberId: memberId,
-          deletedMemberEmail: memberEmail,
-          deletionReason: reason?.trim() || "Owner approved permanent deletion",
-          approvedBy: "info.sunshineeldercare@gmail.com",
-          timestamp: new Date().toISOString()
-        }
+  try {
+    await database.$transaction(async (tx: any) => {
+      // 0. Concurrency guard: atomically consume approval token inside tx
+      const delApproval = await tx.verificationToken.deleteMany({
+        where: { identifier: approvedIdentifier }
+      });
+      if (delApproval.count === 0) {
+        throw new Error("Deletion request already processed or concurrent execution detected.");
       }
+
+      // Revalidate inside tx to prevent race conditions
+      const txMember = await tx.user.findUnique({
+        where: { id: memberUserId },
+        include: {
+          memberProfile: true,
+          subscriptions: {
+            select: {
+              id: true,
+              status: true,
+              careCases: { select: { id: true } },
+              documents: { select: { id: true } },
+            }
+          },
+          invoices: { select: { id: true } },
+          payments: { select: { id: true } },
+          receipts: { select: { id: true } },
+          ownedDocuments: { select: { id: true } },
+        }
+      });
+
+      if (!txMember) {
+        throw new Error("Member record not found or already deleted.");
+      }
+
+      // Strict in-transaction dependency re-verification
+      if (
+        txMember.invoices?.length > 0 ||
+        txMember.payments?.length > 0 ||
+        txMember.receipts?.length > 0 ||
+        txMember.ownedDocuments?.length > 0 ||
+        txMember.subscriptions?.some((s: any) => s.status !== "PENDING" || (s.careCases && s.careCases.length > 0) || (s.documents && s.documents.length > 0))
+      ) {
+        throw new Error("Transaction aborted: protected financial or operational dependencies detected.");
+      }
+
+      // 1. Delete subscription add-ons for eligible pending subscriptions
+      if (txMember.subscriptions && txMember.subscriptions.length > 0) {
+        await tx.subscriptionAddOn?.deleteMany({
+          where: { subscription: { userId: memberUserId } }
+        }).catch(() => {});
+        // Delete eligible pending subscriptions
+        await tx.subscription?.deleteMany({
+          where: { userId: memberUserId, status: "PENDING" }
+        });
+      }
+
+      // 2. Delete dependent profile records
+      if (txMember.memberProfile?.id) {
+        await tx.sponsor?.deleteMany({ where: { memberProfileId: txMember.memberProfile.id } }).catch(() => {});
+        await tx.insuranceDetails?.deleteMany({ where: { memberProfileId: txMember.memberProfile.id } }).catch(() => {});
+        await tx.medicalAuthorization?.deleteMany({ where: { memberProfileId: txMember.memberProfile.id } }).catch(() => {});
+        await tx.memberProfile.delete({ where: { id: txMember.memberProfile.id } });
+      }
+
+      // 3. Delete non-financial direct child relations
+      await tx.emergencyContact?.deleteMany({ where: { userId: memberUserId } }).catch(() => {});
+      await tx.userRole?.deleteMany({ where: { userId: memberUserId } }).catch(() => {});
+      await tx.account?.deleteMany({ where: { userId: memberUserId } }).catch(() => {});
+      await tx.session?.deleteMany({ where: { userId: memberUserId } }).catch(() => {});
+      await tx.verificationToken?.deleteMany({ where: { identifier: { startsWith: `del_` } } }).catch(() => {});
+
+      // 4. Delete user record
+      await tx.user.delete({ where: { id: memberUserId } });
+
+      // 5. Record permanent deletion in AuditLog (entityId preserved; actorUserId = Owner)
+      await tx.auditLog.create({
+        data: {
+          actorUserId,
+          action: "MEMBER_PERMANENTLY_DELETED",
+          entityType: "User",
+          entityId: memberUserId,
+          metadata: {
+            deletedMemberName: memberName,
+            deletedMemberId: memberId,
+            deletedMemberEmail: memberEmail,
+            deletionReason: reason?.trim() || "Owner approved permanent deletion",
+            pendingSubscriptionsDeleted: txMember.subscriptions?.length || 0,
+            approvedBy: "info.sunshineeldercare@gmail.com",
+            timestamp: new Date().toISOString()
+          }
+        }
+      });
     });
-  });
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "Failed to execute permanent deletion. All changes rolled back."
+    };
+  }
 
   return {
     success: true,

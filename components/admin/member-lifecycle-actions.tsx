@@ -48,6 +48,7 @@ export function MemberLifecycleActions({
   const [confirmedIdInput, setConfirmedIdInput] = useState("")
   const [dependencies, setDependencies] = useState<string[]>([])
   const [blockedReason, setBlockedReason] = useState<string | null>(null)
+  const [eligibleNotice, setEligibleNotice] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [otpMessage, setOtpMessage] = useState<string | null>(null)
@@ -58,6 +59,7 @@ export function MemberLifecycleActions({
     setDeleteStep("checking")
     setDeleteError(null)
     setBlockedReason(null)
+    setEligibleNotice(null)
     setOtpInput("")
     setConfirmedIdInput("")
 
@@ -68,6 +70,7 @@ export function MemberLifecycleActions({
         setDependencies(res.dependencies || [])
         setBlockedReason(res.reason || "Member cannot be permanently deleted.")
       } else {
+        setEligibleNotice(res.eligibleNotice || null)
         setDeleteStep("reason")
       }
     } catch (err: any) {
@@ -485,8 +488,8 @@ export function MemberLifecycleActions({
                   <p className="font-bold flex items-center gap-1.5">
                     <AlertTriangle className="h-4 w-4 text-rose-600" /> Irreversible Action
                   </p>
-                  <p className="text-[11px] text-rose-800 leading-relaxed">
-                    Zero financial dependencies were found for this account. Permanent deletion will completely wipe this member's profile and user record.
+                  <p className="text-[11px] text-rose-800 leading-relaxed font-medium">
+                    {eligibleNotice || "Zero financial dependencies were found for this account. Permanent deletion will completely wipe this member's profile and user record."}
                   </p>
                 </div>
 

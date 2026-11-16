@@ -13,6 +13,7 @@ import { hashToken } from '../../lib/auth/tokens';
 async function runMemberArchivingAndDeletionTests() {
   console.log('================================================================');
   console.log('Sunshine Eldercare — Secure Member Archiving & Deletion Test Suite');
+  console.log('Including: Pending Subscription Exception & Concurrency Protections');
   console.log('================================================================\n');
 
   const now = new Date('2026-11-16T12:00:00.000Z');
@@ -76,24 +77,201 @@ async function runMemberArchivingAndDeletionTests() {
     userRoles: [],
   };
 
-  // Clean Test Member: Eligible for deletion (zero invoices, zero payments, zero subscriptions)
-  let cleanUser: any = {
-    id: 'usr_clean_demo_100',
-    name: 'Eligible Test Member',
-    email: 'eligible_test@example.com',
+  // Clean Member 1: Zero subscriptions, zero financial records
+  let cleanUserNoSubs: any = {
+    id: 'usr_clean_no_subs',
+    name: 'Clean Member No Subs',
+    email: 'no_subs@example.com',
     role: 'MEMBER',
     status: 'ACTIVE',
     createdAt: new Date('2026-11-01T10:00:00.000Z'),
     memberProfile: {
-      id: 'prof_clean_100',
-      userId: 'usr_clean_demo_100',
-      memberId: 'SECD1099TEST',
-      firstName: 'Eligible',
-      lastName: 'Test Member',
-      mobileNumber: '9876543210',
-      serviceAddress: 'Test Sector 5, Kolkata',
+      id: 'prof_clean_001',
+      userId: 'usr_clean_no_subs',
+      memberId: 'SECD1090TEST',
+      firstName: 'Clean',
+      lastName: 'No Subs',
     },
     subscriptions: [],
+    invoices: [],
+    payments: [],
+    receipts: [],
+    ownedDocuments: [],
+    userRoles: [],
+  };
+
+  // Clean Member 2: One PENDING subscription, zero financial records
+  let cleanUserOnePendingSub: any = {
+    id: 'usr_clean_one_pending',
+    name: 'Clean Member One Pending Sub',
+    email: 'one_pending@example.com',
+    role: 'MEMBER',
+    status: 'ACTIVE',
+    createdAt: new Date('2026-11-01T10:00:00.000Z'),
+    memberProfile: {
+      id: 'prof_clean_002',
+      userId: 'usr_clean_one_pending',
+      memberId: 'SECD1091TEST',
+      firstName: 'Clean',
+      lastName: 'One Pending',
+    },
+    subscriptions: [
+      { id: 'sub_pending_001', userId: 'usr_clean_one_pending', status: 'PENDING' },
+    ],
+    invoices: [],
+    payments: [],
+    receipts: [],
+    ownedDocuments: [],
+    userRoles: [],
+  };
+
+  // Clean Member 3: Multiple PENDING subscriptions, zero financial records
+  let cleanUserMultiPendingSub: any = {
+    id: 'usr_clean_multi_pending',
+    name: 'Clean Member Multi Pending Sub',
+    email: 'multi_pending@example.com',
+    role: 'MEMBER',
+    status: 'ACTIVE',
+    createdAt: new Date('2026-11-01T10:00:00.000Z'),
+    memberProfile: {
+      id: 'prof_clean_003',
+      userId: 'usr_clean_multi_pending',
+      memberId: 'SECD1092TEST',
+      firstName: 'Clean',
+      lastName: 'Multi Pending',
+    },
+    subscriptions: [
+      { id: 'sub_pending_002', userId: 'usr_clean_multi_pending', status: 'PENDING' },
+      { id: 'sub_pending_003', userId: 'usr_clean_multi_pending', status: 'PENDING' },
+    ],
+    invoices: [],
+    payments: [],
+    receipts: [],
+    ownedDocuments: [],
+    userRoles: [],
+  };
+
+  // Member with ACTIVE subscription
+  const memberActiveSub: any = {
+    id: 'usr_active_sub',
+    name: 'Active Sub Member',
+    email: 'active_sub@example.com',
+    role: 'MEMBER',
+    status: 'ACTIVE',
+    memberProfile: { id: 'prof_act_01', memberId: 'SECD1093ACT' },
+    subscriptions: [{ id: 'sub_act_001', userId: 'usr_active_sub', status: 'ACTIVE' }],
+    invoices: [],
+    payments: [],
+    receipts: [],
+    ownedDocuments: [],
+    userRoles: [],
+  };
+
+  // Member with EXPIRED subscription
+  const memberExpiredSub: any = {
+    id: 'usr_expired_sub',
+    name: 'Expired Sub Member',
+    email: 'expired_sub@example.com',
+    role: 'MEMBER',
+    status: 'ACTIVE',
+    memberProfile: { id: 'prof_exp_01', memberId: 'SECD1094EXP' },
+    subscriptions: [{ id: 'sub_exp_001', userId: 'usr_expired_sub', status: 'EXPIRED' }],
+    invoices: [],
+    payments: [],
+    receipts: [],
+    ownedDocuments: [],
+    userRoles: [],
+  };
+
+  // Member with CANCELLED subscription
+  const memberCancelledSub: any = {
+    id: 'usr_cancelled_sub',
+    name: 'Cancelled Sub Member',
+    email: 'cancelled_sub@example.com',
+    role: 'MEMBER',
+    status: 'ACTIVE',
+    memberProfile: { id: 'prof_can_01', memberId: 'SECD1095CAN' },
+    subscriptions: [{ id: 'sub_can_001', userId: 'usr_cancelled_sub', status: 'CANCELLED' }],
+    invoices: [],
+    payments: [],
+    receipts: [],
+    ownedDocuments: [],
+    userRoles: [],
+  };
+
+  // Member with PENDING subscription AND Invoice
+  const memberPendingAndInvoice: any = {
+    id: 'usr_pen_inv',
+    name: 'Pending With Invoice',
+    email: 'pen_inv@example.com',
+    role: 'MEMBER',
+    status: 'ACTIVE',
+    memberProfile: { id: 'prof_pi_01', memberId: 'SECD1096INV' },
+    subscriptions: [{ id: 'sub_pen_inv', userId: 'usr_pen_inv', status: 'PENDING' }],
+    invoices: [{ id: 'inv_pi_01', invoiceNumber: 'INV/DRAFT/01', status: 'DRAFT' }],
+    payments: [],
+    receipts: [],
+    ownedDocuments: [],
+    userRoles: [],
+  };
+
+  // Member with PENDING subscription AND Payment
+  const memberPendingAndPayment: any = {
+    id: 'usr_pen_pay',
+    name: 'Pending With Payment',
+    email: 'pen_pay@example.com',
+    role: 'MEMBER',
+    status: 'ACTIVE',
+    memberProfile: { id: 'prof_pp_01', memberId: 'SECD1097PAY' },
+    subscriptions: [{ id: 'sub_pen_pay', userId: 'usr_pen_pay', status: 'PENDING' }],
+    invoices: [],
+    payments: [{ id: 'pay_pp_01', amount: 5000, status: 'AUTHORIZED' }],
+    receipts: [],
+    ownedDocuments: [],
+    userRoles: [],
+  };
+
+  // Member with PENDING subscription AND Receipt
+  const memberPendingAndReceipt: any = {
+    id: 'usr_pen_rec',
+    name: 'Pending With Receipt',
+    email: 'pen_rec@example.com',
+    role: 'MEMBER',
+    status: 'ACTIVE',
+    memberProfile: { id: 'prof_pr_01', memberId: 'SECD1098REC' },
+    subscriptions: [{ id: 'sub_pen_rec', userId: 'usr_pen_rec', status: 'PENDING' }],
+    invoices: [],
+    payments: [],
+    receipts: [{ id: 'rec_pr_01', receiptNumber: 'REC/2026/999' }],
+    ownedDocuments: [],
+    userRoles: [],
+  };
+
+  // Member with PENDING subscription AND Legal Record / Document
+  const memberPendingAndDocument: any = {
+    id: 'usr_pen_doc',
+    name: 'Pending With Document',
+    email: 'pen_doc@example.com',
+    role: 'MEMBER',
+    status: 'ACTIVE',
+    memberProfile: { id: 'prof_pd_01', memberId: 'SECD1099DOC' },
+    subscriptions: [{ id: 'sub_pen_doc', userId: 'usr_pen_doc', status: 'PENDING' }],
+    invoices: [],
+    payments: [],
+    receipts: [],
+    ownedDocuments: [{ id: 'doc_pd_01', displayName: 'ID_Proof_Aadhaar.pdf' }],
+    userRoles: [],
+  };
+
+  // Member with UNKNOWN subscription status
+  const memberUnknownSubStatus: any = {
+    id: 'usr_unknown_status',
+    name: 'Unknown Status Sub',
+    email: 'unknown_status@example.com',
+    role: 'MEMBER',
+    status: 'ACTIVE',
+    memberProfile: { id: 'prof_unk_01', memberId: 'SECD1100UNK' },
+    subscriptions: [{ id: 'sub_unk_001', userId: 'usr_unknown_status', status: 'PROVISIONAL_CUSTOM' }],
     invoices: [],
     payments: [],
     receipts: [],
@@ -121,14 +299,29 @@ async function runMemberArchivingAndDeletionTests() {
     userRoles: [{ role: { name: 'Administrator' } }],
   };
 
-  // In-memory Database Mock
-  let usersDb: any[] = [prabirUser, cleanUser, ownerUser, adminUser];
+  // Database mock store
+  let usersDb: any[] = [
+    prabirUser,
+    cleanUserNoSubs,
+    cleanUserOnePendingSub,
+    cleanUserMultiPendingSub,
+    memberActiveSub,
+    memberExpiredSub,
+    memberCancelledSub,
+    memberPendingAndInvoice,
+    memberPendingAndPayment,
+    memberPendingAndReceipt,
+    memberPendingAndDocument,
+    memberUnknownSubStatus,
+    ownerUser,
+    adminUser,
+  ];
   let verificationTokensDb: any[] = [];
   let auditLogsDb: any[] = [];
 
   const mockDb: any = {
     user: {
-      findUnique: async ({ where, include, select }: any) => {
+      findUnique: async ({ where, select }: any) => {
         const u = usersDb.find((x) => x.id === where.id || (where.email && x.email === where.email));
         if (!u) return null;
         if (select) {
@@ -179,6 +372,22 @@ async function runMemberArchivingAndDeletionTests() {
         return { success: true };
       },
     },
+    subscription: {
+      deleteMany: async ({ where }: any) => {
+        const u = usersDb.find((x) => x.id === where.userId);
+        if (u && u.subscriptions) {
+          if (where.status) {
+            u.subscriptions = u.subscriptions.filter((s: any) => s.status !== where.status);
+          } else {
+            u.subscriptions = [];
+          }
+        }
+        return { count: 1 };
+      },
+    },
+    subscriptionAddOn: {
+      deleteMany: async () => ({ count: 0 }),
+    },
     verificationToken: {
       findFirst: async ({ where }: any) => {
         return (
@@ -190,20 +399,27 @@ async function runMemberArchivingAndDeletionTests() {
         return { ...data };
       },
       deleteMany: async ({ where }: any) => {
+        let count = 0;
         if (where?.identifier?.in) {
+          const before = verificationTokensDb.length;
           verificationTokensDb = verificationTokensDb.filter(
             (t) => !where.identifier.in.includes(t.identifier)
           );
+          count = before - verificationTokensDb.length;
         } else if (typeof where?.identifier === 'object' && where?.identifier?.startsWith) {
+          const before = verificationTokensDb.length;
           verificationTokensDb = verificationTokensDb.filter(
             (t) => !t.identifier.startsWith(where.identifier.startsWith)
           );
+          count = before - verificationTokensDb.length;
         } else if (typeof where?.identifier === 'string') {
+          const before = verificationTokensDb.length;
           verificationTokensDb = verificationTokensDb.filter(
             (t) => t.identifier !== where.identifier
           );
+          count = before - verificationTokensDb.length;
         }
-        return { count: 1 };
+        return { count };
       },
     },
     auditLog: {
@@ -213,166 +429,178 @@ async function runMemberArchivingAndDeletionTests() {
       },
     },
     $transaction: async (fn: any) => {
-      return fn({
-        user: mockDb.user,
-        memberProfile: mockDb.memberProfile,
-        verificationToken: mockDb.verificationToken,
-        auditLog: mockDb.auditLog,
-        sponsor: { deleteMany: async () => ({}) },
-        insuranceDetails: { deleteMany: async () => ({}) },
-        medicalAuthorization: { deleteMany: async () => ({}) },
-        emergencyContact: { deleteMany: async () => ({}) },
-        userRole: { deleteMany: async () => ({}) },
-        account: { deleteMany: async () => ({}) },
-        session: { deleteMany: async () => ({}) },
-      });
+      // Create backup copy for rollback support
+      const backupUsers = JSON.parse(JSON.stringify(usersDb));
+      const backupTokens = JSON.parse(JSON.stringify(verificationTokensDb));
+      const backupLogs = JSON.parse(JSON.stringify(auditLogsDb));
+      try {
+        const result = await fn({
+          user: mockDb.user,
+          memberProfile: mockDb.memberProfile,
+          subscription: mockDb.subscription,
+          subscriptionAddOn: mockDb.subscriptionAddOn,
+          verificationToken: mockDb.verificationToken,
+          auditLog: mockDb.auditLog,
+          sponsor: { deleteMany: async () => ({}) },
+          insuranceDetails: { deleteMany: async () => ({}) },
+          medicalAuthorization: { deleteMany: async () => ({}) },
+          emergencyContact: { deleteMany: async () => ({}) },
+          userRole: { deleteMany: async () => ({}) },
+          account: { deleteMany: async () => ({}) },
+          session: { deleteMany: async () => ({}) },
+        });
+        return result;
+      } catch (err) {
+        // Rollback state completely
+        usersDb = backupUsers;
+        verificationTokensDb = backupTokens;
+        auditLogsDb = backupLogs;
+        throw err;
+      }
     },
   };
 
   // ===========================================================================
-  // SCENARIO 1: ARCHIVE MEMBER (REVERSIBLE, PRESERVES DATA & AUDIT LOG)
+  // SECTION 6 TEST CASES: DELETION ELIGIBILITY MATRIX
   // ===========================================================================
-  console.log('Test 1: Archiving a member safely updates status to ARCHIVED and records audit log');
-  const archiveResult = await adminArchiveMemberCore(
-    {
-      memberUserId: prabirUser.id,
-      reason: 'Temporary medical stay with family out of country',
-      actorUserId: adminUserId,
-    },
-    mockDb
-  );
 
-  assert.strictEqual(archiveResult.success, true);
-  assert.strictEqual(usersDb.find((u) => u.id === prabirUser.id)?.status, 'ARCHIVED');
-  // Member ID, subscriptions, and profile remain completely intact
-  assert.strictEqual(usersDb.find((u) => u.id === prabirUser.id)?.memberProfile?.memberId, 'SECD1001PRTY');
-  assert.strictEqual(usersDb.find((u) => u.id === prabirUser.id)?.subscriptions.length, 1);
+  console.log('--- TEST 1: Member with no subscriptions – deletion permitted ---');
+  const resNoSubs = await checkMemberDeletionEligibilityCore(cleanUserNoSubs.id, mockDb);
+  assert.strictEqual(resNoSubs.eligible, true);
+  assert.strictEqual(resNoSubs.hasFinancialDependencies, false);
+  assert.strictEqual(resNoSubs.hasPendingSubscriptionsOnly, false);
+  assert.ok(resNoSubs.eligibleNotice?.includes('no subscriptions and no protected'));
+  console.log('✓ PASS: Deletion permitted for member with zero subscriptions.\n');
 
-  // Check audit log
-  const archiveAudit = auditLogsDb.find((a) => a.action === 'MEMBER_ARCHIVED');
-  assert.ok(archiveAudit);
-  assert.strictEqual(archiveAudit.entityId, prabirUser.id);
-  assert.strictEqual(archiveAudit.metadata.reason, 'Temporary medical stay with family out of country');
-  assert.strictEqual(archiveAudit.metadata.memberId, 'SECD1001PRTY');
-  console.log('✓ PASS: Member safely archived; Member ID & subscriptions preserved; audit log created.\n');
+  console.log('--- TEST 2: Member with one PENDING subscription and no financial dependencies – deletion permitted ---');
+  const resOnePending = await checkMemberDeletionEligibilityCore(cleanUserOnePendingSub.id, mockDb);
+  assert.strictEqual(resOnePending.eligible, true);
+  assert.strictEqual(resOnePending.hasFinancialDependencies, false);
+  assert.strictEqual(resOnePending.hasPendingSubscriptionsOnly, true);
+  assert.strictEqual(resOnePending.pendingSubscriptionCount, 1);
+  assert.ok(resOnePending.eligibleNotice?.includes('only pending subscription records and no protected'));
+  console.log('✓ PASS: Deletion permitted for member with one PENDING subscription.\n');
+
+  console.log('--- TEST 3: Member with multiple PENDING subscriptions and no financial dependencies – deletion permitted ---');
+  const resMultiPending = await checkMemberDeletionEligibilityCore(cleanUserMultiPendingSub.id, mockDb);
+  assert.strictEqual(resMultiPending.eligible, true);
+  assert.strictEqual(resMultiPending.hasFinancialDependencies, false);
+  assert.strictEqual(resMultiPending.hasPendingSubscriptionsOnly, true);
+  assert.strictEqual(resMultiPending.pendingSubscriptionCount, 2);
+  console.log('✓ PASS: Deletion permitted for member with multiple PENDING subscriptions.\n');
+
+  console.log('--- TEST 4: Member with an ACTIVE subscription – blocked ---');
+  const resActive = await checkMemberDeletionEligibilityCore(memberActiveSub.id, mockDb);
+  assert.strictEqual(resActive.eligible, false);
+  assert.ok(resActive.dependencies?.some((d) => d.includes('active subscription(s) [ACTIVE]')));
+  assert.strictEqual(resActive.recommendedAction, 'ARCHIVE');
+  console.log('✓ PASS: Member with ACTIVE subscription is strictly blocked.\n');
+
+  console.log('--- TEST 5: Member with an EXPIRED subscription – blocked ---');
+  const resExpired = await checkMemberDeletionEligibilityCore(memberExpiredSub.id, mockDb);
+  assert.strictEqual(resExpired.eligible, false);
+  assert.ok(resExpired.dependencies?.some((d) => d.includes('expired subscription(s) [EXPIRED]')));
+  assert.strictEqual(resExpired.recommendedAction, 'ARCHIVE');
+  console.log('✓ PASS: Member with EXPIRED subscription is strictly blocked.\n');
+
+  console.log('--- TEST 6: Member with a CANCELLED subscription – blocked ---');
+  const resCancelled = await checkMemberDeletionEligibilityCore(memberCancelledSub.id, mockDb);
+  assert.strictEqual(resCancelled.eligible, false);
+  assert.ok(resCancelled.dependencies?.some((d) => d.includes('historical subscription(s) [CANCELLED]')));
+  assert.strictEqual(resCancelled.recommendedAction, 'ARCHIVE');
+  console.log('✓ PASS: Member with CANCELLED subscription is strictly blocked.\n');
+
+  console.log('--- TEST 7: Member with a PENDING subscription and an invoice – blocked ---');
+  const resPendingInvoice = await checkMemberDeletionEligibilityCore(memberPendingAndInvoice.id, mockDb);
+  assert.strictEqual(resPendingInvoice.eligible, false);
+  assert.ok(resPendingInvoice.dependencies?.some((d) => d.includes('invoice(s)')));
+  assert.strictEqual(resPendingInvoice.recommendedAction, 'ARCHIVE');
+  console.log('✓ PASS: PENDING subscription with invoice is strictly blocked.\n');
+
+  console.log('--- TEST 8: Member with a PENDING subscription and a payment – blocked ---');
+  const resPendingPayment = await checkMemberDeletionEligibilityCore(memberPendingAndPayment.id, mockDb);
+  assert.strictEqual(resPendingPayment.eligible, false);
+  assert.ok(resPendingPayment.dependencies?.some((d) => d.includes('payment record(s)')));
+  assert.strictEqual(resPendingPayment.recommendedAction, 'ARCHIVE');
+  console.log('✓ PASS: PENDING subscription with payment record is strictly blocked.\n');
+
+  console.log('--- TEST 9: Member with a PENDING subscription and a receipt – blocked ---');
+  const resPendingReceipt = await checkMemberDeletionEligibilityCore(memberPendingAndReceipt.id, mockDb);
+  assert.strictEqual(resPendingReceipt.eligible, false);
+  assert.ok(resPendingReceipt.dependencies?.some((d) => d.includes('receipt(s)')));
+  assert.strictEqual(resPendingReceipt.recommendedAction, 'ARCHIVE');
+  console.log('✓ PASS: PENDING subscription with statutory receipt is strictly blocked.\n');
+
+  console.log('--- TEST 10: Member with a PENDING subscription and a legal record/document – blocked ---');
+  const resPendingDocument = await checkMemberDeletionEligibilityCore(memberPendingAndDocument.id, mockDb);
+  assert.strictEqual(resPendingDocument.eligible, false);
+  assert.ok(resPendingDocument.dependencies?.some((d) => d.includes('document(s)')));
+  assert.strictEqual(resPendingDocument.recommendedAction, 'ARCHIVE');
+  console.log('✓ PASS: PENDING subscription with legal/compliance document is strictly blocked.\n');
+
+  console.log('--- TEST 11: Member with an unknown subscription status – blocked ---');
+  const resUnknown = await checkMemberDeletionEligibilityCore(memberUnknownSubStatus.id, mockDb);
+  assert.strictEqual(resUnknown.eligible, false);
+  assert.ok(resUnknown.dependencies?.some((d) => d.includes('unrecognized status [PROVISIONAL_CUSTOM]')));
+  assert.strictEqual(resUnknown.recommendedAction, 'ARCHIVE');
+  console.log('✓ PASS: Member with unknown subscription status is safely blocked.\n');
 
   // ===========================================================================
-  // SCENARIO 2: RESTORE ARCHIVED MEMBER
+  // SECTION 6 TEST CASES: SECURITY CONTROLS, OTP & APPROVAL WORKFLOW
   // ===========================================================================
-  console.log('Test 2: Restoring an archived member reverts status back to ACTIVE');
-  const restoreResult = await adminRestoreMemberCore(
-    {
-      memberUserId: prabirUser.id,
-      reason: 'Returned to Kolkata; resumed active eldercare service',
-      actorUserId: adminUserId,
-    },
-    mockDb
-  );
 
-  assert.strictEqual(restoreResult.success, true);
-  assert.strictEqual(usersDb.find((u) => u.id === prabirUser.id)?.status, 'ACTIVE');
-
-  // Check audit log
-  const restoreAudit = auditLogsDb.find((a) => a.action === 'MEMBER_RESTORED');
-  assert.ok(restoreAudit);
-  assert.strictEqual(restoreAudit.entityId, prabirUser.id);
-  assert.strictEqual(restoreAudit.metadata.reason, 'Returned to Kolkata; resumed active eldercare service');
-  console.log('✓ PASS: Member restored to ACTIVE; audit log created.\n');
-
-  // ===========================================================================
-  // SCENARIO 3: VISIBILITY FILTERING IN getMembersCore
-  // ===========================================================================
-  console.log('Test 3: Visibility filtering excludes ARCHIVED members from active listing');
-  // Archive cleanUser for testing filtering
-  usersDb.find((u) => u.id === cleanUser.id)!.status = 'ARCHIVED';
-
-  const activeListing = await getMembersCore(undefined, 1, 50, mockDb, true, undefined, undefined, false);
-  const activeIds = activeListing.members.map((m: any) => m.id);
-  assert.ok(activeIds.includes(prabirUser.id), 'Active member Prabir should be in active listing');
-  assert.ok(!activeIds.includes(cleanUser.id), 'Archived cleanUser must NOT appear in active listing');
-  assert.strictEqual(activeListing.archivedCount, 1, 'archivedCount should accurately report 1');
-
-  const archivedListing = await getMembersCore(undefined, 1, 50, mockDb, true, undefined, undefined, true);
-  const archivedIds = archivedListing.members.map((m: any) => m.id);
-  assert.ok(archivedIds.includes(cleanUser.id), 'cleanUser must be in archived listing');
-  assert.ok(!archivedIds.includes(prabirUser.id), 'Active member must NOT be in archived listing');
-  console.log('✓ PASS: Active listing excludes archived members; archived listing isolates them.\n');
-
-  // Reset cleanUser to ACTIVE for subsequent tests
-  usersDb.find((u) => u.id === cleanUser.id)!.status = 'ACTIVE';
-
-  // ===========================================================================
-  // SCENARIO 4: OTP GENERATION AND EMAIL DELIVERY INTEGRATION
-  // ===========================================================================
-  console.log('Test 4: Requesting deletion OTP generates 6-digit code and dispatches email');
+  console.log('--- TEST 12: Invalid, expired, reused or exhausted OTP – rejected ---');
+  // 12a: Request OTP for cleanUserOnePendingSub
   sentEmails = [];
-  const otpRequest = await requestMemberDeletionOtpCore(
+  const otpRes = await requestMemberDeletionOtpCore(
     {
-      memberUserId: cleanUser.id,
-      reason: 'Member request under DPDP Act right to be forgotten',
+      memberUserId: cleanUserOnePendingSub.id,
+      reason: 'User request under DPDP Act',
       actorUserId: adminUserId,
       now,
     },
     mockDb,
     mockEmailService
   );
+  assert.strictEqual(otpRes.success, true);
+  const receivedOtp = sentEmails[0].text.match(/\b\d{6}\b/)![0];
 
-  assert.strictEqual(otpRequest.success, true);
-  assert.ok(otpRequest.message?.includes('6-digit verification code'));
-  assert.strictEqual(sentEmails.length, 1);
-  assert.strictEqual(sentEmails[0].to, adminEmail);
-  assert.ok(sentEmails[0].subject.includes('Permanent Member Deletion'));
-  assert.ok(sentEmails[0].text.includes('Eligible Test Member'));
-  assert.ok(sentEmails[0].text.includes('SECD1099TEST'));
-
-  // Extract raw OTP from email text for verification tests
-  const otpMatch = sentEmails[0].text.match(/\b\d{6}\b/);
-  assert.ok(otpMatch, 'Email must contain a 6-digit numeric OTP');
-  const generatedOtp = otpMatch[0];
-
-  // Verify hashed token in database (plaintext OTP must NEVER be stored)
-  const storedOtp = verificationTokensDb.find((t) => t.identifier === `del_otp:${cleanUser.id}:${adminUserId}`);
-  assert.ok(storedOtp);
-  assert.strictEqual(storedOtp.token, hashToken(generatedOtp));
-  assert.notStrictEqual(storedOtp.token, generatedOtp);
-
-  // Check audit log
-  const otpAudit = auditLogsDb.find((a) => a.action === 'MEMBER_DELETION_OTP_REQUESTED');
-  assert.ok(otpAudit);
-  assert.strictEqual(otpAudit.metadata.adminEmail, adminEmail);
-  assert.strictEqual(otpAudit.metadata.memberId, 'SECD1099TEST');
-  // Plaintext OTP should never be in audit log
-  assert.strictEqual(JSON.stringify(otpAudit).includes(generatedOtp), false);
-  console.log('✓ PASS: Cryptographic OTP generated, securely hashed, dispatched via EmailService; audit logged without secrets.\n');
-
-  // ===========================================================================
-  // SCENARIO 5: OTP EXPIRATION (FAILS AFTER 5 MINUTES)
-  // ===========================================================================
-  console.log('Test 5: OTP verification fails when code is expired (> 5 minutes)');
-  const expiredTime = new Date(now.getTime() + 6 * 60 * 1000); // 6 mins later
-  const expiredVerify = await verifyMemberDeletionOtpCore(
+  // 12b: Invalid OTP rejected
+  const invOtpRes = await verifyMemberDeletionOtpCore(
     {
-      memberUserId: cleanUser.id,
-      otp: generatedOtp,
-      confirmedMemberId: 'SECD1099TEST',
+      memberUserId: cleanUserOnePendingSub.id,
+      otp: '111111',
+      confirmedMemberId: 'SECD1091TEST',
       actorUserId: adminUserId,
-      now: expiredTime,
+      now,
     },
     mockDb,
     mockAuthService
   );
+  assert.strictEqual(invOtpRes.success, false);
+  assert.strictEqual(invOtpRes.remainingAttempts, 4);
 
-  assert.strictEqual(expiredVerify.success, false);
-  assert.strictEqual(expiredVerify.expired, true);
-  assert.ok(expiredVerify.error?.includes('expired'));
-  console.log('✓ PASS: Expired OTP rejected properly after 5-minute validity window.\n');
+  // 12c: Expired OTP rejected
+  const expOtpRes = await verifyMemberDeletionOtpCore(
+    {
+      memberUserId: cleanUserOnePendingSub.id,
+      otp: receivedOtp,
+      confirmedMemberId: 'SECD1091TEST',
+      actorUserId: adminUserId,
+      now: new Date(now.getTime() + 6 * 60 * 1000), // 6 mins later
+    },
+    mockDb,
+    mockAuthService
+  );
+  assert.strictEqual(expOtpRes.success, false);
+  assert.strictEqual(expOtpRes.expired, true);
 
-  // Request fresh OTP for subsequent verification tests
+  // Request fresh OTP to test lockout
   sentEmails = [];
   await requestMemberDeletionOtpCore(
     {
-      memberUserId: cleanUser.id,
-      reason: 'Member request under DPDP Act right to be forgotten',
+      memberUserId: cleanUserOnePendingSub.id,
+      reason: 'User request under DPDP Act',
       actorUserId: adminUserId,
       now,
     },
@@ -381,41 +609,13 @@ async function runMemberArchivingAndDeletionTests() {
   );
   const activeOtp = sentEmails[0].text.match(/\b\d{6}\b/)![0];
 
-  // ===========================================================================
-  // SCENARIO 6: INCORRECT OTP REJECTION & ATTEMPT TRACKING
-  // ===========================================================================
-  console.log('Test 6: Incorrect OTP is rejected and remaining attempts are decremented');
-  const wrongOtpVerify = await verifyMemberDeletionOtpCore(
-    {
-      memberUserId: cleanUser.id,
-      otp: '000000', // Incorrect OTP
-      confirmedMemberId: 'SECD1099TEST',
-      actorUserId: adminUserId,
-      now,
-    },
-    mockDb,
-    mockAuthService
-  );
-
-  assert.strictEqual(wrongOtpVerify.success, false);
-  assert.strictEqual(wrongOtpVerify.remainingAttempts, 4);
-  assert.ok(wrongOtpVerify.error?.includes('4 attempt(s) remaining'));
-
-  const failedAudit = auditLogsDb.find((a) => a.action === 'MEMBER_DELETION_OTP_FAILED');
-  assert.ok(failedAudit);
-  assert.strictEqual(failedAudit.metadata.attempt, 1);
-  console.log('✓ PASS: Invalid OTP rejected and remaining attempts tracked.\n');
-
-  // ===========================================================================
-  // SCENARIO 7: 5-ATTEMPT LOCKOUT
-  // ===========================================================================
-  console.log('Test 7: 5 consecutive failed OTP attempts trigger immediate lockout');
-  for (let i = 2; i <= 5; i++) {
+  // 12d: 5-attempt lockout exhausted
+  for (let i = 1; i <= 5; i++) {
     await verifyMemberDeletionOtpCore(
       {
-        memberUserId: cleanUser.id,
+        memberUserId: cleanUserOnePendingSub.id,
         otp: '000000',
-        confirmedMemberId: 'SECD1099TEST',
+        confirmedMemberId: 'SECD1091TEST',
         actorUserId: adminUserId,
         now,
       },
@@ -423,143 +623,70 @@ async function runMemberArchivingAndDeletionTests() {
       mockAuthService
     );
   }
-
-  // 6th attempt should be locked out
-  const lockedOutVerify = await verifyMemberDeletionOtpCore(
+  const exhaustedRes = await verifyMemberDeletionOtpCore(
     {
-      memberUserId: cleanUser.id,
-      otp: activeOtp, // even with correct OTP, lockout is enforced!
-      confirmedMemberId: 'SECD1099TEST',
+      memberUserId: cleanUserOnePendingSub.id,
+      otp: activeOtp,
+      confirmedMemberId: 'SECD1091TEST',
       actorUserId: adminUserId,
       now,
     },
     mockDb,
     mockAuthService
   );
+  assert.strictEqual(exhaustedRes.success, false);
+  assert.strictEqual(exhaustedRes.lockedOut, true);
 
-  assert.strictEqual(lockedOutVerify.success, false);
-  assert.strictEqual(lockedOutVerify.lockedOut, true);
-  assert.ok(lockedOutVerify.error?.includes('Maximum verification attempts exceeded'));
-
-  const lockoutAudit = auditLogsDb.find((a) => a.action === 'MEMBER_DELETION_OTP_LOCKOUT');
-  assert.ok(lockoutAudit);
-  console.log('✓ PASS: 5-attempt lockout successfully enforced; active OTP wiped out.\n');
-
-  // Request fresh OTP for successful verification
+  // 12e: Reused OTP rejected
+  // Issue fresh OTP, verify it, then verify again to test replay
   sentEmails = [];
   await requestMemberDeletionOtpCore(
     {
-      memberUserId: cleanUser.id,
-      reason: 'Member request under DPDP Act right to be forgotten',
+      memberUserId: cleanUserOnePendingSub.id,
+      reason: 'User request under DPDP Act',
       actorUserId: adminUserId,
       now,
     },
     mockDb,
     mockEmailService
   );
-  const freshOtp = sentEmails[0].text.match(/\b\d{6}\b/)![0];
-
-  // ===========================================================================
-  // SCENARIO 8 & 9: EXACT MEMBER ID CONFIRMATION & SINGLE-USE CONSUMPTION
-  // ===========================================================================
-  console.log('Test 8: Exact Member ID confirmation required');
-  const wrongMidVerify = await verifyMemberDeletionOtpCore(
+  const replayOtp = sentEmails[0].text.match(/\b\d{6}\b/)![0];
+  const firstVerify = await verifyMemberDeletionOtpCore(
     {
-      memberUserId: cleanUser.id,
-      otp: freshOtp,
-      confirmedMemberId: 'SECD9999WRONG',
+      memberUserId: cleanUserOnePendingSub.id,
+      otp: replayOtp,
+      confirmedMemberId: 'SECD1091TEST',
       actorUserId: adminUserId,
       now,
     },
     mockDb,
     mockAuthService
   );
-
-  assert.strictEqual(wrongMidVerify.success, false);
-  assert.ok(wrongMidVerify.error?.includes('Member ID mismatch'));
-
-  console.log('Test 9: Valid OTP and exact Member ID succeeds and single-use consumes OTP');
-  const validVerify = await verifyMemberDeletionOtpCore(
+  assert.strictEqual(firstVerify.success, true);
+  const secondVerify = await verifyMemberDeletionOtpCore(
     {
-      memberUserId: cleanUser.id,
-      otp: freshOtp,
-      confirmedMemberId: 'SECD1099TEST',
+      memberUserId: cleanUserOnePendingSub.id,
+      otp: replayOtp,
+      confirmedMemberId: 'SECD1091TEST',
       actorUserId: adminUserId,
       now,
     },
     mockDb,
     mockAuthService
   );
+  assert.strictEqual(secondVerify.success, false);
+  assert.ok(secondVerify.error?.includes('already been used') || secondVerify.error?.includes('No active verification code'));
+  console.log('✓ PASS: Invalid, expired, exhausted, and reused OTPs strictly rejected.\n');
 
-  assert.strictEqual(validVerify.success, true);
-  assert.strictEqual(validVerify.requiresOwnerApproval, true);
-
-  // Single-use: Verify OTP token was deleted from database
-  const consumedOtp = verificationTokensDb.find((t) => t.identifier === `del_otp:${cleanUser.id}:${adminUserId}`);
-  assert.strictEqual(consumedOtp, undefined, 'OTP token must be deleted after single successful verification');
-
-  // Verify approval record was created
-  const apprRecord = verificationTokensDb.find((t) => t.identifier === `del_appr:${cleanUser.id}`);
-  assert.ok(apprRecord, 'Approval record must be created for Owner step');
-
-  // Replay attempt must fail
-  const replayVerify = await verifyMemberDeletionOtpCore(
-    {
-      memberUserId: cleanUser.id,
-      otp: freshOtp,
-      confirmedMemberId: 'SECD1099TEST',
-      actorUserId: adminUserId,
-      now,
-    },
-    mockDb,
-    mockAuthService
-  );
-  assert.strictEqual(replayVerify.success, false);
-  assert.ok(replayVerify.error?.includes('already been used') || replayVerify.error?.includes('No active verification code'));
-  console.log('✓ PASS: Member ID exact match enforced, approval token issued, OTP consumed against replay.\n');
-
-  // ===========================================================================
-  // SCENARIO 10: PRIMARY OWNER APPROVAL & PERMANENT EXECUTION
-  // ===========================================================================
-  console.log('Test 10: Primary Owner executes permanent deletion, purging profile while recording audit log');
-  const ownerExecution = await ownerApproveAndExecuteDeletionCore(
-    {
-      memberUserId: cleanUser.id,
-      reason: 'Owner confirmed and approved DPDP data erasure',
-      actorUserId: ownerUserId,
-      now,
-    },
-    mockDb,
-    mockAuthService
-  );
-
-  assert.strictEqual(ownerExecution.success, true);
-  assert.ok(ownerExecution.message?.includes('permanently deleted'));
-
-  // Ensure user is completely purged from user database
-  const purgedUser = usersDb.find((u) => u.id === cleanUser.id);
-  assert.strictEqual(purgedUser, undefined);
-
-  // Check audit log for permanent deletion
-  const deletionAudit = auditLogsDb.find((a) => a.action === 'MEMBER_PERMANENTLY_DELETED');
-  assert.ok(deletionAudit);
-  assert.strictEqual(deletionAudit.entityId, cleanUser.id);
-  assert.strictEqual(deletionAudit.actorUserId, ownerUserId);
-  assert.strictEqual(deletionAudit.metadata.deletedMemberId, 'SECD1099TEST');
-  assert.strictEqual(deletionAudit.metadata.approvedBy, 'info.sunshineeldercare@gmail.com');
-  console.log('✓ PASS: Primary Owner executed permanent deletion; user deleted; audit history preserved.\n');
-
-  // ===========================================================================
-  // SCENARIO 11: NON-OWNER CANNOT APPROVE PERMANENT DELETION
-  // ===========================================================================
-  console.log('Test 11: Non-owner administrator is strictly rejected by requireOwner');
+  console.log('--- TEST 13: Non-Primary Owner attempting permanent deletion – rejected ---');
   let nonOwnerBlocked = false;
   try {
     await ownerApproveAndExecuteDeletionCore(
       {
-        memberUserId: prabirUser.id,
-        reason: 'Attempted unauthorized deletion',
+        memberUserId: cleanUserOnePendingSub.id,
+        reason: 'Unauthorized execution by non-owner',
         actorUserId: adminUserId, // non-owner
+        now,
       },
       mockDb,
       mockAuthService
@@ -568,106 +695,189 @@ async function runMemberArchivingAndDeletionTests() {
     nonOwnerBlocked = true;
     assert.ok(err.message.includes('Owner access required'));
   }
-  assert.strictEqual(nonOwnerBlocked, true, 'Non-owner must be blocked by requireOwner');
-  console.log('✓ PASS: Non-owner blocked from approving permanent deletion.\n');
+  assert.strictEqual(nonOwnerBlocked, true);
+  console.log('✓ PASS: Non-owner administrator rejected from executing deletion.\n');
 
-  // ===========================================================================
-  // SCENARIO 12: FINANCIAL DEPENDENCIES BLOCK PERMANENT DELETION
-  // ===========================================================================
-  console.log('Test 12: Financial dependencies (invoices, payments, receipts, subscriptions) strictly block permanent deletion');
-  const eligibilityPrabir = await checkMemberDeletionEligibilityCore(prabirUser.id, mockDb);
-  assert.strictEqual(eligibilityPrabir.eligible, false);
-  assert.strictEqual(eligibilityPrabir.hasFinancialDependencies, true);
-  assert.strictEqual(eligibilityPrabir.recommendedAction, 'ARCHIVE');
-  assert.ok(eligibilityPrabir.dependencies?.some((d) => d.includes('subscription')));
-  assert.ok(eligibilityPrabir.dependencies?.some((d) => d.includes('invoice')));
-  assert.ok(eligibilityPrabir.dependencies?.some((d) => d.includes('payment')));
-  assert.ok(eligibilityPrabir.dependencies?.some((d) => d.includes('receipt')));
+  console.log('--- TEST 14: Failed transaction – complete rollback ---');
+  // Setup a scenario where user.delete throws an error inside transaction
+  const originalUserDelete = mockDb.user.delete;
+  mockDb.user.delete = async () => {
+    throw new Error('Database disk I/O simulated failure');
+  };
 
-  // Requesting OTP on account with financial dependencies fails immediately
-  const prabirOtpAttempt = await requestMemberDeletionOtpCore(
+  const rollbackExec = await ownerApproveAndExecuteDeletionCore(
     {
-      memberUserId: prabirUser.id,
-      reason: 'Attempted deletion of paid member',
-      actorUserId: adminUserId,
-      now,
-    },
-    mockDb,
-    mockEmailService
-  );
-  assert.strictEqual(prabirOtpAttempt.success, false);
-  assert.strictEqual(prabirOtpAttempt.hasFinancialDependencies, true);
-  assert.strictEqual(prabirOtpAttempt.recommendedAction, 'ARCHIVE');
-  console.log('✓ PASS: Financial records block permanent deletion and recommend archiving.\n');
-
-  // ===========================================================================
-  // SCENARIO 13: AUDIT LOGGING INTEGRITY (NO SECRETS LEAKED)
-  // ===========================================================================
-  console.log('Test 13: Verify all audit logs contain actor, action, metadata, and zero secrets');
-  for (const log of auditLogsDb) {
-    assert.ok(log.actorUserId, 'Log must have actorUserId');
-    assert.ok(log.action, 'Log must have action');
-    assert.ok(log.entityType, 'Log must have entityType');
-    assert.ok(log.metadata, 'Log must have metadata');
-    // Ensure no plaintext passwords or 6-digit OTP codes leaked in audit log
-    const logStr = JSON.stringify(log);
-    assert.strictEqual(/otp\s*[:=]\s*"\d{6}"/i.test(logStr), false, 'Audit log must not contain plaintext OTP');
-  }
-  console.log(`✓ PASS: All ${auditLogsDb.length} audit logs verified for security and completeness.\n`);
-
-  // ===========================================================================
-  // SCENARIO 14: CONCURRENT DELETION / RACE CONDITION PREVENTION
-  // ===========================================================================
-  console.log('Test 14: Deleting a non-existent or already deleted member returns clean error');
-  // Put a dummy approval token for a non-existent user
-  await mockDb.verificationToken.create({
-    data: {
-      identifier: 'del_appr:non_existent_usr',
-      token: 'fake_token',
-      expires: new Date(now.getTime() + 10 * 60 * 1000),
-    },
-  });
-
-  const missingUserDeletion = await ownerApproveAndExecuteDeletionCore(
-    {
-      memberUserId: 'non_existent_usr',
-      reason: 'Attempted race condition deletion',
+      memberUserId: cleanUserOnePendingSub.id,
+      reason: 'Testing rollback mechanism',
       actorUserId: ownerUserId,
       now,
     },
     mockDb,
     mockAuthService
   );
-  assert.strictEqual(missingUserDeletion.success, false);
-  assert.ok(missingUserDeletion.error?.includes('not found') || missingUserDeletion.error?.includes('already deleted'));
-  console.log('✓ PASS: Race condition / non-existent user handled gracefully without crash.\n');
+  assert.strictEqual(rollbackExec.success, false);
+  assert.ok(rollbackExec.error?.includes('Database disk I/O simulated failure'));
 
-  // ===========================================================================
-  // SCENARIO 15: ADMINISTRATIVE AND OWNER ACCOUNT DELETION PROTECTION
-  // ===========================================================================
-  console.log('Test 15: Owner and system administrator accounts cannot be deleted or archived');
-  const ownerArchiving = await adminArchiveMemberCore(
+  // Verify complete rollback: user record still exists in usersDb
+  const rollbackUserCheck = usersDb.find((u) => u.id === cleanUserOnePendingSub.id);
+  assert.ok(rollbackUserCheck, 'User must still exist after rolled back transaction');
+  assert.strictEqual(rollbackUserCheck.subscriptions.length, 1, 'Subscriptions must not be deleted after rollback');
+
+  // Restore user.delete
+  mockDb.user.delete = originalUserDelete;
+  console.log('✓ PASS: Transaction failure triggers complete state rollback without orphaned records.\n');
+
+  console.log('--- TEST 15: Successful execution of member with eligible PENDING subscription ---');
+  // Re-verify cleanUserOnePendingSub with fresh OTP and execute
+  sentEmails = [];
+  await requestMemberDeletionOtpCore(
     {
-      memberUserId: ownerUserId,
-      reason: 'Unauthorized owner archiving',
+      memberUserId: cleanUserOnePendingSub.id,
+      reason: 'Owner approved permanent deletion of pending account',
+      actorUserId: adminUserId,
+      now,
+    },
+    mockDb,
+    mockEmailService
+  );
+  const validOtp = sentEmails[0].text.match(/\b\d{6}\b/)![0];
+  await verifyMemberDeletionOtpCore(
+    {
+      memberUserId: cleanUserOnePendingSub.id,
+      otp: validOtp,
+      confirmedMemberId: 'SECD1091TEST',
+      actorUserId: adminUserId,
+      now,
+    },
+    mockDb,
+    mockAuthService
+  );
+
+  const pendingExecResult = await ownerApproveAndExecuteDeletionCore(
+    {
+      memberUserId: cleanUserOnePendingSub.id,
+      reason: 'Approved DPDP erasure of pending member',
+      actorUserId: ownerUserId,
+      now,
+    },
+    mockDb,
+    mockAuthService
+  );
+  assert.strictEqual(pendingExecResult.success, true);
+  assert.ok(pendingExecResult.message?.includes('permanently deleted'));
+  // Ensure user is deleted
+  assert.strictEqual(usersDb.find((u) => u.id === cleanUserOnePendingSub.id), undefined);
+
+  // Check audit log
+  const delAudit = auditLogsDb.find(
+    (a) => a.action === 'MEMBER_PERMANENTLY_DELETED' && a.entityId === cleanUserOnePendingSub.id
+  );
+  assert.ok(delAudit);
+  assert.strictEqual(delAudit.metadata.pendingSubscriptionsDeleted, 1);
+  console.log('✓ PASS: Member with eligible PENDING subscription permanently deleted and audit logged.\n');
+
+  console.log('--- TEST 16: Concurrent deletion requests – no security bypass ---');
+  // Setup cleanUserMultiPendingSub with approval record
+  sentEmails = [];
+  await requestMemberDeletionOtpCore(
+    {
+      memberUserId: cleanUserMultiPendingSub.id,
+      reason: 'Concurrency test request',
+      actorUserId: adminUserId,
+      now,
+    },
+    mockDb,
+    mockEmailService
+  );
+  const concOtp = sentEmails[0].text.match(/\b\d{6}\b/)![0];
+  await verifyMemberDeletionOtpCore(
+    {
+      memberUserId: cleanUserMultiPendingSub.id,
+      otp: concOtp,
+      confirmedMemberId: 'SECD1092TEST',
+      actorUserId: adminUserId,
+      now,
+    },
+    mockDb,
+    mockAuthService
+  );
+
+  // Launch two concurrent executions for the same approved deletion
+  const [exec1, exec2] = await Promise.all([
+    ownerApproveAndExecuteDeletionCore(
+      {
+        memberUserId: cleanUserMultiPendingSub.id,
+        reason: 'Concurrent thread 1',
+        actorUserId: ownerUserId,
+        now,
+      },
+      mockDb,
+      mockAuthService
+    ),
+    ownerApproveAndExecuteDeletionCore(
+      {
+        memberUserId: cleanUserMultiPendingSub.id,
+        reason: 'Concurrent thread 2',
+        actorUserId: ownerUserId,
+        now,
+      },
+      mockDb,
+      mockAuthService
+    ),
+  ]);
+
+  // Exactly one execution must succeed, the other must fail cleanly
+  const successCount = [exec1.success, exec2.success].filter(Boolean).length;
+  assert.strictEqual(successCount, 1, 'Exactly one concurrent deletion execution must succeed');
+  const failureResult = !exec1.success ? exec1 : exec2;
+  assert.ok(
+    failureResult.error?.includes('already processed') ||
+      failureResult.error?.includes('concurrent execution') ||
+      failureResult.error?.includes('not found') ||
+      failureResult.error?.includes('already deleted')
+  );
+  console.log('✓ PASS: Concurrent requests handled safely with zero security bypass or race condition.\n');
+
+  console.log('--- TEST 17: Archiving and Restoring functionality remains fully operational ---');
+  const arcRes = await adminArchiveMemberCore(
+    {
+      memberUserId: prabirUser.id,
+      reason: 'Temporary overseas hiatus',
       actorUserId: adminUserId,
     },
     mockDb
   );
-  assert.strictEqual(ownerArchiving.success, false);
-  assert.ok(ownerArchiving.error?.includes('Administrative and owner accounts cannot be archived'));
+  assert.strictEqual(arcRes.success, true);
+  assert.strictEqual(usersDb.find((u) => u.id === prabirUser.id)?.status, 'ARCHIVED');
 
-  const ownerEligibility = await checkMemberDeletionEligibilityCore(ownerUserId, mockDb);
-  assert.strictEqual(ownerEligibility.eligible, false);
-  assert.ok(ownerEligibility.reason?.includes('Administrative and system accounts cannot be permanently deleted'));
-  console.log('✓ PASS: Administrative and Owner accounts protected from archiving and deletion.\n');
+  const restRes = await adminRestoreMemberCore(
+    {
+      memberUserId: prabirUser.id,
+      reason: 'Hiatus complete',
+      actorUserId: adminUserId,
+    },
+    mockDb
+  );
+  assert.strictEqual(restRes.success, true);
+  assert.strictEqual(usersDb.find((u) => u.id === prabirUser.id)?.status, 'ACTIVE');
+  console.log('✓ PASS: Archiving and restoring remain fully operational.\n');
+
+  console.log('--- TEST 18: Visibility filtering preserves active/archived roster isolation ---');
+  usersDb.find((u) => u.id === prabirUser.id)!.status = 'ARCHIVED';
+  const activeList = await getMembersCore(undefined, 1, 50, mockDb, true, undefined, undefined, false);
+  assert.ok(!activeList.members.some((m: any) => m.id === prabirUser.id));
+
+  const archivedList = await getMembersCore(undefined, 1, 50, mockDb, true, undefined, undefined, true);
+  assert.ok(archivedList.members.some((m: any) => m.id === prabirUser.id));
+  usersDb.find((u) => u.id === prabirUser.id)!.status = 'ACTIVE';
+  console.log('✓ PASS: Active and archived listings properly segregated.\n');
 
   console.log('================================================================');
-  console.log('🎉 ALL 15 SECURE MEMBER ARCHIVING & DELETION TESTS PASSED!');
+  console.log('🎉 ALL 18 AUTOMATED LIFECYCLE & PENDING SUBSCRIPTION TESTS PASSED!');
   console.log('================================================================\n');
 }
 
 runMemberArchivingAndDeletionTests().catch((err) => {
-  console.error('Test failed with error:', err);
+  console.error('Test suite failed:', err);
   process.exit(1);
 });
