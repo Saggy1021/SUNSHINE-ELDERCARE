@@ -140,13 +140,14 @@ export class RateLimitService {
     const isProduction = process.env.NODE_ENV === 'production';
     const hasUpstash = !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN;
 
-    if (isProduction || hasUpstash) {
-      if (!hasUpstash) {
-        throw new ConfigurationError('Upstash Redis configuration is missing in production environment.');
-      }
+    if (hasUpstash) {
       this.storeInstance = new UpstashRedisRateLimitStore();
     } else {
-      logger.warn('Using in-memory rate limiter. This is unsafe for multi-instance deployments.');
+      if (isProduction) {
+        logger.warn('UPSTASH_REDIS_REST_URL not configured. Using in-memory rate limiter in production.');
+      } else {
+        logger.warn('Using in-memory rate limiter. This is unsafe for multi-instance deployments.');
+      }
       this.storeInstance = new InMemoryRateLimitStore();
     }
 
