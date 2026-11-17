@@ -53,6 +53,7 @@ export function SearchableMemberSelect({
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const searchRequestId = useRef(0);
+  const searchCacheRef = useRef<Map<string, ScheduleMemberSearchResult[]>>(new Map());
 
   // Sync initial selection from props or initialCases
   useEffect(() => {
@@ -98,7 +99,7 @@ export function SearchableMemberSelect({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Debounced server search with stale-response protection
+  // Debounced server search with immediate client caching and stale-response protection
   useEffect(() => {
     if (!isOpen) return;
 
@@ -122,6 +123,17 @@ export function SearchableMemberSelect({
       return;
     }
 
+    const cacheKey = trimmed.toLowerCase();
+
+    // Instant cache hit: display immediately with 0ms network latency
+    if (searchCacheRef.current.has(cacheKey)) {
+      const cached = searchCacheRef.current.get(cacheKey)!;
+      setResults(cached);
+      setHighlightedIndex(cached.length > 0 ? 0 : -1);
+      setIsSearching(false);
+      return;
+    }
+
     setIsSearching(true);
     const thisRequestId = ++searchRequestId.current;
 
@@ -129,6 +141,14 @@ export function SearchableMemberSelect({
       startTransition(async () => {
         try {
           const data = await searchScheduleMembers(trimmed);
+
+          // Cache recent results safely (cap at 100 queries)
+          if (searchCacheRef.current.size >= 100) {
+            const oldest = searchCacheRef.current.keys().next().value;
+            if (oldest) searchCacheRef.current.delete(oldest);
+          }
+          searchCacheRef.current.set(cacheKey, data);
+
           if (thisRequestId === searchRequestId.current) {
             setResults(data);
             setHighlightedIndex(data.length > 0 ? 0 : -1);
@@ -141,7 +161,7 @@ export function SearchableMemberSelect({
           }
         }
       });
-    }, 250);
+    }, 150);
 
     return () => clearTimeout(timeout);
   }, [query, isOpen, initialCases]);

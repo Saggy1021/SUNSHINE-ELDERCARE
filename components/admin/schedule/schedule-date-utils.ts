@@ -270,7 +270,7 @@ export function formatWeekRangeDisplay(days: Date[]): string {
  */
 export function formatPlanDisplay(sub?: any): string {
   if (!sub) return "No service plan recorded";
-  const planName = sub.carePlan?.name || sub.plan?.name || sub.customPlan?.title;
+  const planName = sub.carePlan?.name || sub.plan?.name || sub.customPlan?.title || sub.customPlan?.name;
   if (!planName) return "No service plan recorded";
 
   let durationStr = "";

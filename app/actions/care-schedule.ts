@@ -2,6 +2,7 @@
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
+import { Prisma } from "@prisma/client";
 import { AuthorizationService } from "@/lib/services/authorization";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { revalidatePath } from "next/cache";
@@ -540,6 +541,7 @@ export async function getEmployeeAvailability(params: {
 /**
  * Server-side searchable member / care case autocomplete action.
  * Allows searching by member name, member ID (canonical SECD...), service address, and elder/care recipient name.
+ * Optimized with single-roundtrip parameterized SQL join, eliminating N+1 waterfall queries.
  * Returns the 5 mandatory fields: Member Name, Member ID, Full Service Address, Primary Mobile Number, and Subscribed Plan with duration.
  */
 export async function searchScheduleMembers(query: string = ""): Promise<ScheduleMemberSearchResult[]> {
@@ -548,152 +550,162 @@ export async function searchScheduleMembers(query: string = ""): Promise<Schedul
   const q = (query || "").trim();
   const terms = q.split(/\s+/).filter(Boolean);
 
-  let whereCase: any = { status: "ACTIVE" };
-  if (terms.length > 0) {
-    whereCase = {
-      status: "ACTIVE",
-      AND: terms.map((term) => ({
-        OR: [
-          { elder: { firstName: { contains: term, mode: "insensitive" } } },
-          { elder: { lastName: { contains: term, mode: "insensitive" } } },
-          { elder: { address: { contains: term, mode: "insensitive" } } },
-          { elder: { user: { name: { contains: term, mode: "insensitive" } } } },
-          { elder: { user: { memberProfile: { memberId: { contains: term, mode: "insensitive" } } } } },
-          { elder: { user: { memberProfile: { firstName: { contains: term, mode: "insensitive" } } } } },
-          { elder: { user: { memberProfile: { lastName: { contains: term, mode: "insensitive" } } } } },
-          { elder: { user: { memberProfile: { serviceAddress: { contains: term, mode: "insensitive" } } } } },
-        ],
-      })),
+  const caseTermConditions = terms.map((t) => {
+    const pattern = `%${t}%`;
+    return Prisma.sql`(
+      e."firstName" ILIKE ${pattern} OR
+      e."lastName" ILIKE ${pattern} OR
+      e.address ILIKE ${pattern} OR
+      u.name ILIKE ${pattern} OR
+      mp."memberId" ILIKE ${pattern} OR
+      mp."firstName" ILIKE ${pattern} OR
+      mp."lastName" ILIKE ${pattern} OR
+      mp."serviceAddress" ILIKE ${pattern}
+    )`;
+  });
+
+  const caseWhere =
+    caseTermConditions.length > 0
+      ? Prisma.sql`cc.status = 'ACTIVE' AND ${Prisma.join(caseTermConditions, " AND ")}`
+      : Prisma.sql`cc.status = 'ACTIVE'`;
+
+  const subTermConditions = terms.map((t) => {
+    const pattern = `%${t}%`;
+    return Prisma.sql`(
+      u.name ILIKE ${pattern} OR
+      mp."memberId" ILIKE ${pattern} OR
+      mp."firstName" ILIKE ${pattern} OR
+      mp."lastName" ILIKE ${pattern} OR
+      mp."serviceAddress" ILIKE ${pattern} OR
+      EXISTS (
+        SELECT 1 FROM "Elder" sub_e 
+        WHERE sub_e."userId" = u.id AND (
+          sub_e."firstName" ILIKE ${pattern} OR 
+          sub_e."lastName" ILIKE ${pattern} OR 
+          sub_e.address ILIKE ${pattern}
+        )
+      )
+    )`;
+  });
+
+  const subWhere =
+    subTermConditions.length > 0
+      ? Prisma.sql`s.status = 'ACTIVE' AND NOT EXISTS (SELECT 1 FROM "CareCase" cc_sub WHERE cc_sub."subscriptionId" = s.id) AND ${Prisma.join(subTermConditions, " AND ")}`
+      : Prisma.sql`s.status = 'ACTIVE' AND NOT EXISTS (SELECT 1 FROM "CareCase" cc_sub WHERE cc_sub."subscriptionId" = s.id)`;
+
+  const querySql = Prisma.sql`
+    SELECT * FROM (
+      SELECT 
+        cc.id AS "id",
+        cc.id AS "careCaseId",
+        false AS "isNewSub",
+        e.id AS "elderId",
+        e."firstName" AS "elderFirstName",
+        e."lastName" AS "elderLastName",
+        e.address AS "elderAddress",
+        u.name AS "userName",
+        mp."memberId" AS "canonicalMemberId",
+        mp."firstName" AS "profileFirstName",
+        mp."lastName" AS "profileLastName",
+        mp."serviceAddress" AS "profileServiceAddress",
+        mp."mobileNumber" AS "profileMobile",
+        sub.id AS "subscriptionId",
+        sub."durationMonths" AS "subDurationMonths",
+        sub."startDate" AS "subStartDate",
+        sub."endDate" AS "subEndDate",
+        cp.name AS "carePlanName",
+        p.name AS "planName",
+        cust.name AS "customPlanName",
+        cc."createdAt" AS "createdAt"
+      FROM "CareCase" cc
+      JOIN "Elder" e ON cc."elderId" = e.id
+      JOIN "User" u ON e."userId" = u.id
+      LEFT JOIN "MemberProfile" mp ON mp."userId" = u.id
+      LEFT JOIN "Subscription" sub ON cc."subscriptionId" = sub.id
+      LEFT JOIN "CarePlan" cp ON sub."carePlanId" = cp.id
+      LEFT JOIN "Plan" p ON sub."planId" = p.id
+      LEFT JOIN "CustomPlanAgreement" cust ON sub."customPlanId" = cust.id
+      WHERE ${caseWhere}
+
+      UNION ALL
+
+      SELECT 
+        CONCAT('new_sub_', s.id) AS "id",
+        CONCAT('new_sub_', s.id) AS "careCaseId",
+        true AS "isNewSub",
+        e.id AS "elderId",
+        e."firstName" AS "elderFirstName",
+        e."lastName" AS "elderLastName",
+        e.address AS "elderAddress",
+        u.name AS "userName",
+        mp."memberId" AS "canonicalMemberId",
+        mp."firstName" AS "profileFirstName",
+        mp."lastName" AS "profileLastName",
+        mp."serviceAddress" AS "profileServiceAddress",
+        mp."mobileNumber" AS "profileMobile",
+        s.id AS "subscriptionId",
+        s."durationMonths" AS "subDurationMonths",
+        s."startDate" AS "subStartDate",
+        s."endDate" AS "subEndDate",
+        cp.name AS "carePlanName",
+        p.name AS "planName",
+        cust.name AS "customPlanName",
+        s."createdAt" AS "createdAt"
+      FROM "Subscription" s
+      JOIN "User" u ON s."userId" = u.id
+      LEFT JOIN "MemberProfile" mp ON mp."userId" = u.id
+      LEFT JOIN "Elder" e ON e."userId" = u.id
+      LEFT JOIN "CarePlan" cp ON s."carePlanId" = cp.id
+      LEFT JOIN "Plan" p ON s."planId" = p.id
+      LEFT JOIN "CustomPlanAgreement" cust ON s."customPlanId" = cust.id
+      WHERE ${subWhere}
+    ) combined
+    ORDER BY "createdAt" DESC
+    LIMIT 30
+  `;
+
+  const rows: any[] = await db.$queryRaw(querySql);
+
+  return rows.map((r) => {
+    const elderName = r.elderFirstName
+      ? `${r.elderFirstName} ${r.elderLastName || ""}`.trim()
+      : r.userName || "Care Recipient";
+    const memberName =
+      (r.profileFirstName ? `${r.profileFirstName} ${r.profileLastName || ""}`.trim() : r.userName) ||
+      elderName;
+    const memberId = r.canonicalMemberId || "Not assigned";
+    const serviceAddress = r.profileServiceAddress || r.elderAddress || "Not available";
+    const primaryMobile = r.profileMobile || "Not available";
+    const subscribedPlan = formatPlanDisplay({
+      durationMonths: r.subDurationMonths,
+      startDate: r.subStartDate,
+      endDate: r.subEndDate,
+      carePlan: r.carePlanName ? { name: r.carePlanName } : null,
+      plan: r.planName ? { name: r.planName } : null,
+      customPlan: r.customPlanName ? { title: r.customPlanName, name: r.customPlanName } : null,
+    });
+    const tag = r.isNewSub ? " [New Case]" : "";
+    const label = `${memberName}${memberId !== "Not assigned" ? ` (${memberId})` : ""}${tag} – ${subscribedPlan}`;
+
+    return {
+      id: r.id,
+      careCaseId: r.careCaseId,
+      memberId,
+      memberName,
+      serviceAddress,
+      primaryMobile,
+      subscribedPlan,
+      elderName,
+      elderId: r.elderId,
+      label,
     };
-  }
-
-  let whereSub: any = {
-    status: "ACTIVE",
-    careCases: { none: {} },
-  };
-  if (terms.length > 0) {
-    whereSub.AND = terms.map((term) => ({
-      OR: [
-        { user: { name: { contains: term, mode: "insensitive" } } },
-        { user: { memberProfile: { memberId: { contains: term, mode: "insensitive" } } } },
-        { user: { memberProfile: { firstName: { contains: term, mode: "insensitive" } } } },
-        { user: { memberProfile: { lastName: { contains: term, mode: "insensitive" } } } },
-        { user: { memberProfile: { serviceAddress: { contains: term, mode: "insensitive" } } } },
-        { user: { elders: { some: { firstName: { contains: term, mode: "insensitive" } } } } },
-        { user: { elders: { some: { lastName: { contains: term, mode: "insensitive" } } } } },
-      ],
-    }));
-  }
-
-  const [activeCases, activeSubs] = await Promise.all([
-    db.careCase.findMany({
-      where: whereCase,
-      include: {
-        elder: {
-          include: {
-            user: {
-              include: {
-                memberProfile: true,
-                subscriptions: {
-                  where: { status: "ACTIVE" },
-                  include: { carePlan: true, plan: true, customPlan: true },
-                  orderBy: { createdAt: "desc" },
-                },
-              },
-            },
-          },
-        },
-        subscription: {
-          include: { carePlan: true, plan: true, customPlan: true },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 25,
-    }),
-    db.subscription.findMany({
-      where: whereSub,
-      include: {
-        carePlan: true,
-        plan: true,
-        customPlan: true,
-        user: {
-          include: {
-            memberProfile: true,
-            elders: true,
-          },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 15,
-    }),
-  ]);
-
-  const results: ScheduleMemberSearchResult[] = [];
-
-  for (const c of activeCases) {
-    const member = c.elder?.user;
-    const profile = member?.memberProfile;
-    const elder = c.elder;
-    const elderName = elder ? `${elder.firstName} ${elder.lastName}`.trim() : "Care Recipient";
-    const memberName =
-      (profile?.firstName ? `${profile.firstName} ${profile.lastName}`.trim() : member?.name) || elderName;
-    const memberId = profile?.memberId || "Not assigned";
-    const serviceAddress = profile?.serviceAddress || elder?.address || "Not available";
-    const primaryMobile = profile?.mobileNumber || "Not available";
-
-    const sub = c.subscription || member?.subscriptions?.[0];
-    const subscribedPlan = formatPlanDisplay(sub);
-
-    const label = `${memberName}${memberId !== "Not assigned" ? ` (${memberId})` : ""} – ${subscribedPlan}`;
-
-    results.push({
-      id: c.id,
-      careCaseId: c.id,
-      memberId,
-      memberName,
-      serviceAddress,
-      primaryMobile,
-      subscribedPlan,
-      elderName,
-      elderId: elder?.id,
-      label,
-    });
-  }
-
-  for (const sub of activeSubs) {
-    const user = sub.user;
-    const profile = user.memberProfile;
-    const elder = user.elders?.[0];
-    const elderName = elder ? `${elder.firstName} ${elder.lastName}`.trim() : user.name || "Care Recipient";
-    const memberName =
-      (profile?.firstName ? `${profile.firstName} ${profile.lastName}`.trim() : user.name) || elderName;
-    const memberId = profile?.memberId || "Not assigned";
-    const serviceAddress = profile?.serviceAddress || elder?.address || "Not available";
-    const primaryMobile = profile?.mobileNumber || "Not available";
-    const subscribedPlan = formatPlanDisplay(sub);
-
-    const label = `${memberName}${memberId !== "Not assigned" ? ` (${memberId})` : ""} [New Case] – ${subscribedPlan}`;
-
-    results.push({
-      id: `new_sub_${sub.id}`,
-      careCaseId: `new_sub_${sub.id}`,
-      memberId,
-      memberName,
-      serviceAddress,
-      primaryMobile,
-      subscribedPlan,
-      elderName,
-      elderId: elder?.id,
-      label,
-    });
-  }
-
-  return results;
+  });
 }
 
 /**
  * Server-side searchable employee selector with real-time availability evaluation in Asia/Kolkata (IST).
  * Allows searching by employee name, employee ID, designation, and department.
+ * Optimized with parallel database execution, minimal field selection, and single-query conflict checking.
  * Real-time availability calculation detects overlapping care visits and marks occupied employees as unavailable.
  */
 export async function searchScheduleEmployees(params: {
@@ -723,46 +735,51 @@ export async function searchScheduleEmployees(params: {
     };
   }
 
-  const employees = await db.employee.findMany({
-    where: whereFilter,
-    orderBy: { firstName: "asc" },
-  });
-
   const scheduledStart = parseISTDateTimeToUTC(params.date, params.startTime);
   const scheduledEnd = parseISTDateTimeToUTC(params.date, params.endTime);
   const isValidInterval =
     !isNaN(scheduledStart.getTime()) && !isNaN(scheduledEnd.getTime()) && scheduledEnd > scheduledStart;
 
-  let blockingVisits: any[] = [];
-  if (isValidInterval) {
-    blockingVisits = await db.careVisit.findMany({
-      where: {
-        id: params.excludeVisitId ? { not: params.excludeVisitId } : undefined,
-        status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] },
-        scheduledStart: { lt: scheduledEnd },
-        scheduledEnd: { gt: scheduledStart },
-      },
-      select: {
-        id: true,
-        assignedEmpId: true,
-        scheduledStart: true,
-        scheduledEnd: true,
-        status: true,
-        assignments: { select: { employeeId: true } },
-        careCase: {
-          select: {
-            elder: {
-              select: {
-                firstName: true,
-                lastName: true,
-                user: { select: { name: true } },
-              },
-            },
-          },
-        },
-      },
-    });
-  }
+  // Run employee query and blocking visits query concurrently in parallel
+  const employeePromise = db.employee.findMany({
+    where: whereFilter,
+    select: {
+      id: true,
+      employeeId: true,
+      firstName: true,
+      lastName: true,
+      designation: true,
+      status: true,
+    },
+    orderBy: { firstName: "asc" },
+    take: 30,
+  });
+
+  const blockingVisitsPromise: Promise<any[]> = isValidInterval
+    ? db.$queryRaw`
+        SELECT 
+          cv.id,
+          cv."assignedEmpId",
+          cv."scheduledStart",
+          cv."scheduledEnd",
+          va."employeeId" AS "assignedRelieverId",
+          COALESCE(u.name, TRIM(CONCAT(e."firstName", ' ', e."lastName")), 'Member') AS "memberName"
+        FROM "CareVisit" cv
+        LEFT JOIN "VisitAssignment" va ON va."visitId" = cv.id
+        LEFT JOIN "CareCase" cc ON cv."careCaseId" = cc.id
+        LEFT JOIN "Elder" e ON cc."elderId" = e.id
+        LEFT JOIN "User" u ON e."userId" = u.id
+        WHERE cv.status IN ('SCHEDULED', 'CONFIRMED', 'IN_PROGRESS')
+          AND cv."scheduledStart" < ${scheduledEnd}
+          AND cv."scheduledEnd" > ${scheduledStart}
+          AND (${params.excludeVisitId || null}::text IS NULL OR cv.id != ${params.excludeVisitId || null})
+      `
+    : Promise.resolve([]);
+
+  const [employees, blockingVisits] = await Promise.all([
+    employeePromise,
+    blockingVisitsPromise,
+  ]);
 
   return employees.map((emp) => {
     if (!isValidInterval) {
@@ -773,7 +790,7 @@ export async function searchScheduleEmployees(params: {
         firstName: emp.firstName,
         lastName: emp.lastName,
         designation: emp.designation,
-        department: (emp as any).department || null,
+        department: null,
         status: emp.status,
         available: false,
         conflictReason: "Invalid visit time range.",
@@ -781,14 +798,10 @@ export async function searchScheduleEmployees(params: {
     }
 
     const conflict = blockingVisits.find(
-      (v) => v.assignedEmpId === emp.id || v.assignments.some((a: any) => a.employeeId === emp.id)
+      (v) => v.assignedEmpId === emp.id || v.assignedRelieverId === emp.id
     );
 
     if (conflict) {
-      const memberName =
-        conflict.careCase?.elder?.user?.name ||
-        `${conflict.careCase?.elder?.firstName || ""} ${conflict.careCase?.elder?.lastName || ""}`.trim() ||
-        "Member";
       const timeStr = `${formatTimeIST(conflict.scheduledStart)} – ${formatTimeIST(conflict.scheduledEnd)}`;
       return {
         id: emp.id,
@@ -797,11 +810,11 @@ export async function searchScheduleEmployees(params: {
         firstName: emp.firstName,
         lastName: emp.lastName,
         designation: emp.designation,
-        department: (emp as any).department || null,
+        department: null,
         status: emp.status,
         available: false,
         conflictTime: timeStr,
-        conflictReason: `Occupied (${timeStr} for ${memberName})`,
+        conflictReason: `Occupied (${timeStr} for ${conflict.memberName})`,
       };
     }
 
@@ -812,7 +825,7 @@ export async function searchScheduleEmployees(params: {
       firstName: emp.firstName,
       lastName: emp.lastName,
       designation: emp.designation,
-      department: (emp as any).department || null,
+      department: null,
       status: emp.status,
       available: true,
     };

@@ -63,6 +63,7 @@ export function SearchableEmployeeSelect({
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const searchRequestId = useRef(0);
+  const empCacheRef = useRef<Map<string, ScheduleEmployeeSearchResult[]>>(new Map());
 
   // Sync initial selection from props or initialEmployees
   useEffect(() => {
@@ -110,11 +111,37 @@ export function SearchableEmployeeSelect({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Recalculate search results & availability whenever query, date, or times change
+  // Recalculate search results & availability with immediate caching and 150ms debounce
   useEffect(() => {
     if (!isOpen && !value) return;
 
     const trimmed = query.trim();
+    const cacheKey = `${trimmed.toLowerCase()}|${date}|${startTime}|${endTime}|${excludeVisitId || ""}`;
+
+    // Instant cache hit: display immediately with 0ms network latency
+    if (empCacheRef.current.has(cacheKey)) {
+      const cached = empCacheRef.current.get(cacheKey)!;
+      setResults(cached);
+      setIsSearching(false);
+
+      if (value) {
+        const currentInResults = cached.find((e) => e.id === value);
+        if (currentInResults) {
+          setSelectedEmp((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  available: currentInResults.available,
+                  conflictTime: currentInResults.conflictTime,
+                  conflictReason: currentInResults.conflictReason,
+                }
+              : currentInResults
+          );
+        }
+      }
+      return;
+    }
+
     setIsSearching(true);
     const thisRequestId = ++searchRequestId.current;
 
@@ -128,6 +155,13 @@ export function SearchableEmployeeSelect({
             endTime,
             excludeVisitId,
           });
+
+          // Cache recent results safely (cap at 100 entries)
+          if (empCacheRef.current.size >= 100) {
+            const oldest = empCacheRef.current.keys().next().value;
+            if (oldest) empCacheRef.current.delete(oldest);
+          }
+          empCacheRef.current.set(cacheKey, data);
 
           if (thisRequestId === searchRequestId.current) {
             setResults(data);
@@ -157,7 +191,7 @@ export function SearchableEmployeeSelect({
           }
         }
       });
-    }, 200);
+    }, 150);
 
     return () => clearTimeout(timeout);
   }, [query, date, startTime, endTime, excludeVisitId, isOpen, value]);

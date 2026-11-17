@@ -234,6 +234,8 @@ model Elder {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model CareAssessment {
@@ -343,6 +345,9 @@ model Subscription {
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
   documents MemberDocument[]
+
+  @@index([userId, status])
+  @@index([status])
 }
 
 model SubscriptionAddOn {
@@ -652,6 +657,8 @@ model Employee {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([status])
 }
 
 model EmployeeSequence {
@@ -812,6 +819,10 @@ model CareCase {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([elderId])
+  @@index([subscriptionId])
 }
 
 model CareAssignment {
@@ -855,6 +866,10 @@ model CareVisit {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([status, scheduledStart, scheduledEnd])
+  @@index([assignedEmpId])
+  @@index([careCaseId])
 }
 
 model CareTask {
