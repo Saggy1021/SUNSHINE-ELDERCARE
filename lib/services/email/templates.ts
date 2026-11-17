@@ -518,3 +518,33 @@ export function memberDeletionOtpEmail(data: {
   const text = `CRITICAL: Member Deletion Verification Code\n\nMember: ${data.memberName} (${data.memberId})\nReason: ${data.reason}\n\nYour 6-digit OTP is: ${data.otp}\n\nExpires in 5 minutes. Single-use only.`
   return { subject, html, text }
 }
+
+export function adminCreationOtpEmail(data: {
+  primaryOwnerName: string
+  proposedAdminName: string
+  proposedAdminEmail: string
+  roleNames: string
+  otp: string
+}): { subject: string; html: string; text: string } {
+  const subject = `CRITICAL: Verification Code for New Admin Creation (${data.proposedAdminEmail})`
+  const html = baseLayout(`
+    ${heading('New Admin Account Authorization')}
+    ${paragraph(`Dear ${data.primaryOwnerName},`)}
+    ${paragraph('A request has been initiated to create a new Administrator account on Sunshine Eldercare:')}
+    <div style="background-color:#eff6ff;border:1px solid #bfdbfe;padding:16px;border-radius:12px;margin:20px 0;">
+      <p style="margin:0 0 8px 0;color:#1e40af;font-weight:700;font-size:14px;letter-spacing:0.5px;">🔒 ADMINISTRATIVE PRIVILEGE NOTICE</p>
+      <p style="margin:0 0 6px 0;color:#1e3a8a;font-size:13px;"><strong>Proposed Admin:</strong> ${data.proposedAdminName}</p>
+      <p style="margin:0 0 6px 0;color:#1e3a8a;font-size:13px;"><strong>Email:</strong> ${data.proposedAdminEmail}</p>
+      <p style="margin:0;color:#1e3a8a;font-size:13px;"><strong>Assigned Roles:</strong> ${data.roleNames}</p>
+    </div>
+    ${paragraph('Enter the 6-digit one-time verification code below to authorize this new administrator account:')}
+    <div style="margin:24px 0;text-align:center;">
+      <span style="display:inline-block;padding:16px 32px;background-color:#f8fafc;color:#091329;font-size:32px;font-weight:700;letter-spacing:8px;border:1px solid #e2e8f0;border-radius:12px;">${data.otp}</span>
+    </div>
+    ${securityNotice('This code expires in 5 minutes and is single-use. This verification code has been dispatched exclusively to the Primary Owner. Do not share this OTP.')}
+    ${paragraph('If you did not initiate this administrator creation request, please investigate your account security immediately.')}
+  `)
+  const text = `CRITICAL: New Admin Creation Verification Code\n\nProposed Admin: ${data.proposedAdminName} (${data.proposedAdminEmail})\nRoles: ${data.roleNames}\n\nYour 6-digit OTP is: ${data.otp}\n\nExpires in 5 minutes. Dispatched exclusively to Primary Owner. Single-use only.`
+  return { subject, html, text }
+}
+

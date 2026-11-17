@@ -4,19 +4,22 @@ import { useState, useMemo } from "react";
 import { 
   Plus, Edit2, Shield, Lock, Activity, UserX, Search, Users, 
   CheckCircle, XCircle, Phone, Mail, Calendar, AlertCircle, 
-  Briefcase, Check, Sparkles, Building, UserCheck
+  Briefcase, Check, Sparkles, Building, UserCheck, Trash2, KeyRound, RefreshCw, ArrowLeft
 } from "lucide-react";
 import { 
   inviteAdminUserAction, 
   updateAdminUserAction, 
   toggleAdminStatusAction, 
   resetAdminPasswordAction, 
-  revokeAdminInvitationAction 
+  revokeAdminInvitationAction,
+  requestAdminCreationOtpAction,
+  confirmAndCreateAdminAction
 } from "@/app/actions/admin-users";
 import { 
   createEmployee, 
   updateEmployee, 
-  toggleEmployeeStatus 
+  toggleEmployeeStatus,
+  deleteEmployee
 } from "@/app/actions/employee";
 import { useRouter } from "next/navigation";
 
@@ -86,9 +89,27 @@ export function EmployeesClient({
   const [employeeError, setEmployeeError] = useState<string | null>(null);
   const [employeeSuccessMsg, setEmployeeSuccessMsg] = useState<string | null>(null);
 
-  // --- Admin State (Preserved) ---
+  // --- Employee Deletion State ---
+  const [deletingEmployee, setDeletingEmployee] = useState<any | null>(null);
+  const [isDeletingEmployee, setIsDeletingEmployee] = useState<boolean>(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // --- Admin State (Preserved & OTP Protected) ---
   const invitations = initialInvitations || [];
   const [isCreatingAdmin, setIsCreatingAdmin] = useState(false);
+  const [adminStep, setAdminStep] = useState<"DETAILS" | "OTP">("DETAILS");
+  const [adminOtp, setAdminOtp] = useState("");
+  const [adminFormPayload, setAdminFormPayload] = useState<{
+    name: string;
+    email: string;
+    employeeId: string;
+    roleIds: string[];
+    password?: string;
+  }>({ name: "", email: "", employeeId: "", roleIds: [] });
+  const [adminOtpError, setAdminOtpError] = useState<string | null>(null);
+  const [adminOtpSuccessMsg, setAdminOtpSuccessMsg] = useState<string | null>(null);
+  const [adminOtpResending, setAdminOtpResending] = useState(false);
+
   const [editingUser, setEditingUser] = useState<any>(null);
   const [passwordResetUser, setPasswordResetUser] = useState<any>(null);
   const [adminLoading, setAdminLoading] = useState(false);
@@ -275,18 +296,148 @@ export function EmployeesClient({
     }
   }
 
-  // --- Admin Handlers (Preserved) ---
-  async function handleCreateAdmin(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setAdminLoading(true);
+  // --- Employee Deletion Handler ---
+  async function handleConfirmDeleteEmployee() {
+    if (!deletingEmployee) return;
+    setIsDeletingEmployee(true);
+    setDeleteError(null);
     try {
-      await inviteAdminUserAction(new FormData(e.currentTarget));
-      setIsCreatingAdmin(false);
+      const res = await deleteEmployee(deletingEmployee.id);
+      if (!res.success) {
+        setDeleteError(res.error || "Failed to delete employee.");
+        setIsDeletingEmployee(false);
+        return;
+      }
+      setEmployeeList((prev) => prev.filter((e) => e.id !== deletingEmployee.id));
+      setEmployeeSuccessMsg(
+        `Employee ${deletingEmployee.firstName} ${deletingEmployee.lastName} (${deletingEmployee.employeeId}) has been permanently deleted.`
+      );
+      setDeletingEmployee(null);
       router.refresh();
     } catch (err: any) {
-      alert(err.message);
+      setDeleteError(err?.message || "An unexpected error occurred while deleting the employee.");
+    } finally {
+      setIsDeletingEmployee(false);
     }
-    setAdminLoading(false);
+  }
+
+  // --- Admin OTP Handlers ---
+  async function handleRequestAdminOtp(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setAdminOtpError(null);
+    setAdminLoading(true);
+
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+    const name = (formData.get("name") as string || "").trim();
+    const email = (formData.get("email") as string || "").trim();
+    const employeeId = (formData.get("employeeId") as string || "").trim();
+    const roleIds = formData.getAll("roleIds") as string[];
+    const password = (formData.get("password") as string || "").trim();
+
+    if (!name || !email) {
+      setAdminOtpError("Name and Email are required.");
+      setAdminLoading(false);
+      return;
+    }
+    if (roleIds.length === 0) {
+      setAdminOtpError("Please select at least one role.");
+      setAdminLoading(false);
+      return;
+    }
+
+    setAdminFormPayload({ name, email, employeeId, roleIds, password });
+
+    try {
+      const res = await requestAdminCreationOtpAction({
+        name,
+        email,
+        roleIds,
+        employeeId: employeeId || null,
+      });
+
+      if (!res.success) {
+        setAdminOtpError(res.error || "Failed to request verification code.");
+        setAdminLoading(false);
+        return;
+      }
+
+      setAdminOtpSuccessMsg(res.message || "A 6-digit verification code has been dispatched.");
+      setAdminStep("OTP");
+    } catch (err: any) {
+      setAdminOtpError(err?.message || "Failed to dispatch verification code.");
+    } finally {
+      setAdminLoading(false);
+    }
+  }
+
+  async function handleConfirmCreateAdmin(e: React.FormEvent) {
+    e.preventDefault();
+    if (!adminOtp || adminOtp.trim().length !== 6) {
+      setAdminOtpError("Please enter the 6-digit verification code.");
+      return;
+    }
+    setAdminOtpError(null);
+    setAdminLoading(true);
+
+    try {
+      const res = await confirmAndCreateAdminAction({
+        email: adminFormPayload.email,
+        name: adminFormPayload.name,
+        otp: adminOtp.trim(),
+        roleIds: adminFormPayload.roleIds,
+        employeeId: adminFormPayload.employeeId || null,
+        password: adminFormPayload.password || undefined,
+      });
+
+      if (!res.success) {
+        setAdminOtpError(res.error || "Failed to verify code.");
+        setAdminLoading(false);
+        return;
+      }
+
+      setIsCreatingAdmin(false);
+      setAdminStep("DETAILS");
+      setAdminOtp("");
+      setAdminOtpSuccessMsg(null);
+      setAdminOtpError(null);
+      setEmployeeSuccessMsg(
+        `Administrator account for ${adminFormPayload.name} (${adminFormPayload.email}) has been successfully created.`
+      );
+      router.refresh();
+    } catch (err: any) {
+      setAdminOtpError(err?.message || "Failed to create administrator account.");
+    } finally {
+      setAdminLoading(false);
+    }
+  }
+
+  async function handleResendAdminOtp() {
+    if (adminOtpResending) return;
+    setAdminOtpResending(true);
+    setAdminOtpError(null);
+    try {
+      const res = await requestAdminCreationOtpAction({
+        name: adminFormPayload.name,
+        email: adminFormPayload.email,
+        roleIds: adminFormPayload.roleIds,
+        employeeId: adminFormPayload.employeeId || null,
+      });
+      if (!res.success) {
+        setAdminOtpError(res.error || "Failed to resend code.");
+      } else {
+        setAdminOtpSuccessMsg("A new 6-digit verification code has been dispatched.");
+      }
+    } catch (err: any) {
+      setAdminOtpError(err?.message || "Failed to resend code.");
+    } finally {
+      setAdminOtpResending(false);
+    }
+  }
+
+  // --- Admin Handlers (Preserved) ---
+  async function handleCreateAdmin(e: React.FormEvent<HTMLFormElement>) {
+    await handleRequestAdminOtp(e);
   }
 
   async function handleRevokeAdmin(invId: string) {
@@ -436,7 +587,13 @@ export function EmployeesClient({
 
           {activeTab === "admins" && canManageAdmins && (
             <button
-              onClick={() => setIsCreatingAdmin(true)}
+              onClick={() => {
+                setAdminStep("DETAILS");
+                setAdminOtp("");
+                setAdminOtpError(null);
+                setAdminOtpSuccessMsg(null);
+                setIsCreatingAdmin(true);
+              }}
               className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
             >
               <Plus className="h-4 w-4" /> New Admin
@@ -647,10 +804,10 @@ export function EmployeesClient({
                               <button
                                 onClick={() => handleToggleEmployeeStatus(emp)}
                                 title={isActive ? "Deactivate Employee" : "Activate Employee"}
-                                disabled={employeeSubmitting}
+                                disabled={employeeSubmitting || isDeletingEmployee}
                                 className={`inline-flex items-center justify-center p-1.5 rounded-lg transition-colors ${
                                   isActive
-                                    ? "text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                                    ? "text-slate-400 hover:text-amber-600 hover:bg-amber-50"
                                     : "text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"
                                 }`}
                               >
@@ -659,6 +816,21 @@ export function EmployeesClient({
                                 ) : (
                                   <Activity className="h-4 w-4" />
                                 )}
+                              </button>
+                            )}
+
+                            {canDeactivateEmployee && (
+                              <button
+                                onClick={() => {
+                                  setEmployeeError(null);
+                                  setDeleteError(null);
+                                  setDeletingEmployee(emp);
+                                }}
+                                title="Delete Employee"
+                                disabled={employeeSubmitting || isDeletingEmployee}
+                                className="inline-flex items-center justify-center p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                              >
+                                <Trash2 className="h-4 w-4" />
                               </button>
                             )}
                           </td>
@@ -1188,77 +1360,305 @@ export function EmployeesClient({
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL: Creation Modal (Admin Invitation - Preserved)                       */}
+      {/* MODAL: Delete Employee Confirmation Modal                                  */}
+      {/* ========================================================================= */}
+      {deletingEmployee && (
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-100">
+            <div className="flex items-center gap-3 text-rose-600 mb-3">
+              <div className="p-2 bg-rose-50 rounded-lg">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900">Confirm Employee Deletion</h3>
+            </div>
+            <p className="text-sm text-slate-600 mb-4 leading-relaxed">
+              Are you sure you want to permanently delete employee{" "}
+              <strong className="text-slate-900 font-semibold">
+                {deletingEmployee.firstName} {deletingEmployee.lastName}
+              </strong>{" "}
+              (Employee ID:{" "}
+              <span className="font-mono font-semibold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded">
+                {deletingEmployee.employeeId || "UNASSIGNED"}
+              </span>
+              )?
+            </p>
+
+            {deleteError && (
+              <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-rose-500" />
+                <div className="leading-relaxed">{deleteError}</div>
+              </div>
+            )}
+
+            <p className="text-xs text-slate-500 mb-5 leading-relaxed">
+              This action permanently deletes the employee record. If this employee has historical care visits, assignments, operational tasks, or administrative credentials, permanent deletion will be prevented to protect data integrity, and you can deactivate them instead.
+            </p>
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeletingEmployee(null);
+                  setDeleteError(null);
+                }}
+                disabled={isDeletingEmployee}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteEmployee}
+                disabled={isDeletingEmployee}
+                className="px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 disabled:opacity-50 text-sm font-semibold transition-colors flex items-center gap-2 shadow-sm"
+              >
+                {isDeletingEmployee ? "Deleting..." : "Delete Employee"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: Creation Modal (Admin User - Primary Owner OTP Protected)            */}
       {/* ========================================================================= */}
       {isCreatingAdmin && (
         <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl">
-            <h3 className="text-lg font-bold text-slate-900 mb-1">Invite Admin User</h3>
-            <p className="text-xs text-slate-500 mb-4">
-              Grants system dashboard access with specified role permissions.
-            </p>
-            <form onSubmit={handleCreateAdmin} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
-                <input
-                  name="name"
-                  required
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-                <input
-                  type="email"
-                  name="email"
-                  required
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Employee Link (Optional)
-                </label>
-                <select
-                  name="employeeId"
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                >
-                  <option value="">-- No Link --</option>
-                  {employeeList.map((e: any) => (
-                    <option key={e.id} value={e.id}>
-                      {e.firstName} {e.lastName} ({e.employeeId || e.designation})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Roles</label>
-                <div className="space-y-2 max-h-48 overflow-y-auto p-2 border rounded-lg bg-slate-50">
-                  {roles.map((r: any) => (
-                    <label key={r.id} className="flex items-center gap-2">
-                      <input type="checkbox" name="roleIds" value={r.id} />
-                      <span className="text-sm font-medium text-slate-700">{r.name}</span>
-                    </label>
-                  ))}
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-100">
+            {adminStep === "DETAILS" ? (
+              <>
+                <div className="flex items-center gap-3 mb-1">
+                  <div className="p-2 bg-indigo-50 text-indigo-700 rounded-lg">
+                    <Shield className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900">New Administrator Account</h3>
+                    <p className="text-xs text-slate-500">
+                      Requires Primary Owner OTP authorization.
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex justify-end gap-3 mt-6">
-                <button
-                  type="button"
-                  onClick={() => setIsCreatingAdmin(false)}
-                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={adminLoading}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium"
-                >
-                  Send Invitation
-                </button>
-              </div>
-            </form>
+
+                <div className="bg-amber-50/70 border border-amber-200/80 rounded-lg p-3 my-3 text-xs text-amber-800 leading-relaxed flex items-start gap-2">
+                  <Lock className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                  <div>
+                    A 6-digit verification code will be dispatched exclusively to the Primary Owner email (<span className="font-medium text-amber-900">info.sunshineeldercare@gmail.com</span>) to authorize creation.
+                  </div>
+                </div>
+
+                {adminOtpError && (
+                  <div className="mb-3 p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 shrink-0 text-rose-500 mt-0.5" />
+                    <div>{adminOtpError}</div>
+                  </div>
+                )}
+
+                <form onSubmit={handleRequestAdminOtp} className="space-y-3.5">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Full Name *
+                    </label>
+                    <input
+                      name="name"
+                      required
+                      defaultValue={adminFormPayload.name}
+                      placeholder="e.g. Ananya Sen"
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Admin Email *
+                    </label>
+                    <input
+                      type="email"
+                      name="email"
+                      required
+                      defaultValue={adminFormPayload.email}
+                      placeholder="e.g. ananya.sen@sunshineeldercare.in"
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Employee Link (Optional)
+                    </label>
+                    <select
+                      name="employeeId"
+                      defaultValue={adminFormPayload.employeeId}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-slate-700"
+                    >
+                      <option value="">-- No Link --</option>
+                      {employeeList.map((e: any) => (
+                        <option key={e.id} value={e.id}>
+                          {e.firstName} {e.lastName} ({e.employeeId || e.designation})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                      Assigned Roles *
+                    </label>
+                    <div className="space-y-1.5 max-h-36 overflow-y-auto p-2.5 border border-slate-200 rounded-lg bg-slate-50">
+                      {roles.map((r: any) => (
+                        <label key={r.id} className="flex items-center gap-2 cursor-pointer hover:bg-white p-1 rounded transition-colors">
+                          <input
+                            type="checkbox"
+                            name="roleIds"
+                            value={r.id}
+                            defaultChecked={adminFormPayload.roleIds.includes(r.id)}
+                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <span className="text-xs font-medium text-slate-700">{r.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Initial Password (Optional)
+                    </label>
+                    <input
+                      type="password"
+                      name="password"
+                      defaultValue={adminFormPayload.password}
+                      placeholder="Minimum 8 characters (or leave blank to send invite)"
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCreatingAdmin(false);
+                        setAdminOtpError(null);
+                      }}
+                      className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={adminLoading}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm font-semibold transition-colors flex items-center gap-2 shadow-sm"
+                    >
+                      {adminLoading ? "Sending Code..." : "Send Verification Code"}
+                    </button>
+                  </div>
+                </form>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-emerald-50 text-emerald-700 rounded-lg">
+                    <KeyRound className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900">Authorize Admin Creation</h3>
+                    <p className="text-xs text-slate-500">
+                      Enter the 6-digit verification code to complete creation.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 my-3 text-xs text-slate-700 space-y-1">
+                  <div>
+                    <span className="text-slate-500">Target Admin:</span>{" "}
+                    <strong className="text-slate-900 font-semibold">{adminFormPayload.name}</strong>{" "}
+                    ({adminFormPayload.email})
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Roles:</span>{" "}
+                    <span className="font-medium text-indigo-700">
+                      {roles
+                        .filter((r: any) => adminFormPayload.roleIds.includes(r.id))
+                        .map((r: any) => r.name)
+                        .join(", ") || "Selected roles"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 text-blue-800 rounded-lg p-3 mb-3 text-xs flex items-start gap-2 leading-relaxed">
+                  <Mail className="h-4 w-4 shrink-0 text-blue-600 mt-0.5" />
+                  <div>
+                    A 6-digit code has been dispatched exclusively to <strong className="text-blue-900">info.sunshineeldercare@gmail.com</strong>. The proposed admin will never receive this authorization code.
+                  </div>
+                </div>
+
+                {adminOtpSuccessMsg && (
+                  <div className="mb-3 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600" />
+                    <div>{adminOtpSuccessMsg}</div>
+                  </div>
+                )}
+
+                {adminOtpError && (
+                  <div className="mb-3 p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 shrink-0 text-rose-500 mt-0.5" />
+                    <div>{adminOtpError}</div>
+                  </div>
+                )}
+
+                <form onSubmit={handleConfirmCreateAdmin} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2 text-center">
+                      6-Digit Security Code
+                    </label>
+                    <input
+                      type="text"
+                      autoFocus
+                      maxLength={6}
+                      value={adminOtp}
+                      onChange={(e) => setAdminOtp(e.target.value.replace(/\D/g, ""))}
+                      placeholder="000000"
+                      className="w-full text-center font-mono text-2xl tracking-[0.5em] py-2.5 px-3 border-2 border-slate-300 rounded-lg focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 outline-none"
+                    />
+                    <p className="text-[11px] text-slate-500 text-center mt-1.5">
+                      Valid for 5 minutes • Maximum 5 verification attempts
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAdminStep("DETAILS");
+                        setAdminOtpError(null);
+                        setAdminOtpSuccessMsg(null);
+                      }}
+                      className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors flex items-center gap-1.5"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5" /> Back
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleResendAdminOtp}
+                        disabled={adminOtpResending || adminLoading}
+                        className="px-3 py-1.5 text-xs text-indigo-600 hover:bg-indigo-50 rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
+                      >
+                        <RefreshCw className={`h-3 w-3 ${adminOtpResending ? "animate-spin" : ""}`} />
+                        Resend
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={adminLoading || adminOtp.length !== 6}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-xs font-semibold transition-colors shadow-sm"
+                      >
+                        {adminLoading ? "Verifying..." : "Confirm & Create Admin"}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </>
+            )}
           </div>
         </div>
       )}

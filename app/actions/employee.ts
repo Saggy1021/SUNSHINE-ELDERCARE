@@ -18,8 +18,8 @@ async function requirePermission(permission: string): Promise<{ userId: string; 
   return { userId: session.user.id, email: session.user.email || "" }
 }
 
-async function logAudit(actorId: string, action: string, entityType: string, entityId: string, metadata?: any) {
-  await db.auditLog.create({
+async function logAudit(actorId: string, action: string, entityType: string, entityId: string, metadata?: any, database: any = db) {
+  await database.auditLog.create({
     data: {
       actorUserId: actorId,
       action,
@@ -229,49 +229,88 @@ export async function deactivateEmployee(id: string): Promise<{ success: boolean
 }
 
 /**
- * Deletes an employee only if there are zero historical care visits, assignments or tasks.
- * Intended for safe cleanup of disposable test records.
+ * Deletes an employee only if there are zero historical care visits, assignments, tasks,
+ * user credentials, or admin invitations.
+ * Preserves historical records by preventing cascade deletion.
  */
-export async function deleteEmployee(id: string): Promise<{ success: boolean; error?: string }> {
-  try {
-    const admin = await requirePermission("EMPLOYEE_DEACTIVATE");
+export async function deleteEmployeeCore(
+  id: string,
+  actorUserId: string,
+  database: any = db
+): Promise<{ success: boolean; hasDependencies?: boolean; error?: string }> {
+  const employee = await database.employee.findUnique({
+    where: { id },
+    include: {
+      visits: { select: { id: true }, take: 1 },
+      visitAssignments: { select: { id: true }, take: 1 },
+      assignments: { select: { id: true }, take: 1 },
+      tasks: { select: { id: true }, take: 1 },
+    },
+  });
 
-    const employee = await db.employee.findUnique({
-      where: { id },
-      include: {
-        visits: { select: { id: true }, take: 1 },
-        visitAssignments: { select: { id: true }, take: 1 },
-        assignments: { select: { id: true }, take: 1 },
-        tasks: { select: { id: true }, take: 1 },
+  if (!employee) return { success: false, error: "Employee not found." };
+
+  // Check for linked user account or admin invitation
+  let hasInvitation = false;
+  if (employee.employeeId && database.adminInvitation) {
+    const invite = await database.adminInvitation.findFirst({
+      where: {
+        OR: [
+          { employeeId: employee.employeeId },
+          { employeeId: employee.id }
+        ]
       },
+      select: { id: true },
     });
+    if (invite) hasInvitation = true;
+  }
 
-    if (!employee) return { success: false, error: "Employee not found." };
+  if (
+    employee.visits?.length > 0 ||
+    employee.visitAssignments?.length > 0 ||
+    employee.assignments?.length > 0 ||
+    employee.tasks?.length > 0 ||
+    Boolean(employee.userId) ||
+    hasInvitation
+  ) {
+    return {
+      success: false,
+      hasDependencies: true,
+      error: "Cannot permanently delete employee because they have associated care appointments, operational tasks, or administrative credentials. You can deactivate this employee instead to preserve historical records.",
+    };
+  }
 
-    if (
-      employee.visits.length > 0 ||
-      employee.visitAssignments.length > 0 ||
-      employee.assignments.length > 0 ||
-      employee.tasks.length > 0
-    ) {
-      return {
-        success: false,
-        error: "Cannot delete an employee with historical appointments or assignments. Please deactivate the employee instead.",
-      };
-    }
+  await database.employee.delete({ where: { id } });
 
-    await db.employee.delete({ where: { id } });
-
-    await logAudit(admin.userId, "EMPLOYEE_DELETED", "Employee", id, {
+  await logAudit(
+    actorUserId,
+    "EMPLOYEE_DELETED",
+    "Employee",
+    id,
+    {
       employeeId: employee.employeeId,
       name: `${employee.firstName} ${employee.lastName}`,
-    });
+    },
+    database
+  );
 
-    revalidatePath('/admin/employees');
-    revalidatePath('/admin/schedule');
-    revalidatePath('/admin/care');
+  return { success: true };
+}
 
-    return { success: true };
+/**
+ * Server Action for deleting an employee.
+ * Strictly checks permissions and dependencies. Does not require OTP.
+ */
+export async function deleteEmployee(id: string): Promise<{ success: boolean; hasDependencies?: boolean; error?: string }> {
+  try {
+    const admin = await requirePermission("EMPLOYEE_DEACTIVATE");
+    const result = await deleteEmployeeCore(id, admin.userId, db);
+    if (result.success) {
+      revalidatePath('/admin/employees');
+      revalidatePath('/admin/schedule');
+      revalidatePath('/admin/care');
+    }
+    return result;
   } catch (err: any) {
     console.error("[deleteEmployee] Error:", err);
     return { success: false, error: err?.message || "Failed to delete employee." };
