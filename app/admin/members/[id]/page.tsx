@@ -74,7 +74,11 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
             <div className="space-y-3">
               <div>
                 <p className="text-sm font-medium text-slate-500">Name</p>
-                <p className="font-semibold text-slate-900">{member.name || "N/A"}</p>
+                <p className="font-semibold text-slate-900">
+                  {profile?.firstName
+                    ? `${profile.salutation || 'Mr'} ${profile.firstName} ${profile.lastName || ''}`.trim()
+                    : member.name || "N/A"}
+                </p>
               </div>
               <div>
                 <p className="text-sm font-medium text-slate-500">Member ID</p>
@@ -129,7 +133,9 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
               <div className="space-y-3">
                 <div>
                   <p className="text-sm font-medium text-slate-500">Name</p>
-                  <p className="font-semibold text-slate-900">{profile.spouseFirstName || ''} {profile.spouseLastName || ''}</p>
+                  <p className="font-semibold text-slate-900">
+                    {[profile.spouseSalutation || 'Mr', profile.spouseFirstName, profile.spouseLastName].filter(Boolean).join(' ')}
+                  </p>
                 </div>
                 {profile.spouseDateOfBirth && (
                   <div>
@@ -212,7 +218,9 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
               <div className="space-y-3">
                 <div>
                   <p className="text-sm font-medium text-slate-500">Name & Relationship</p>
-                  <p className="font-semibold text-slate-900">{profile.sponsor.fullName} ({profile.sponsor.relationship})</p>
+                  <p className="font-semibold text-slate-900">
+                    {[profile.sponsor.salutation || 'Mr', profile.sponsor.firstName, profile.sponsor.lastName].filter(Boolean).join(' ') || profile.sponsor.fullName} ({profile.sponsor.relationship})
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-slate-500">Phone</p>

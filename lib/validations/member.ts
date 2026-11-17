@@ -6,8 +6,9 @@ export const memberRegistrationSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters").max(128, "Password must not exceed 128 characters"),
   
   // SECTION A: MEMBER DETAILS
-  firstName: z.string().min(1, "First Name is required"),
-  lastName: z.string().min(1, "Surname / Last Name is required"),
+  salutation: z.string().trim().optional().or(z.literal('')),
+  firstName: z.string().min(1, "First Name is required").trim(),
+  lastName: z.string().min(1, "Surname / Last Name is required").trim(),
   idProofType: z.enum(["Voter ID", "Passport", "PAN", "Driving Licence", "Other"], {
     message: "Invalid ID Proof Type"
   }).optional().or(z.literal('')),
@@ -22,6 +23,7 @@ export const memberRegistrationSchema = z.object({
   alternateNumber: z.string().optional().or(z.literal('')),
 
   // SPOUSE / SECOND MEMBER DETAILS (Optional for Couple memberships)
+  spouseSalutation: z.string().trim().optional().or(z.literal('')),
   spouseFirstName: z.string().optional().or(z.literal('')),
   spouseLastName: z.string().optional().or(z.literal('')),
   spouseDateOfBirth: z
@@ -57,9 +59,12 @@ export const memberRegistrationSchema = z.object({
   emergencyContactEmail: z.string().email("Invalid email").optional().or(z.literal('')),
   
   // SECTION C: SPONSOR DETAILS
-  sponsorName: z.string().min(1, "Sponsor Name is required"),
-  sponsorRelationship: z.string().min(1, "Sponsor Relationship is required"),
-  sponsorMobile: z.string().min(1, "Sponsor Mobile is required"),
+  sponsorSalutation: z.string().trim().optional().or(z.literal('')),
+  sponsorFirstName: z.string().trim().optional().or(z.literal('')),
+  sponsorLastName: z.string().trim().optional().or(z.literal('')),
+  sponsorName: z.string().trim().optional().or(z.literal('')),
+  sponsorRelationship: z.string().optional().or(z.literal('')),
+  sponsorMobile: z.string().optional().or(z.literal('')),
   sponsorOther: z.string().optional(),
   sponsorEmail: z.string().email("Invalid email").optional().or(z.literal('')),
   

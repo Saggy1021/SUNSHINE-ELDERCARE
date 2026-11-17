@@ -26,7 +26,7 @@ export interface ScheduleVisitDTO {
   member: {
     userId: string;
     name: string;
-    email: string;
+    email: string; 
     memberId: string | null;
     serviceAddress: string | null;
     mobileNumber: string | null;
@@ -604,6 +604,7 @@ export async function searchScheduleMembers(query: string = ""): Promise<Schedul
         e."lastName" AS "elderLastName",
         e.address AS "elderAddress",
         u.name AS "userName",
+        mp.salutation AS "profileSalutation",
         mp."memberId" AS "canonicalMemberId",
         mp."firstName" AS "profileFirstName",
         mp."lastName" AS "profileLastName",
@@ -638,6 +639,7 @@ export async function searchScheduleMembers(query: string = ""): Promise<Schedul
         e."lastName" AS "elderLastName",
         e.address AS "elderAddress",
         u.name AS "userName",
+        mp.salutation AS "profileSalutation",
         mp."memberId" AS "canonicalMemberId",
         mp."firstName" AS "profileFirstName",
         mp."lastName" AS "profileLastName",
@@ -670,9 +672,11 @@ export async function searchScheduleMembers(query: string = ""): Promise<Schedul
     const elderName = r.elderFirstName
       ? `${r.elderFirstName} ${r.elderLastName || ""}`.trim()
       : r.userName || "Care Recipient";
-    const memberName =
-      (r.profileFirstName ? `${r.profileFirstName} ${r.profileLastName || ""}`.trim() : r.userName) ||
-      elderName;
+    const salutation = r.profileSalutation || "Mr";
+    const profileFullName = r.profileFirstName
+      ? `${salutation} ${r.profileFirstName} ${r.profileLastName || ""}`.trim()
+      : null;
+    const memberName = profileFullName || r.userName || elderName;
     const memberId = r.canonicalMemberId || "Not assigned";
     const serviceAddress = r.profileServiceAddress || r.elderAddress || "Not available";
     const primaryMobile = r.profileMobile || "Not available";

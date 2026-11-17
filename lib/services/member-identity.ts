@@ -40,9 +40,14 @@ export class MemberIdentityService {
     type: "S" | "D" = "S",
     client: any = db
   ): Promise<string> {
-    // 1. Get first 2 ASCII letters of first name and last name, with deterministic 'XX' padding
-    const cleanFirst = (firstName || "").replace(/[^A-Za-z]/g, "").toUpperCase();
-    const cleanLast = (lastName || "").replace(/[^A-Za-z]/g, "").toUpperCase();
+    // 1. Strip any leading salutation or professional/military rank from firstName so salutation NEVER influences ID
+    const titleRegex = /^(mr|mrs|ms|miss|dr|prof|col|lt|brig|capt|grp\s*cpt|wg\s*cdr|major|gen)\.?\s+/i;
+    const strippedFirst = (firstName || "").trim().replace(titleRegex, "").trim();
+    const strippedLast = (lastName || "").trim();
+
+    // Get first 2 ASCII letters of first name and last name, with deterministic 'XX' padding
+    const cleanFirst = (strippedFirst || firstName || "").replace(/[^A-Za-z]/g, "").toUpperCase();
+    const cleanLast = (strippedLast || lastName || "").replace(/[^A-Za-z]/g, "").toUpperCase();
     const fInitial = (cleanFirst + "XX").substring(0, 2);
     const lInitial = (cleanLast + "XX").substring(0, 2);
     const initials = `${fInitial}${lInitial}`;
@@ -146,7 +151,10 @@ export class MemberIdentityService {
 
     if (!firstName) {
       if (user?.name) {
-        const parts = user.name.trim().split(/\s+/);
+        const cleanedUserName = user.name
+          .replace(/^(mr|mrs|ms|miss|dr|prof|col|lt|brig|capt|grp\s*cpt|wg\s*cdr|major|gen)\.?\s+/i, "")
+          .trim();
+        const parts = cleanedUserName.split(/\s+/);
         firstName = parts[0] || "Member";
         lastName = parts.slice(1).join(" ") || "";
       } else {

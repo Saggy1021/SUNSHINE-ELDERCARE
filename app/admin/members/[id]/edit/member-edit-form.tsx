@@ -146,6 +146,19 @@ export function MemberEditForm({ member, catalog }: { member: any; catalog?: any
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Salutation
+            </label>
+            <input
+              type="text"
+              name="salutation"
+              defaultValue={profile?.salutation || "Mr"}
+              placeholder="e.g. Mr, Dr, Grp Cpt (Default: Mr)"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:bg-white focus:border-[#091329] focus:ring-1 focus:ring-[#091329] outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
               First Name *
             </label>
             <input
@@ -317,6 +330,19 @@ export function MemberEditForm({ member, catalog }: { member: any; catalog?: any
         {hasSpouse ? (
           <div className="space-y-4 pt-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  Spouse Salutation
+                </label>
+                <input
+                  type="text"
+                  name="spouseSalutation"
+                  defaultValue={profile?.spouseSalutation || (hasSpouse ? "Mr" : "")}
+                  placeholder="e.g. Mr, Mrs, Dr (Default: Mr)"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:border-[#091329] focus:ring-1 focus:ring-[#091329] outline-none"
+                />
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                   Spouse First Name
@@ -680,15 +706,41 @@ export function MemberEditForm({ member, catalog }: { member: any; catalog?: any
           {/* Sponsor Details */}
           <div className="space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
             <h4 className="text-sm font-semibold text-slate-800">Sponsor Details</h4>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Sponsor Full Name</label>
-              <input
-                type="text"
-                name="sponsorName"
-                defaultValue={sponsor?.fullName || ''}
-                className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-md text-sm outline-none"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+              <div className="sm:col-span-3">
+                <label className="block text-xs font-medium text-slate-600 mb-1">Salutation</label>
+                <input
+                  type="text"
+                  name="sponsorSalutation"
+                  defaultValue={sponsor?.salutation || (sponsor ? "Mr" : "")}
+                  placeholder="e.g. Mr, Dr (Default: Mr)"
+                  className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-md text-sm outline-none"
+                />
+              </div>
+              <div className="sm:col-span-5">
+                <label className="block text-xs font-medium text-slate-600 mb-1">First Name</label>
+                <input
+                  type="text"
+                  name="sponsorFirstName"
+                  defaultValue={sponsor?.firstName || (sponsor?.fullName ? sponsor.fullName.split(" ")[0] : "")}
+                  className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-md text-sm outline-none"
+                />
+              </div>
+              <div className="sm:col-span-4">
+                <label className="block text-xs font-medium text-slate-600 mb-1">Last Name</label>
+                <input
+                  type="text"
+                  name="sponsorLastName"
+                  defaultValue={sponsor?.lastName || (sponsor?.fullName ? sponsor.fullName.split(" ").slice(1).join(" ") : "")}
+                  className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-md text-sm outline-none"
+                />
+              </div>
             </div>
+            <input
+              type="hidden"
+              name="sponsorName"
+              defaultValue={sponsor?.fullName || ""}
+            />
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">Relationship</label>

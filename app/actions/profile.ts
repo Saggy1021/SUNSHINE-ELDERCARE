@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 
 const updateProfileSchema = z.object({
+  salutation: z.string().optional(),
   firstName: z.string().min(2, "First name must be at least 2 characters"),
   lastName: z.string().min(2, "Last name must be at least 2 characters"),
   mobileNumber: z.string().min(10, "Mobile number must be at least 10 digits"),
@@ -45,15 +46,25 @@ export async function updateMemberProfile(formData: FormData) {
     return { success: false, error: "Profile not found" }
   }
 
+  const salutation = (validationResult.data.salutation || "").trim() || (profile.salutation || "Mr")
+
   await db.memberProfile.update({
     where: { id: profile.id },
     data: {
+      salutation,
       firstName,
       lastName,
       mobileNumber,
       alternateNumber: alternateNumber || null,
       serviceAddress,
       nearestLandmark: nearestLandmark || null,
+    }
+  })
+
+  await db.user.update({
+    where: { id: session.user.id },
+    data: {
+      name: `${salutation} ${firstName} ${lastName}`.trim(),
     }
   })
 

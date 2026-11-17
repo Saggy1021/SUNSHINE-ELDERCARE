@@ -52,8 +52,17 @@ export default function MemberProfileForm({ profile }: { profile: any }) {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid sm:grid-cols-2 gap-4">
-          <div>
+        <div className="grid sm:grid-cols-12 gap-4">
+          <div className="sm:col-span-3">
+            <label className="block text-sm font-medium text-slate-700 mb-1">Salutation</label>
+            <input 
+              name="salutation" 
+              defaultValue={profile.salutation || "Mr"} 
+              placeholder="e.g. Mr, Dr, Grp Cpt"
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" 
+            />
+          </div>
+          <div className="sm:col-span-5">
             <label className="block text-sm font-medium text-slate-700 mb-1">First Name</label>
             <input 
               name="firstName" 
@@ -62,7 +71,7 @@ export default function MemberProfileForm({ profile }: { profile: any }) {
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" 
             />
           </div>
-          <div>
+          <div className="sm:col-span-4">
             <label className="block text-sm font-medium text-slate-700 mb-1">Last Name</label>
             <input 
               name="lastName" 

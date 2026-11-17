@@ -141,10 +141,14 @@ export async function executeAdminOnboardMember(
   let txResult: { userId: string; documentUrl: string | null; subscriptionId?: string }
   try {
     txResult = await database.$transaction(async (tx: any) => {
+      // 1. Compute Primary Member Salutation and Full Name (Default: Mr)
+      const salutation = (validatedData.salutation || "").trim() || "Mr"
+      const fullName = `${salutation} ${validatedData.firstName.trim()} ${validatedData.lastName.trim()}`.trim()
+
       // Create User
       const newUser = await tx.user.create({
         data: {
-          name: `${validatedData.firstName} ${validatedData.lastName}`,
+          name: fullName,
           email: normalizedEmail,
           passwordHash,
           role: ROLES.MEMBER,
@@ -205,12 +209,19 @@ export async function executeAdminOnboardMember(
         documentUrl = `/api/documents/${uploadedPaymentDoc.id}`
       }
 
-      // Create Member Profile with both Primary and Spouse Details
+      // Spouse Salutation: If spouse entered, blank defaults to Mr
+      const hasSpouseData = Boolean(validatedData.spouseFirstName?.trim() || validatedData.spouseLastName?.trim())
+      const spouseSalutation = hasSpouseData
+        ? ((validatedData.spouseSalutation || "").trim() || "Mr")
+        : null
+
+      // Create Member Profile with separate Salutation, First Name, and Last Name
       const profile = await tx.memberProfile.create({
         data: {
           userId: newUser.id,
-          firstName: validatedData.firstName,
-          lastName: validatedData.lastName,
+          salutation,
+          firstName: validatedData.firstName.trim(),
+          lastName: validatedData.lastName.trim(),
           idProofType: validatedData.idProofType || null,
           idProofNumber: validatedData.idProofNumber || null,
           idProofDocumentId,
@@ -225,8 +236,9 @@ export async function executeAdminOnboardMember(
           bloodGroup: validatedData.bloodGroup || null,
 
           // Spouse / Second Member Details (Optional)
-          spouseFirstName: validatedData.spouseFirstName || null,
-          spouseLastName: validatedData.spouseLastName || null,
+          spouseSalutation,
+          spouseFirstName: validatedData.spouseFirstName?.trim() || null,
+          spouseLastName: validatedData.spouseLastName?.trim() || null,
           spouseDateOfBirth: validatedData.spouseDateOfBirth ? new Date(validatedData.spouseDateOfBirth) : null,
           spouseGender: validatedData.spouseGender || null,
           spouseMobileNumber: validatedData.spouseMobileNumber || null,
@@ -248,13 +260,24 @@ export async function executeAdminOnboardMember(
         }
       })
 
-      // Sponsor
+      // Sponsor Details: 3-field structure (Salutation, First Name, Last Name)
+      const sponsorFirstName = validatedData.sponsorFirstName?.trim() || (validatedData.sponsorName ? validatedData.sponsorName.trim().split(/\s+/)[0] : "")
+      const sponsorLastName = validatedData.sponsorLastName?.trim() || (validatedData.sponsorName ? validatedData.sponsorName.trim().split(/\s+/).slice(1).join(" ") : "")
+      const hasSponsorData = Boolean(sponsorFirstName || sponsorLastName || validatedData.sponsorName?.trim())
+      const sponsorSalutation = hasSponsorData
+        ? ((validatedData.sponsorSalutation || "").trim() || "Mr")
+        : "Mr"
+      const sponsorFullName = [sponsorSalutation, sponsorFirstName, sponsorLastName].filter(Boolean).join(" ") || validatedData.sponsorName?.trim() || "Sponsor"
+
       await tx.sponsor.create({
         data: {
           memberProfileId: profile.id,
-          fullName: validatedData.sponsorName,
-          relationship: validatedData.sponsorRelationship,
-          mobileNumber: validatedData.sponsorMobile,
+          salutation: sponsorSalutation,
+          firstName: sponsorFirstName || null,
+          lastName: sponsorLastName || null,
+          fullName: sponsorFullName,
+          relationship: validatedData.sponsorRelationship || "Sponsor",
+          mobileNumber: validatedData.sponsorMobile || "",
           alternateNumber: validatedData.sponsorOther || null,
           email: validatedData.sponsorEmail || null,
         }

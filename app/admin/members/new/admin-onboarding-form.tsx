@@ -63,9 +63,15 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
     const formData = new FormData(e.currentTarget)
     
     // Group member fields into a JSON string
+    const sponsorSalutation = (formData.get('sponsorSalutation') as string) || undefined
+    const sponsorFirstName = (formData.get('sponsorFirstName') as string) || undefined
+    const sponsorLastName = (formData.get('sponsorLastName') as string) || undefined
+    const sponsorNameDerived = [sponsorFirstName, sponsorLastName].filter(Boolean).join(' ') || (formData.get('sponsorName') as string) || undefined
+
     const memberData = {
       email: formData.get('email'),
       password: formData.get('password'),
+      salutation: formData.get('salutation') || undefined,
       firstName: formData.get('firstName'),
       lastName: formData.get('lastName'),
       idProofType: formData.get('idProofType') || undefined,
@@ -78,6 +84,7 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
       alternateNumber: formData.get('alternateNumber') || undefined,
 
       // Spouse / Second Member Details
+      spouseSalutation: formData.get('spouseSalutation') || undefined,
       spouseFirstName: formData.get('spouseFirstName') || undefined,
       spouseLastName: formData.get('spouseLastName') || undefined,
       spouseDateOfBirth: formData.get('spouseDateOfBirth') || undefined,
@@ -91,7 +98,10 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
       emergencyContactMobile: formData.get('emergencyContactMobile'),
       emergencyContactOther: formData.get('emergencyContactOther') || undefined,
       emergencyContactEmail: formData.get('emergencyContactEmail') || undefined,
-      sponsorName: formData.get('sponsorName'),
+      sponsorSalutation,
+      sponsorFirstName,
+      sponsorLastName,
+      sponsorName: sponsorNameDerived,
       sponsorRelationship: formData.get('sponsorRelationship'),
       sponsorMobile: formData.get('sponsorMobile'),
       sponsorOther: formData.get('sponsorOther') || undefined,
@@ -230,13 +240,34 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
       <div className="space-y-4">
         <h3 className="font-serif text-xl border-b border-border pb-2 text-slate-800">Member Details</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground/80">First Name *</label>
-            <input name="firstName" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Surname / Last Name *</label>
-            <input name="lastName" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-12 gap-4">
+            <div className="sm:col-span-3">
+              <label className="mb-1.5 block text-sm font-medium text-foreground/80">Salutation</label>
+              <input
+                name="salutation"
+                type="text"
+                placeholder="e.g. Mr, Dr, Grp Cpt (Default: Mr)"
+                className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+            <div className="sm:col-span-5">
+              <label className="mb-1.5 block text-sm font-medium text-foreground/80">First Name *</label>
+              <input
+                name="firstName"
+                type="text"
+                required
+                className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+            <div className="sm:col-span-4">
+              <label className="mb-1.5 block text-sm font-medium text-foreground/80">Surname / Last Name *</label>
+              <input
+                name="lastName"
+                type="text"
+                required
+                className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground/80">Date of Birth *</label>
@@ -368,23 +399,35 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
         )}
 
         <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 ${shouldShowSpouse ? '' : 'hidden'}`}>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Spouse First Name</label>
-            <input
-              name="spouseFirstName"
-              type="text"
-              onChange={(e) => { if (e.target.value) setHadSpouseData(true) }}
-              className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Spouse Surname / Last Name</label>
-            <input
-              name="spouseLastName"
-              type="text"
-              onChange={(e) => { if (e.target.value) setHadSpouseData(true) }}
-              className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-            />
+          <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-12 gap-4">
+            <div className="sm:col-span-3">
+              <label className="mb-1.5 block text-sm font-medium text-foreground/80">Spouse Salutation</label>
+              <input
+                name="spouseSalutation"
+                type="text"
+                placeholder="e.g. Mr, Mrs, Dr (Default: Mr)"
+                onChange={(e) => { if (e.target.value) setHadSpouseData(true) }}
+                className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+            <div className="sm:col-span-5">
+              <label className="mb-1.5 block text-sm font-medium text-foreground/80">Spouse First Name</label>
+              <input
+                name="spouseFirstName"
+                type="text"
+                onChange={(e) => { if (e.target.value) setHadSpouseData(true) }}
+                className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+            <div className="sm:col-span-4">
+              <label className="mb-1.5 block text-sm font-medium text-foreground/80">Spouse Surname / Last Name</label>
+              <input
+                name="spouseLastName"
+                type="text"
+                onChange={(e) => { if (e.target.value) setHadSpouseData(true) }}
+                className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground/80">Spouse Date of Birth</label>
@@ -497,9 +540,34 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
       <div className="space-y-4 bg-slate-50 p-6 rounded-xl border border-slate-200">
         <h3 className="font-serif text-xl border-b border-slate-200 pb-2 text-slate-800">Sponsor Details</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Sponsor Name *</label>
-            <input name="sponsorName" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-12 gap-4">
+            <div className="sm:col-span-3">
+              <label className="mb-1.5 block text-sm font-medium text-foreground/80">Sponsor Salutation</label>
+              <input
+                name="sponsorSalutation"
+                type="text"
+                placeholder="e.g. Mr, Dr, Grp Cpt (Default: Mr)"
+                className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+            <div className="sm:col-span-5">
+              <label className="mb-1.5 block text-sm font-medium text-foreground/80">Sponsor First Name *</label>
+              <input
+                name="sponsorFirstName"
+                type="text"
+                required
+                className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+            <div className="sm:col-span-4">
+              <label className="mb-1.5 block text-sm font-medium text-foreground/80">Sponsor Surname / Last Name *</label>
+              <input
+                name="sponsorLastName"
+                type="text"
+                required
+                className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground/80">Relationship *</label>

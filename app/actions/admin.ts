@@ -489,10 +489,12 @@ export async function getMembersCore(
       service = `${sub.durationMonths} Month${sub.durationMonths > 1 ? 's' : ''}`;
     }
 
-    const secondaryName = [m.memberProfile?.spouseFirstName, m.memberProfile?.spouseLastName]
-      .filter(Boolean)
-      .join(" ")
-      .trim();
+    const spouseParts = [
+      m.memberProfile?.spouseSalutation,
+      m.memberProfile?.spouseFirstName,
+      m.memberProfile?.spouseLastName,
+    ].filter(Boolean).join(" ").trim();
+    const secondaryName = spouseParts || null;
 
     // Sourced scheduled visit date
     const visitFromSub = sub?.careCases?.[0]?.visits?.[0]?.scheduledStart;
@@ -507,6 +509,7 @@ export async function getMembersCore(
 
     return {
       ...m,
+      name: m.name,
       serialNumber: genuineSerialMap.get(m.id) ?? null,
       service,
       secondaryName: secondaryName || null,
@@ -657,6 +660,7 @@ export async function updateMembershipStartDate(
 // --- Comprehensive Member Profile Editing ---
 export interface AdminUpdateMemberInput {
   userId: string;
+  salutation?: string | null;
   firstName: string;
   lastName: string;
   email: string;
@@ -672,6 +676,7 @@ export interface AdminUpdateMemberInput {
 
   // Spouse / Secondary Member
   hasSpouse?: boolean;
+  spouseSalutation?: string | null;
   spouseFirstName?: string | null;
   spouseLastName?: string | null;
   spouseMobileNumber?: string | null;
@@ -704,6 +709,9 @@ export interface AdminUpdateMemberInput {
   emergencyContactAlternatePhone?: string | null;
   emergencyContactEmail?: string | null;
 
+  sponsorSalutation?: string | null;
+  sponsorFirstName?: string | null;
+  sponsorLastName?: string | null;
   sponsorName?: string | null;
   sponsorRelationship?: string | null;
   sponsorMobile?: string | null;
@@ -795,7 +803,8 @@ export async function adminUpdateMemberCore(
       };
 
       // 3. Update User record
-      const fullName = `${input.firstName.trim()} ${input.lastName.trim()}`.trim();
+      const salutation = (input.salutation || "").trim() || (currentUser.memberProfile?.salutation || "Mr");
+      const fullName = `${salutation} ${input.firstName.trim()} ${input.lastName.trim()}`.trim();
       await tx.user.update({
         where: { id: currentUser.id },
         data: {
@@ -807,6 +816,7 @@ export async function adminUpdateMemberCore(
       // 4. Update or Upsert MemberProfile record
       // CRITICAL: Member ID is strictly PRESERVED! Never modify or overwrite memberId.
       const profileData: any = {
+        salutation,
         firstName: input.firstName.trim(),
         lastName: input.lastName.trim(),
         email: normalizedEmail,
@@ -838,6 +848,7 @@ export async function adminUpdateMemberCore(
       // Spouse handling:
       // If hasSpouse is explicitly false, clear spouse fields.
       if (input.hasSpouse === false) {
+        profileData.spouseSalutation = null;
         profileData.spouseFirstName = null;
         profileData.spouseLastName = null;
         profileData.spouseMobileNumber = null;
@@ -846,6 +857,7 @@ export async function adminUpdateMemberCore(
         profileData.spouseIdProofType = null;
         profileData.spouseIdProofNumber = null;
       } else if (input.hasSpouse === true || input.spouseFirstName || input.spouseLastName || input.spouseMobileNumber) {
+        profileData.spouseSalutation = (input.spouseSalutation || "").trim() || (currentUser.memberProfile?.spouseSalutation || "Mr");
         profileData.spouseFirstName = input.spouseFirstName?.trim() || null;
         profileData.spouseLastName = input.spouseLastName?.trim() || null;
         profileData.spouseMobileNumber = input.spouseMobileNumber?.trim() || null;
@@ -931,28 +943,39 @@ export async function adminUpdateMemberCore(
         }
       }
 
-      // 7. Sponsor Details
-      if (input.sponsorName !== undefined || input.sponsorMobile !== undefined) {
-        if (input.sponsorName?.trim() || input.sponsorMobile?.trim()) {
-          await tx.sponsor.upsert({
-            where: { memberProfileId: memberProfileId },
-            update: {
-              fullName: input.sponsorName?.trim() || "Sponsor",
-              relationship: input.sponsorRelationship?.trim() || "Sponsor",
-              mobileNumber: input.sponsorMobile?.trim() || "",
-              alternateNumber: input.sponsorAlternateNumber?.trim() || null,
-              email: input.sponsorEmail?.trim() || null,
-            },
-            create: {
-              memberProfileId: memberProfileId,
-              fullName: input.sponsorName?.trim() || "Sponsor",
-              relationship: input.sponsorRelationship?.trim() || "Sponsor",
-              mobileNumber: input.sponsorMobile?.trim() || "",
-              alternateNumber: input.sponsorAlternateNumber?.trim() || null,
-              email: input.sponsorEmail?.trim() || null,
-            }
-          });
-        }
+      // 7. Sponsor Details: 3-field structure (Salutation, First Name, Last Name)
+      const sponsorFirstName = input.sponsorFirstName?.trim() || (input.sponsorName ? input.sponsorName.trim().split(/\s+/)[0] : "");
+      const sponsorLastName = input.sponsorLastName?.trim() || (input.sponsorName ? input.sponsorName.trim().split(/\s+/).slice(1).join(" ") : "");
+      const hasSponsorData = Boolean(sponsorFirstName || sponsorLastName || input.sponsorName?.trim() || input.sponsorMobile?.trim());
+
+      if (hasSponsorData || input.sponsorName !== undefined) {
+        const sponsorSalutation = (input.sponsorSalutation || "").trim() || (currentUser.memberProfile?.sponsor?.salutation || "Mr");
+        const sponsorFullName = [sponsorSalutation, sponsorFirstName, sponsorLastName].filter(Boolean).join(" ") || input.sponsorName?.trim() || "Sponsor";
+
+        await tx.sponsor.upsert({
+          where: { memberProfileId: memberProfileId },
+          update: {
+            salutation: sponsorSalutation,
+            firstName: sponsorFirstName || null,
+            lastName: sponsorLastName || null,
+            fullName: sponsorFullName,
+            relationship: input.sponsorRelationship?.trim() || "Sponsor",
+            mobileNumber: input.sponsorMobile?.trim() || "",
+            alternateNumber: input.sponsorAlternateNumber?.trim() || null,
+            email: input.sponsorEmail?.trim() || null,
+          },
+          create: {
+            memberProfileId: memberProfileId,
+            salutation: sponsorSalutation,
+            firstName: sponsorFirstName || null,
+            lastName: sponsorLastName || null,
+            fullName: sponsorFullName,
+            relationship: input.sponsorRelationship?.trim() || "Sponsor",
+            mobileNumber: input.sponsorMobile?.trim() || "",
+            alternateNumber: input.sponsorAlternateNumber?.trim() || null,
+            email: input.sponsorEmail?.trim() || null,
+          }
+        });
       }
 
       // 8. Insurance Details
@@ -1033,6 +1056,7 @@ export async function adminUpdateMember(formData: FormData) {
   const hasSensitiveView = await AuthorizationService.can(sessionUser, "MEMBER_SENSITIVE_VIEW");
 
   const userId = formData.get("userId") as string;
+  const salutation = formData.get("salutation") as string;
   const firstName = formData.get("firstName") as string;
   const lastName = formData.get("lastName") as string;
   const email = formData.get("email") as string;
@@ -1048,6 +1072,7 @@ export async function adminUpdateMember(formData: FormData) {
 
   const hasSpouseStr = formData.get("hasSpouse") as string;
   const hasSpouse = hasSpouseStr === "true" || hasSpouseStr === "1" || hasSpouseStr === "on";
+  const spouseSalutation = formData.get("spouseSalutation") as string;
   const spouseFirstName = formData.get("spouseFirstName") as string;
   const spouseLastName = formData.get("spouseLastName") as string;
   const spouseMobileNumber = formData.get("spouseMobileNumber") as string;
@@ -1077,6 +1102,9 @@ export async function adminUpdateMember(formData: FormData) {
   const emergencyContactAlternatePhone = formData.get("emergencyContactAlternatePhone") as string;
   const emergencyContactEmail = formData.get("emergencyContactEmail") as string;
 
+  const sponsorSalutation = formData.get("sponsorSalutation") as string;
+  const sponsorFirstName = formData.get("sponsorFirstName") as string;
+  const sponsorLastName = formData.get("sponsorLastName") as string;
   const sponsorName = formData.get("sponsorName") as string;
   const sponsorRelationship = formData.get("sponsorRelationship") as string;
   const sponsorMobile = formData.get("sponsorMobile") as string;
@@ -1085,6 +1113,7 @@ export async function adminUpdateMember(formData: FormData) {
 
   const input: AdminUpdateMemberInput = {
     userId,
+    salutation: salutation || null,
     firstName,
     lastName,
     email,
@@ -1099,6 +1128,7 @@ export async function adminUpdateMember(formData: FormData) {
     idProofNumber: idProofNumber || null,
 
     hasSpouse,
+    spouseSalutation: spouseSalutation || null,
     spouseFirstName: spouseFirstName || null,
     spouseLastName: spouseLastName || null,
     spouseMobileNumber: spouseMobileNumber || null,
@@ -1127,6 +1157,9 @@ export async function adminUpdateMember(formData: FormData) {
     emergencyContactAlternatePhone: emergencyContactAlternatePhone || null,
     emergencyContactEmail: emergencyContactEmail || null,
 
+    sponsorSalutation: sponsorSalutation || null,
+    sponsorFirstName: sponsorFirstName || null,
+    sponsorLastName: sponsorLastName || null,
     sponsorName: sponsorName || null,
     sponsorRelationship: sponsorRelationship || null,
     sponsorMobile: sponsorMobile || null,
@@ -1484,21 +1517,33 @@ export async function adminCreateMember(formData: FormData) {
 
   const passwordHash = await bcrypt.hash(validatedData.password, 10)
 
+  const salutation = (validatedData.salutation || "").trim() || "Mr";
+  const firstName = validatedData.firstName.trim();
+  const lastName = validatedData.lastName.trim();
+  const fullName = `${salutation} ${firstName} ${lastName}`.trim();
+
   const user = await db.$transaction(async (tx) => {
     const newUser = await tx.user.create({
       data: {
-        name: ` `,
+        name: fullName,
         email: normalizedEmail,
         passwordHash,
         role: ROLES.MEMBER,
         emailVerified: new Date(),
       }
     })
+
+    const hasSpouseData = Boolean(validatedData.spouseFirstName?.trim() || validatedData.spouseLastName?.trim());
+    const spouseSalutation = hasSpouseData
+      ? ((validatedData.spouseSalutation || "").trim() || "Mr")
+      : null;
+
     const profile = await tx.memberProfile.create({
       data: {
         userId: newUser.id,
-        firstName: validatedData.firstName,
-        lastName: validatedData.lastName,
+        salutation,
+        firstName,
+        lastName,
         idProofType: validatedData.idProofType || null,
         idProofNumber: validatedData.idProofNumber || null,
         dateOfBirth: new Date(validatedData.dateOfBirth),
@@ -1508,13 +1553,35 @@ export async function adminCreateMember(formData: FormData) {
         mobileNumber: validatedData.mobileNumber,
         alternateNumber: validatedData.alternateNumber || null,
         email: normalizedEmail,
+        spouseSalutation,
+        spouseFirstName: validatedData.spouseFirstName?.trim() || null,
+        spouseLastName: validatedData.spouseLastName?.trim() || null,
       }
     })
     await tx.emergencyContact.create({
       data: { userId: newUser.id, fullName: validatedData.emergencyContactName, relationship: validatedData.emergencyContactRelationship, phone: validatedData.emergencyContactMobile, alternatePhone: validatedData.emergencyContactOther || null, email: validatedData.emergencyContactEmail || null }
     })
+
+    const sponsorFirstName = validatedData.sponsorFirstName?.trim() || (validatedData.sponsorName ? validatedData.sponsorName.trim().split(/\s+/)[0] : "");
+    const sponsorLastName = validatedData.sponsorLastName?.trim() || (validatedData.sponsorName ? validatedData.sponsorName.trim().split(/\s+/).slice(1).join(" ") : "");
+    const hasSponsorData = Boolean(sponsorFirstName || sponsorLastName || validatedData.sponsorName?.trim() || validatedData.sponsorMobile?.trim());
+    const sponsorSalutation = hasSponsorData
+      ? ((validatedData.sponsorSalutation || "").trim() || "Mr")
+      : "Mr";
+    const sponsorFullName = [sponsorSalutation, sponsorFirstName, sponsorLastName].filter(Boolean).join(" ") || validatedData.sponsorName?.trim() || "Sponsor";
+
     await tx.sponsor.create({
-      data: { memberProfileId: profile.id, fullName: validatedData.sponsorName, relationship: validatedData.sponsorRelationship, mobileNumber: validatedData.sponsorMobile, alternateNumber: validatedData.sponsorOther || null, email: validatedData.sponsorEmail || null }
+      data: {
+        memberProfileId: profile.id,
+        salutation: sponsorSalutation,
+        firstName: sponsorFirstName || null,
+        lastName: sponsorLastName || null,
+        fullName: sponsorFullName,
+        relationship: validatedData.sponsorRelationship || "Sponsor",
+        mobileNumber: validatedData.sponsorMobile || "",
+        alternateNumber: validatedData.sponsorOther || null,
+        email: validatedData.sponsorEmail || null,
+      }
     })
     if (validatedData.insuranceProvider || validatedData.policyNumber) {
       await tx.insuranceDetails.create({ data: { memberProfileId: profile.id, providerName: validatedData.insuranceProvider || '', policyNumber: validatedData.policyNumber || '', coverageAmount: validatedData.coverageAmount || null } })

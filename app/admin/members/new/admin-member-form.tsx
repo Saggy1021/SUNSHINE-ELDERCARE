@@ -63,13 +63,19 @@ export function AdminMemberForm() {
       <div className="space-y-4">
         <h3 className="font-serif text-xl border-b border-border pb-2">Section A: Member Details</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground/80">First Name *</label>
-            <input name="firstName" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Surname / Last Name *</label>
-            <input name="lastName" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-12 gap-4">
+            <div className="sm:col-span-3">
+              <label className="mb-1.5 block text-sm font-medium text-foreground/80">Salutation</label>
+              <input name="salutation" type="text" placeholder="e.g. Mr, Dr, Grp Cpt (Default: Mr)" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+            </div>
+            <div className="sm:col-span-5">
+              <label className="mb-1.5 block text-sm font-medium text-foreground/80">First Name *</label>
+              <input name="firstName" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+            </div>
+            <div className="sm:col-span-4">
+              <label className="mb-1.5 block text-sm font-medium text-foreground/80">Surname / Last Name *</label>
+              <input name="lastName" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+            </div>
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground/80">ID Proof Type</label>
@@ -142,9 +148,19 @@ export function AdminMemberForm() {
       <div className="space-y-4">
         <h3 className="font-serif text-xl border-b border-border pb-2">Section C: Sponsor Details</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground/80">Sponsor Name *</label>
-            <input name="sponsorName" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-12 gap-4">
+            <div className="sm:col-span-3">
+              <label className="mb-1.5 block text-sm font-medium text-foreground/80">Sponsor Salutation</label>
+              <input name="sponsorSalutation" type="text" placeholder="e.g. Mr, Dr, Grp Cpt (Default: Mr)" className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+            </div>
+            <div className="sm:col-span-5">
+              <label className="mb-1.5 block text-sm font-medium text-foreground/80">Sponsor First Name *</label>
+              <input name="sponsorFirstName" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+            </div>
+            <div className="sm:col-span-4">
+              <label className="mb-1.5 block text-sm font-medium text-foreground/80">Sponsor Surname / Last Name *</label>
+              <input name="sponsorLastName" type="text" required className="w-full rounded-xl border border-input bg-background px-4 py-3 font-serif text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+            </div>
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground/80">Relationship *</label>

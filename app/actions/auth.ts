@@ -45,10 +45,15 @@ export async function registerUser(formData: FormData) {
     const passwordHash = await bcrypt.hash(validatedData.password, 10)
 
     // Run in a transaction to ensure atomic creation
+    const salutation = (validatedData.salutation || "").trim() || "Mr";
+    const firstName = validatedData.firstName.trim();
+    const lastName = validatedData.lastName.trim();
+    const fullName = `${salutation} ${firstName} ${lastName}`.trim();
+
     const user = await db.$transaction(async (tx) => {
       const newUser = await tx.user.create({
         data: {
-          name: `${validatedData.firstName} ${validatedData.lastName}`,
+          name: fullName,
           email: normalizedEmail,
           passwordHash,
           role: ROLES.MEMBER,
@@ -84,8 +89,9 @@ export async function registerUser(formData: FormData) {
       const profile = await tx.memberProfile.create({
         data: {
           userId: newUser.id,
-          firstName: validatedData.firstName,
-          lastName: validatedData.lastName,
+          salutation,
+          firstName,
+          lastName,
           idProofType: validatedData.idProofType || null,
           idProofNumber: validatedData.idProofNumber || null,
           dateOfBirth: new Date(validatedData.dateOfBirth),
@@ -112,12 +118,23 @@ export async function registerUser(formData: FormData) {
         }
       })
 
+      const sponsorFirstName = validatedData.sponsorFirstName?.trim() || (validatedData.sponsorName ? validatedData.sponsorName.trim().split(/\s+/)[0] : "");
+      const sponsorLastName = validatedData.sponsorLastName?.trim() || (validatedData.sponsorName ? validatedData.sponsorName.trim().split(/\s+/).slice(1).join(" ") : "");
+      const hasSponsorData = Boolean(sponsorFirstName || sponsorLastName || validatedData.sponsorName?.trim() || validatedData.sponsorMobile?.trim());
+      const sponsorSalutation = hasSponsorData
+        ? ((validatedData.sponsorSalutation || "").trim() || "Mr")
+        : "Mr";
+      const sponsorFullName = [sponsorSalutation, sponsorFirstName, sponsorLastName].filter(Boolean).join(" ") || validatedData.sponsorName?.trim() || "Sponsor";
+
       await tx.sponsor.create({
         data: {
           memberProfileId: profile.id,
-          fullName: validatedData.sponsorName,
-          relationship: validatedData.sponsorRelationship,
-          mobileNumber: validatedData.sponsorMobile,
+          salutation: sponsorSalutation,
+          firstName: sponsorFirstName || null,
+          lastName: sponsorLastName || null,
+          fullName: sponsorFullName,
+          relationship: validatedData.sponsorRelationship || "Sponsor",
+          mobileNumber: validatedData.sponsorMobile || "",
           alternateNumber: validatedData.sponsorOther || null,
           email: validatedData.sponsorEmail || null,
         }

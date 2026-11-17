@@ -544,6 +544,7 @@ model MemberProfile {
   memberId String? @unique // Business Member ID (e.g. SEC/S/1001/SAKR)
 
   // Section A: Member Details
+  salutation      String?   @default("Mr")
   firstName       String
   lastName        String
   idProofType     String? // e.g., PAN, Voter ID, Passport
@@ -568,6 +569,7 @@ model MemberProfile {
   idProofDocument   MemberDocument? @relation("MemberIdProof", fields: [idProofDocumentId], references: [id], onDelete: SetNull)
 
   // Spouse / Second Member Details (Optional for Couple memberships)
+  spouseSalutation        String?         @default("Mr")
   spouseFirstName         String?
   spouseLastName          String?
   spouseDateOfBirth       DateTime?
@@ -588,6 +590,9 @@ model MemberProfile {
 model Sponsor {
   id              String  @id @default(cuid())
   memberProfileId String  @unique
+  salutation      String? @default("Mr")
+  firstName       String?
+  lastName        String?
   fullName        String
   relationship    String
   mobileNumber    String
