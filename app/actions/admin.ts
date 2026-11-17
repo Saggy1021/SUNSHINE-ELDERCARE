@@ -2,6 +2,7 @@
 
 import { auth } from "@/auth"
 import { db } from "@/lib/db"
+import { Prisma } from "@prisma/client"
 import { revalidatePath, revalidateTag } from "next/cache"
 import { redirect } from "next/navigation"
 import { notificationService } from "@/lib/services/notification"
@@ -50,6 +51,97 @@ async function logAudit(actorId: string, action: string, entityType: string, ent
 
 // --- Dashboard & Metrics Core Functions ---
 export async function getAdminDashboardMetricsCore(database: any = db, now: Date = new Date()) {
+  if (typeof database.$queryRaw === 'function') {
+    try {
+      const excluded = DASHBOARD_EXCLUDED_EMAILS;
+      const rawRows: any[] = await database.$queryRaw(Prisma.sql`
+        SELECT
+          (
+            SELECT COUNT(DISTINCT u.id)::int
+            FROM "User" u
+            LEFT JOIN "MemberProfile" mp ON mp."userId" = u.id
+            LEFT JOIN "Subscription" s ON s."userId" = u.id
+            WHERE u.email NOT IN (${Prisma.join(excluded)})
+              AND u.status != 'ARCHIVED'
+              AND u.role != 'ADMIN'
+              AND NOT EXISTS (
+                SELECT 1 FROM "UserRole" ur JOIN "Role" r ON ur."roleId" = r.id WHERE ur."userId" = u.id AND r.name IN ('Owner', 'Admin')
+              )
+              AND (u.role = 'MEMBER' OR mp.id IS NOT NULL OR s.id IS NOT NULL)
+          ) AS "totalMembers",
+          (
+            SELECT COUNT(DISTINCT u.id)::int
+            FROM "User" u
+            JOIN "MemberProfile" mp ON mp."userId" = u.id
+            JOIN "Subscription" s ON s."userId" = u.id
+            WHERE u.email NOT IN (${Prisma.join(excluded)})
+              AND u.email NOT LIKE '%@example.com'
+              AND u.status != 'ARCHIVED'
+              AND u.role != 'ADMIN'
+              AND NOT EXISTS (
+                SELECT 1 FROM "UserRole" ur JOIN "Role" r ON ur."roleId" = r.id WHERE ur."userId" = u.id AND r.name IN ('Owner', 'Admin')
+              )
+              AND s.status = 'ACTIVE'
+              AND s."startDate" <= ${now}
+              AND s."endDate" >= ${now}
+          ) AS "activeMembers",
+          (
+            SELECT COUNT(*)::int 
+            FROM "RenewalRequest" rr
+            JOIN "User" u ON rr."userId" = u.id
+            WHERE rr.status = 'SUBMITTED' AND u.email NOT IN (${Prisma.join(excluded)})
+          ) AS "pendingRenewals",
+          (
+            SELECT COUNT(*)::int 
+            FROM "Payment" p
+            JOIN "User" u ON p."userId" = u.id
+            WHERE p.status = 'VERIFICATION_PENDING' AND u.email NOT IN (${Prisma.join(excluded)})
+          ) AS "pendingPayments",
+          (
+            SELECT COUNT(*)::int FROM "Inquiry" WHERE status = 'NEW'
+          ) AS "newInquiries",
+          (
+            SELECT COUNT(*)::int FROM "Feedback" WHERE status IN ('SUBMITTED', 'UNDER_REVIEW')
+          ) AS "unresolvedFeedback",
+          (
+            SELECT COUNT(*)::int
+            FROM "Subscription" s
+            JOIN "User" u ON s."userId" = u.id
+            WHERE s.status = 'SCHEDULED' AND u.email NOT IN (${Prisma.join(excluded)}) AND u.role != 'ADMIN'
+          ) AS "scheduledMemberships",
+          (
+            SELECT COUNT(*)::int
+            FROM "Subscription" s
+            JOIN "User" u ON s."userId" = u.id
+            WHERE s.status = 'EXPIRING' AND u.email NOT IN (${Prisma.join(excluded)}) AND u.role != 'ADMIN'
+          ) AS "expiringMemberships",
+          (
+            SELECT COUNT(*)::int
+            FROM "Subscription" s
+            JOIN "User" u ON s."userId" = u.id
+            WHERE s.status = 'EXPIRED' AND u.email NOT IN (${Prisma.join(excluded)}) AND u.role != 'ADMIN'
+          ) AS "expiredMemberships"
+      `);
+
+      if (rawRows && rawRows.length > 0) {
+        const r = rawRows[0];
+        return {
+          totalMembers: Number(r.totalMembers || 0),
+          activeMembers: Number(r.activeMembers || 0),
+          pendingRenewals: Number(r.pendingRenewals || 0),
+          scheduledMemberships: Number(r.scheduledMemberships || 0),
+          expiringMemberships: Number(r.expiringMemberships || 0),
+          expiredMemberships: Number(r.expiredMemberships || 0),
+          newInquiries: Number(r.newInquiries || 0),
+          unresolvedFeedback: Number(r.unresolvedFeedback || 0),
+          pendingPayments: Number(r.pendingPayments || 0),
+        };
+      }
+    } catch (err) {
+      console.warn("[getAdminDashboardMetricsCore] $queryRaw failed, falling back to Prisma query:", err);
+    }
+  }
+
   const canUseGroupBy = typeof database.subscription?.groupBy === 'function';
 
   if (canUseGroupBy) {

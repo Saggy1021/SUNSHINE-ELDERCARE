@@ -187,6 +187,228 @@ export async function getScheduleVisits(filters: {
   const rangeStart = new Date(startUtc.getTime() - 14 * 3600 * 1000);
   const rangeEnd = new Date(endUtc.getTime() + 14 * 3600 * 1000);
 
+  if (typeof db.$queryRaw === "function") {
+    try {
+      const statusCondition =
+        filters.status && filters.status !== "ALL"
+          ? Prisma.sql`AND cv.status = ${filters.status}`
+          : Prisma.empty;
+
+      const caregiverCondition =
+        filters.caregiverId && filters.caregiverId !== "ALL"
+          ? Prisma.sql`AND (cv."assignedEmpId" = ${filters.caregiverId} OR EXISTS (SELECT 1 FROM "VisitAssignment" va2 WHERE va2."visitId" = cv.id AND va2."employeeId" = ${filters.caregiverId}))`
+          : Prisma.empty;
+
+      const rawVisits: any[] = await db.$queryRaw(Prisma.sql`
+        SELECT 
+          cv.id,
+          cv.status,
+          cv."operationalNotes",
+          cv."scheduledStart",
+          cv."scheduledEnd",
+          cv."actualStart",
+          cv."actualEnd",
+          cv."careCaseId",
+          cv."assignedEmpId",
+          e.id AS "elderId",
+          e."firstName" AS "elderFirstName",
+          e."lastName" AS "elderLastName",
+          e.relationship AS "elderRelationship",
+          e.address AS "elderAddress",
+          e.city AS "elderCity",
+          e."contactNumber" AS "elderContactNumber",
+          u.id AS "userId",
+          u.name AS "userName",
+          u.email AS "userEmail",
+          mp.salutation AS "profileSalutation",
+          mp."firstName" AS "profileFirstName",
+          mp."lastName" AS "profileLastName",
+          mp."memberId" AS "profileMemberId",
+          mp."serviceAddress" AS "profileServiceAddress",
+          mp."mobileNumber" AS "profileMobileNumber",
+          mp."preferredVisitDay" AS "preferredVisitDay",
+          mp."preferredVisitTime" AS "preferredVisitTime",
+          cp.name AS "carePlanName",
+          emp.id AS "empId",
+          emp."employeeId" AS "empEmployeeId",
+          emp."firstName" AS "empFirstName",
+          emp."lastName" AS "empLastName",
+          emp.designation AS "empDesignation",
+          emp."contactNumber" AS "empContactNumber"
+        FROM "CareVisit" cv
+        LEFT JOIN "CareCase" cc ON cv."careCaseId" = cc.id
+        LEFT JOIN "Elder" e ON cc."elderId" = e.id
+        LEFT JOIN "User" u ON e."userId" = u.id
+        LEFT JOIN "MemberProfile" mp ON mp."userId" = u.id
+        LEFT JOIN "Subscription" sub ON cc."subscriptionId" = sub.id
+        LEFT JOIN "CarePlan" cp ON sub."carePlanId" = cp.id
+        LEFT JOIN "Employee" emp ON cv."assignedEmpId" = emp.id
+        WHERE cv."scheduledStart" >= ${rangeStart} AND cv."scheduledStart" <= ${rangeEnd}
+          ${statusCondition}
+          ${caregiverCondition}
+        ORDER BY cv."scheduledStart" ASC
+      `);
+
+      const visitIds = rawVisits.map((v) => v.id);
+      const relieversByVisit: Record<string, any[]> = {};
+      if (visitIds.length > 0) {
+        const assignments: any[] = await db.$queryRaw(Prisma.sql`
+          SELECT 
+            va."visitId",
+            emp.id,
+            emp."employeeId",
+            emp."firstName",
+            emp."lastName",
+            emp.designation
+          FROM "VisitAssignment" va
+          JOIN "Employee" emp ON va."employeeId" = emp.id
+          WHERE va."visitId" IN (${Prisma.join(visitIds)})
+        `);
+        for (const a of assignments) {
+          if (!relieversByVisit[a.visitId]) relieversByVisit[a.visitId] = [];
+          relieversByVisit[a.visitId].push({
+            id: a.id,
+            employeeId: a.employeeId,
+            firstName: a.firstName,
+            lastName: a.lastName,
+            designation: a.designation,
+          });
+        }
+      }
+
+      const dtoList: ScheduleVisitDTO[] = [];
+      for (const v of rawVisits) {
+        // Filter by memberSearch if provided
+        if (filters.memberSearch && filters.memberSearch.trim()) {
+          const q = filters.memberSearch.trim().toLowerCase();
+          const matchElder = `${v.elderFirstName || ""} ${v.elderLastName || ""}`.toLowerCase().includes(q);
+          const matchMember =
+            (v.userName && v.userName.toLowerCase().includes(q)) ||
+            `${v.profileFirstName || ""} ${v.profileLastName || ""}`.toLowerCase().includes(q);
+          const matchMid = v.profileMemberId && v.profileMemberId.toLowerCase().includes(q);
+          if (!matchElder && !matchMember && !matchMid) {
+            continue;
+          }
+        }
+
+        // Filter by category if provided
+        const parsedCat = parseCategory(v.operationalNotes);
+        if (filters.category && filters.category !== "ALL") {
+          if (parsedCat.category !== filters.category) {
+            continue;
+          }
+        }
+
+        // Filter by location if provided
+        if (filters.location && filters.location.trim()) {
+          const locQ = filters.location.trim().toLowerCase();
+          const address = v.profileServiceAddress || v.elderAddress || v.elderCity || "";
+          if (!address.toLowerCase().includes(locQ)) {
+            continue;
+          }
+        }
+
+        const memberSalutation = v.profileSalutation || "Mr";
+        const memberProfileName = v.profileFirstName
+          ? `${memberSalutation} ${v.profileFirstName} ${v.profileLastName || ""}`.trim()
+          : null;
+        const memberName =
+          memberProfileName ||
+          v.userName ||
+          `${v.elderFirstName || ""} ${v.elderLastName || ""}`.trim() ||
+          "Member";
+        const elderName = v.elderFirstName ? `${v.elderFirstName} ${v.elderLastName || ""}`.trim() : memberName;
+
+        const assignedRelievers = relieversByVisit[v.id] || [];
+        const primaryReliever = assignedRelievers[0];
+
+        const assignedEmpData = v.empId
+          ? {
+              id: v.empId,
+              employeeId: v.empEmployeeId,
+              firstName: v.empFirstName,
+              lastName: v.empLastName,
+              designation: v.empDesignation,
+              contactNumber: v.empContactNumber || null,
+            }
+          : primaryReliever
+          ? {
+              id: primaryReliever.id,
+              employeeId: primaryReliever.employeeId,
+              firstName: primaryReliever.firstName,
+              lastName: primaryReliever.lastName,
+              designation: primaryReliever.designation,
+              contactNumber: null,
+            }
+          : null;
+
+        const additionalCaregivers = v.empId
+          ? assignedRelievers.map((a) => ({
+              id: a.id,
+              employeeId: a.employeeId,
+              firstName: a.firstName,
+              lastName: a.lastName,
+            }))
+          : assignedRelievers.slice(1).map((a) => ({
+              id: a.id,
+              employeeId: a.employeeId,
+              firstName: a.firstName,
+              lastName: a.lastName,
+            }));
+
+        dtoList.push({
+          id: v.id,
+          careCaseId: v.careCaseId,
+          scheduledStart:
+            v.scheduledStart instanceof Date ? v.scheduledStart.toISOString() : new Date(v.scheduledStart).toISOString(),
+          scheduledEnd:
+            v.scheduledEnd instanceof Date ? v.scheduledEnd.toISOString() : new Date(v.scheduledEnd).toISOString(),
+          actualStart: v.actualStart
+            ? v.actualStart instanceof Date
+              ? v.actualStart.toISOString()
+              : new Date(v.actualStart).toISOString()
+            : null,
+          actualEnd: v.actualEnd
+            ? v.actualEnd instanceof Date
+              ? v.actualEnd.toISOString()
+              : new Date(v.actualEnd).toISOString()
+            : null,
+          status: v.status,
+          category: parsedCat.category,
+          operationalNotes: parsedCat.cleanNotes || v.operationalNotes,
+          member: {
+            userId: v.userId || "",
+            name: memberName,
+            email: v.userEmail || "",
+            memberId: v.profileMemberId || null,
+            serviceAddress: v.profileServiceAddress || v.elderAddress || null,
+            mobileNumber: v.profileMobileNumber || v.elderContactNumber || null,
+            preferredVisitDay: v.preferredVisitDay || null,
+            preferredVisitTime: v.preferredVisitTime || null,
+            preferredScheduleDisplay: formatPreferredSchedule(v.preferredVisitDay, v.preferredVisitTime),
+          },
+          elder: {
+            id: v.elderId || "",
+            firstName: v.elderFirstName || "",
+            lastName: v.elderLastName || "",
+            relationship: v.elderRelationship || "Self",
+            address: v.elderAddress || v.profileServiceAddress || null,
+            city: v.elderCity || null,
+            contactNumber: v.elderContactNumber || null,
+          },
+          carePlanName: v.carePlanName || "Care Plan",
+          assignedEmployee: assignedEmpData,
+          assignedCaregiver: assignedEmpData,
+          additionalCaregivers,
+        });
+      }
+
+      return dtoList;
+    } catch (err) {
+      console.warn("[getScheduleVisits] $queryRaw failed, falling back to Prisma findMany:", err);
+    }
+  }
+
   const whereClause: any = {
     scheduledStart: {
       gte: rangeStart,
@@ -337,33 +559,13 @@ export async function getScheduleVisits(filters: {
 
 /**
  * Returns available cases (active subscriptions / elders) and active employees for scheduling modals.
+ * Accelerated with single-roundtrip join eliminating waterfall query contention.
  */
 export async function getCareScheduleFormData(): Promise<CareScheduleFormData> {
   await requireSchedulePermission(false);
 
-  const [activeCases, activeEmployees, activeSubscriptionsWithoutCase] = await Promise.all([
-    db.careCase.findMany({
-      where: { status: "ACTIVE" },
-      include: {
-        elder: {
-          include: {
-            user: {
-              include: {
-                memberProfile: true,
-                subscriptions: {
-                  where: { status: "ACTIVE" },
-                  include: { carePlan: true, plan: true, customPlan: true },
-                },
-              },
-            },
-          },
-        },
-        subscription: {
-          include: { carePlan: true, plan: true, customPlan: true },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
+  const [casesOptions, activeEmployees] = await Promise.all([
+    searchScheduleMembers(""),
     db.employee.findMany({
       where: { status: "ACTIVE" },
       select: {
@@ -375,91 +577,7 @@ export async function getCareScheduleFormData(): Promise<CareScheduleFormData> {
       },
       orderBy: { firstName: "asc" },
     }),
-    db.subscription.findMany({
-      where: {
-        status: "ACTIVE",
-        careCases: { none: {} },
-      },
-      include: {
-        carePlan: true,
-        plan: true,
-        customPlan: true,
-        user: {
-          include: { memberProfile: true, elders: true },
-        },
-      },
-    }),
   ]);
-
-  const casesOptions: CareScheduleFormData["cases"] = [];
-
-  for (const c of activeCases) {
-    const elder = c.elder;
-    const member = elder?.user;
-    const profile = member?.memberProfile;
-    const elderName = elder ? `${elder.firstName} ${elder.lastName}`.trim() : "Elder";
-    const memberName =
-      (profile?.firstName ? `${profile.firstName} ${profile.lastName}`.trim() : member?.name) || elderName;
-    const memberId = profile?.memberId || null;
-    const sub = c.subscription || member?.subscriptions?.[0];
-    const subscribedPlan = formatPlanDisplay(sub);
-    const primaryMobile = profile?.mobileNumber || "Not available";
-    const serviceAddress = profile?.serviceAddress || elder?.address || null;
-    const preferredVisitDay = profile?.preferredVisitDay || null;
-    const preferredVisitTime = profile?.preferredVisitTime || null;
-    const preferredScheduleDisplay = formatPreferredSchedule(preferredVisitDay, preferredVisitTime);
-    const label = memberId ? `${memberName} (${memberId}) – ${subscribedPlan}` : `${memberName} — ${subscribedPlan}`;
-
-    casesOptions.push({
-      id: c.id,
-      careCaseId: c.id,
-      label,
-      memberName,
-      memberId,
-      elderName,
-      serviceAddress,
-      primaryMobile,
-      subscribedPlan,
-      preferredVisitDay,
-      preferredVisitTime,
-      preferredScheduleDisplay,
-    });
-  }
-
-  // Ensure members with active subscriptions without a case can also be selected (case created on the fly)
-  for (const sub of activeSubscriptionsWithoutCase) {
-    const user = sub.user;
-    const profile = user.memberProfile;
-    const elder = user.elders?.[0];
-    const elderName = elder ? `${elder.firstName} ${elder.lastName}`.trim() : user.name || "Care Recipient";
-    const memberName =
-      (profile?.firstName ? `${profile.firstName} ${profile.lastName}`.trim() : user.name) || elderName;
-    const memberId = profile?.memberId || null;
-    const subscribedPlan = formatPlanDisplay(sub);
-    const primaryMobile = profile?.mobileNumber || "Not available";
-    const serviceAddress = profile?.serviceAddress || elder?.address || null;
-    const preferredVisitDay = profile?.preferredVisitDay || null;
-    const preferredVisitTime = profile?.preferredVisitTime || null;
-    const preferredScheduleDisplay = formatPreferredSchedule(preferredVisitDay, preferredVisitTime);
-    const label = memberId
-      ? `${memberName} (${memberId}) [New Case] – ${subscribedPlan}`
-      : `${memberName} [New Case] — ${subscribedPlan}`;
-
-    casesOptions.push({
-      id: `new_sub_${sub.id}`,
-      careCaseId: `new_sub_${sub.id}`,
-      label,
-      memberName,
-      memberId,
-      elderName,
-      serviceAddress,
-      primaryMobile,
-      subscribedPlan,
-      preferredVisitDay,
-      preferredVisitTime,
-      preferredScheduleDisplay,
-    });
-  }
 
   const employeeOptions = activeEmployees.map((emp) => {
     const codePart = emp.employeeId ? ` (${emp.employeeId})` : "";

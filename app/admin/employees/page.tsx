@@ -39,13 +39,13 @@ export default async function EmployeesPage() {
   // Execute all admin users, invitations, roles, and employees queries in parallel
   const [usersResult, invitationsResult, roles, employees] = await Promise.all([
     canViewAdmins
-      ? AdminUserService.getEmployeeUsers(user.id).catch((e) => {
+      ? AdminUserService.getEmployeeUsers(user.id, user.email).catch((e) => {
           console.error("Error fetching admin users:", e);
           return [];
         })
       : Promise.resolve([]),
     canViewAdmins
-      ? AdminUserService.getAdminInvitations(user.id)
+      ? AdminUserService.getAdminInvitations(user.id, user.email)
           .then((invs) => ({ invitations: invs, invitationError: false }))
           .catch((error: any) => {
             if (error?.code === "P2021") {

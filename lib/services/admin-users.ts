@@ -3,8 +3,8 @@ import { AuthorizationService } from "./authorization";
 import bcrypt from "bcryptjs";
 
 export class AdminUserService {
-  static async getEmployeeUsers(actorUserId: string) {
-    await AuthorizationService.require(actorUserId, 'ADMIN_USER_MANAGE');
+  static async getEmployeeUsers(actorUserId: string, actorEmail?: string | null) {
+    await AuthorizationService.require(actorUserId, 'ADMIN_USER_MANAGE', actorEmail);
     return db.user.findMany({
       where: { 
         role: { in: ['ADMIN', 'STAFF', 'CAREGIVER', 'COORDINATOR', 'SUPER_ADMIN', 'EMPLOYEE'] }
@@ -19,8 +19,8 @@ export class AdminUserService {
     });
   }
 
-  static async getAdminInvitations(actorUserId: string) {
-    await AuthorizationService.require(actorUserId, 'ADMIN_USER_MANAGE');
+  static async getAdminInvitations(actorUserId: string, actorEmail?: string | null) {
+    await AuthorizationService.require(actorUserId, 'ADMIN_USER_MANAGE', actorEmail);
     return db.adminInvitation.findMany({
       orderBy: { createdAt: 'desc' }
     });

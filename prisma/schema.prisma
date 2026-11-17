@@ -59,6 +59,8 @@ model User {
   updatedEmailTemplates EmailTemplate[]  @relation("TemplateUpdatedBy")
   ownedDocuments        MemberDocument[] @relation("UserDocuments")
   createdDocuments      MemberDocument[] @relation("DocumentCreatedBy")
+
+  @@index([role, status])
 }
 
 model Account {
@@ -387,6 +389,9 @@ model RenewalRequest {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([userId])
 }
 
 model RenewalRequestAddOn {
@@ -467,6 +472,10 @@ model AuditLog {
   actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
+
+  @@index([createdAt(sort: Desc)])
+  @@index([actorUserId])
+  @@index([entityId, entityType])
 }
 
 model Payment {
@@ -496,6 +505,9 @@ model Payment {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([userId])
 }
 
 model RazorpayWebhookEvent {
@@ -877,6 +889,7 @@ model CareVisit {
   updatedAt DateTime @updatedAt
 
   @@index([status, scheduledStart, scheduledEnd])
+  @@index([scheduledStart])
   @@index([assignedEmpId])
   @@index([careCaseId])
 }
@@ -1058,4 +1071,5 @@ model VisitAssignment {
   employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@unique([visitId, employeeId])
+  @@index([employeeId])
 }
