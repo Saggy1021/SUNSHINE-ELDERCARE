@@ -43,10 +43,10 @@ function formatDate(dateInput: any): string {
   try {
     const d = new Date(dateInput);
     if (isNaN(d.getTime())) return "-";
-    const day = String(d.getDate()).padStart(2, "0");
+    const day = String(d.getUTCDate()).padStart(2, "0");
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const month = months[d.getMonth()];
-    const year = d.getFullYear();
+    const month = months[d.getUTCMonth()];
+    const year = d.getUTCFullYear();
     return `${day} ${month} ${year}`;
   } catch {
     return "-";
@@ -256,7 +256,9 @@ export function EmployeesClient({
 
     setEmployeeSubmitting(true);
     try {
+      console.log("[handleToggleEmployeeStatus] Calling toggleEmployeeStatus with id:", employee.id);
       const res = await toggleEmployeeStatus(employee.id);
+      console.log("[handleToggleEmployeeStatus] Received response:", res);
       if (!res.success) {
         alert(res.error || "Failed to update employee status.");
         return;
@@ -622,7 +624,7 @@ export function EmployeesClient({
                           <td className="px-6 py-4 text-xs text-slate-600">
                             <div className="flex items-center gap-1.5">
                               <Calendar className="h-3 w-3 text-slate-400 shrink-0" />
-                              <span>{formatDate(emp.createdAt)}</span>
+                              <span suppressHydrationWarning>{formatDate(emp.createdAt)}</span>
                             </div>
                           </td>
 

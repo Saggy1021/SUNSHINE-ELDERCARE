@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { AuthorizationService } from "@/lib/services/authorization";
 import { redirect } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Employee & Admin Management - Sunshine Eldercare",
 };
