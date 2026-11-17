@@ -8,6 +8,7 @@ import { revalidatePath } from "next/cache";
 import {
   parseISTDateTimeToUTC,
   formatTimeIST,
+  formatPlanDisplay,
 } from "@/components/admin/schedule/schedule-date-utils";
 
 export interface ScheduleVisitDTO {
@@ -64,6 +65,33 @@ export interface ScheduleVisitDTO {
   }>;
 }
 
+export interface ScheduleMemberSearchResult {
+  id: string; // careCaseId or new_sub_${sub.id}
+  careCaseId: string;
+  memberId: string; // canonical SECD... or "Not assigned"
+  memberName: string; // Full registered member name
+  serviceAddress: string; // Full registered service address
+  primaryMobile: string; // Primary registered mobile number (never spouse's)
+  subscribedPlan: string; // e.g. "Shield Shine – 6 Months" or "No service plan recorded"
+  elderName: string; // Care recipient name
+  elderId?: string;
+  label: string; // Compact display label
+}
+
+export interface ScheduleEmployeeSearchResult {
+  id: string; // employee cuid
+  employeeId: string; // canonical SEC/184/SAKA
+  name: string; // Full name "FirstName LastName"
+  firstName: string;
+  lastName: string;
+  designation: string;
+  department?: string | null;
+  status: string; // "ACTIVE" | "INACTIVE"
+  available: boolean;
+  conflictTime?: string;
+  conflictReason?: string;
+}
+
 export interface CareScheduleFormData {
   cases: Array<{
     id: string;
@@ -73,6 +101,8 @@ export interface CareScheduleFormData {
     memberId: string | null;
     elderName: string;
     serviceAddress: string | null;
+    primaryMobile?: string | null;
+    subscribedPlan?: string | null;
   }>;
   employees: Array<{
     id: string;
@@ -81,6 +111,7 @@ export interface CareScheduleFormData {
     lastName: string;
     designation: string;
     displayName: string;
+    department?: string | null;
   }>;
 }
 
@@ -303,9 +334,18 @@ export async function getCareScheduleFormData(): Promise<CareScheduleFormData> {
         elder: {
           include: {
             user: {
-              include: { memberProfile: true },
+              include: {
+                memberProfile: true,
+                subscriptions: {
+                  where: { status: "ACTIVE" },
+                  include: { carePlan: true, plan: true, customPlan: true },
+                },
+              },
             },
           },
+        },
+        subscription: {
+          include: { carePlan: true, plan: true, customPlan: true },
         },
       },
       orderBy: { createdAt: "desc" },
@@ -327,6 +367,9 @@ export async function getCareScheduleFormData(): Promise<CareScheduleFormData> {
         careCases: { none: {} },
       },
       include: {
+        carePlan: true,
+        plan: true,
+        customPlan: true,
         user: {
           include: { memberProfile: true, elders: true },
         },
@@ -341,9 +384,14 @@ export async function getCareScheduleFormData(): Promise<CareScheduleFormData> {
     const member = elder?.user;
     const profile = member?.memberProfile;
     const elderName = elder ? `${elder.firstName} ${elder.lastName}`.trim() : "Elder";
-    const memberName = member?.name || elderName;
+    const memberName =
+      (profile?.firstName ? `${profile.firstName} ${profile.lastName}`.trim() : member?.name) || elderName;
     const memberId = profile?.memberId || null;
-    const label = memberId ? `${elderName} (${memberId})` : `${elderName} — ${member?.email || ""}`;
+    const sub = c.subscription || member?.subscriptions?.[0];
+    const subscribedPlan = formatPlanDisplay(sub);
+    const primaryMobile = profile?.mobileNumber || "Not available";
+    const serviceAddress = profile?.serviceAddress || elder?.address || null;
+    const label = memberId ? `${memberName} (${memberId}) – ${subscribedPlan}` : `${memberName} — ${subscribedPlan}`;
 
     casesOptions.push({
       id: c.id,
@@ -352,7 +400,9 @@ export async function getCareScheduleFormData(): Promise<CareScheduleFormData> {
       memberName,
       memberId,
       elderName,
-      serviceAddress: profile?.serviceAddress || elder?.address || null,
+      serviceAddress,
+      primaryMobile,
+      subscribedPlan,
     });
   }
 
@@ -360,9 +410,17 @@ export async function getCareScheduleFormData(): Promise<CareScheduleFormData> {
   for (const sub of activeSubscriptionsWithoutCase) {
     const user = sub.user;
     const profile = user.memberProfile;
-    const memberName = user.name || "Member";
+    const elder = user.elders?.[0];
+    const elderName = elder ? `${elder.firstName} ${elder.lastName}`.trim() : user.name || "Care Recipient";
+    const memberName =
+      (profile?.firstName ? `${profile.firstName} ${profile.lastName}`.trim() : user.name) || elderName;
     const memberId = profile?.memberId || null;
-    const label = memberId ? `${memberName} (${memberId}) [New Case]` : `${memberName} — ${user.email} [New Case]`;
+    const subscribedPlan = formatPlanDisplay(sub);
+    const primaryMobile = profile?.mobileNumber || "Not available";
+    const serviceAddress = profile?.serviceAddress || elder?.address || null;
+    const label = memberId
+      ? `${memberName} (${memberId}) [New Case] – ${subscribedPlan}`
+      : `${memberName} [New Case] — ${subscribedPlan}`;
 
     casesOptions.push({
       id: `new_sub_${sub.id}`,
@@ -370,8 +428,10 @@ export async function getCareScheduleFormData(): Promise<CareScheduleFormData> {
       label,
       memberName,
       memberId,
-      elderName: memberName,
-      serviceAddress: profile?.serviceAddress || null,
+      elderName,
+      serviceAddress,
+      primaryMobile,
+      subscribedPlan,
     });
   }
 
@@ -472,6 +532,288 @@ export async function getEmployeeAvailability(params: {
 
     return {
       employeeId: emp.id,
+      available: true,
+    };
+  });
+}
+
+/**
+ * Server-side searchable member / care case autocomplete action.
+ * Allows searching by member name, member ID (canonical SECD...), service address, and elder/care recipient name.
+ * Returns the 5 mandatory fields: Member Name, Member ID, Full Service Address, Primary Mobile Number, and Subscribed Plan with duration.
+ */
+export async function searchScheduleMembers(query: string = ""): Promise<ScheduleMemberSearchResult[]> {
+  await requireSchedulePermission(false);
+
+  const q = (query || "").trim();
+  const terms = q.split(/\s+/).filter(Boolean);
+
+  let whereCase: any = { status: "ACTIVE" };
+  if (terms.length > 0) {
+    whereCase = {
+      status: "ACTIVE",
+      AND: terms.map((term) => ({
+        OR: [
+          { elder: { firstName: { contains: term, mode: "insensitive" } } },
+          { elder: { lastName: { contains: term, mode: "insensitive" } } },
+          { elder: { address: { contains: term, mode: "insensitive" } } },
+          { elder: { user: { name: { contains: term, mode: "insensitive" } } } },
+          { elder: { user: { memberProfile: { memberId: { contains: term, mode: "insensitive" } } } } },
+          { elder: { user: { memberProfile: { firstName: { contains: term, mode: "insensitive" } } } } },
+          { elder: { user: { memberProfile: { lastName: { contains: term, mode: "insensitive" } } } } },
+          { elder: { user: { memberProfile: { serviceAddress: { contains: term, mode: "insensitive" } } } } },
+        ],
+      })),
+    };
+  }
+
+  let whereSub: any = {
+    status: "ACTIVE",
+    careCases: { none: {} },
+  };
+  if (terms.length > 0) {
+    whereSub.AND = terms.map((term) => ({
+      OR: [
+        { user: { name: { contains: term, mode: "insensitive" } } },
+        { user: { memberProfile: { memberId: { contains: term, mode: "insensitive" } } } },
+        { user: { memberProfile: { firstName: { contains: term, mode: "insensitive" } } } },
+        { user: { memberProfile: { lastName: { contains: term, mode: "insensitive" } } } },
+        { user: { memberProfile: { serviceAddress: { contains: term, mode: "insensitive" } } } },
+        { user: { elders: { some: { firstName: { contains: term, mode: "insensitive" } } } } },
+        { user: { elders: { some: { lastName: { contains: term, mode: "insensitive" } } } } },
+      ],
+    }));
+  }
+
+  const [activeCases, activeSubs] = await Promise.all([
+    db.careCase.findMany({
+      where: whereCase,
+      include: {
+        elder: {
+          include: {
+            user: {
+              include: {
+                memberProfile: true,
+                subscriptions: {
+                  where: { status: "ACTIVE" },
+                  include: { carePlan: true, plan: true, customPlan: true },
+                  orderBy: { createdAt: "desc" },
+                },
+              },
+            },
+          },
+        },
+        subscription: {
+          include: { carePlan: true, plan: true, customPlan: true },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 25,
+    }),
+    db.subscription.findMany({
+      where: whereSub,
+      include: {
+        carePlan: true,
+        plan: true,
+        customPlan: true,
+        user: {
+          include: {
+            memberProfile: true,
+            elders: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 15,
+    }),
+  ]);
+
+  const results: ScheduleMemberSearchResult[] = [];
+
+  for (const c of activeCases) {
+    const member = c.elder?.user;
+    const profile = member?.memberProfile;
+    const elder = c.elder;
+    const elderName = elder ? `${elder.firstName} ${elder.lastName}`.trim() : "Care Recipient";
+    const memberName =
+      (profile?.firstName ? `${profile.firstName} ${profile.lastName}`.trim() : member?.name) || elderName;
+    const memberId = profile?.memberId || "Not assigned";
+    const serviceAddress = profile?.serviceAddress || elder?.address || "Not available";
+    const primaryMobile = profile?.mobileNumber || "Not available";
+
+    const sub = c.subscription || member?.subscriptions?.[0];
+    const subscribedPlan = formatPlanDisplay(sub);
+
+    const label = `${memberName}${memberId !== "Not assigned" ? ` (${memberId})` : ""} – ${subscribedPlan}`;
+
+    results.push({
+      id: c.id,
+      careCaseId: c.id,
+      memberId,
+      memberName,
+      serviceAddress,
+      primaryMobile,
+      subscribedPlan,
+      elderName,
+      elderId: elder?.id,
+      label,
+    });
+  }
+
+  for (const sub of activeSubs) {
+    const user = sub.user;
+    const profile = user.memberProfile;
+    const elder = user.elders?.[0];
+    const elderName = elder ? `${elder.firstName} ${elder.lastName}`.trim() : user.name || "Care Recipient";
+    const memberName =
+      (profile?.firstName ? `${profile.firstName} ${profile.lastName}`.trim() : user.name) || elderName;
+    const memberId = profile?.memberId || "Not assigned";
+    const serviceAddress = profile?.serviceAddress || elder?.address || "Not available";
+    const primaryMobile = profile?.mobileNumber || "Not available";
+    const subscribedPlan = formatPlanDisplay(sub);
+
+    const label = `${memberName}${memberId !== "Not assigned" ? ` (${memberId})` : ""} [New Case] – ${subscribedPlan}`;
+
+    results.push({
+      id: `new_sub_${sub.id}`,
+      careCaseId: `new_sub_${sub.id}`,
+      memberId,
+      memberName,
+      serviceAddress,
+      primaryMobile,
+      subscribedPlan,
+      elderName,
+      elderId: elder?.id,
+      label,
+    });
+  }
+
+  return results;
+}
+
+/**
+ * Server-side searchable employee selector with real-time availability evaluation in Asia/Kolkata (IST).
+ * Allows searching by employee name, employee ID, designation, and department.
+ * Real-time availability calculation detects overlapping care visits and marks occupied employees as unavailable.
+ */
+export async function searchScheduleEmployees(params: {
+  query?: string;
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  excludeVisitId?: string;
+}): Promise<ScheduleEmployeeSearchResult[]> {
+  await requireSchedulePermission(false);
+
+  const q = (params.query || "").trim();
+  const terms = q.split(/\s+/).filter(Boolean);
+
+  let whereFilter: any = { status: "ACTIVE" };
+  if (terms.length > 0) {
+    whereFilter = {
+      status: "ACTIVE",
+      AND: terms.map((term) => ({
+        OR: [
+          { firstName: { contains: term, mode: "insensitive" } },
+          { lastName: { contains: term, mode: "insensitive" } },
+          { employeeId: { contains: term, mode: "insensitive" } },
+          { designation: { contains: term, mode: "insensitive" } },
+        ],
+      })),
+    };
+  }
+
+  const employees = await db.employee.findMany({
+    where: whereFilter,
+    orderBy: { firstName: "asc" },
+  });
+
+  const scheduledStart = parseISTDateTimeToUTC(params.date, params.startTime);
+  const scheduledEnd = parseISTDateTimeToUTC(params.date, params.endTime);
+  const isValidInterval =
+    !isNaN(scheduledStart.getTime()) && !isNaN(scheduledEnd.getTime()) && scheduledEnd > scheduledStart;
+
+  let blockingVisits: any[] = [];
+  if (isValidInterval) {
+    blockingVisits = await db.careVisit.findMany({
+      where: {
+        id: params.excludeVisitId ? { not: params.excludeVisitId } : undefined,
+        status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] },
+        scheduledStart: { lt: scheduledEnd },
+        scheduledEnd: { gt: scheduledStart },
+      },
+      select: {
+        id: true,
+        assignedEmpId: true,
+        scheduledStart: true,
+        scheduledEnd: true,
+        status: true,
+        assignments: { select: { employeeId: true } },
+        careCase: {
+          select: {
+            elder: {
+              select: {
+                firstName: true,
+                lastName: true,
+                user: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  return employees.map((emp) => {
+    if (!isValidInterval) {
+      return {
+        id: emp.id,
+        employeeId: emp.employeeId,
+        name: `${emp.firstName} ${emp.lastName}`.trim(),
+        firstName: emp.firstName,
+        lastName: emp.lastName,
+        designation: emp.designation,
+        department: (emp as any).department || null,
+        status: emp.status,
+        available: false,
+        conflictReason: "Invalid visit time range.",
+      };
+    }
+
+    const conflict = blockingVisits.find(
+      (v) => v.assignedEmpId === emp.id || v.assignments.some((a: any) => a.employeeId === emp.id)
+    );
+
+    if (conflict) {
+      const memberName =
+        conflict.careCase?.elder?.user?.name ||
+        `${conflict.careCase?.elder?.firstName || ""} ${conflict.careCase?.elder?.lastName || ""}`.trim() ||
+        "Member";
+      const timeStr = `${formatTimeIST(conflict.scheduledStart)} – ${formatTimeIST(conflict.scheduledEnd)}`;
+      return {
+        id: emp.id,
+        employeeId: emp.employeeId,
+        name: `${emp.firstName} ${emp.lastName}`.trim(),
+        firstName: emp.firstName,
+        lastName: emp.lastName,
+        designation: emp.designation,
+        department: (emp as any).department || null,
+        status: emp.status,
+        available: false,
+        conflictTime: timeStr,
+        conflictReason: `Occupied (${timeStr} for ${memberName})`,
+      };
+    }
+
+    return {
+      id: emp.id,
+      employeeId: emp.employeeId,
+      name: `${emp.firstName} ${emp.lastName}`.trim(),
+      firstName: emp.firstName,
+      lastName: emp.lastName,
+      designation: emp.designation,
+      department: (emp as any).department || null,
+      status: emp.status,
       available: true,
     };
   });
@@ -646,6 +988,8 @@ export async function updateCareVisitDetails(
     category?: "Scheduled" | "Ad-hoc";
     operationalNotes?: string;
     status?: string;
+    careCaseId?: string;
+    caseSelectionId?: string;
   }
 ): Promise<{ success: boolean; error?: string }> {
   const admin = await requireSchedulePermission(true);
@@ -656,6 +1000,43 @@ export async function updateCareVisitDetails(
   if (!existing) return { success: false, error: "Visit not found." };
 
   const dataToUpdate: any = {};
+
+  if (input.caseSelectionId || input.careCaseId) {
+    let targetCaseId = input.caseSelectionId || input.careCaseId!;
+    if (targetCaseId.startsWith("new_sub_")) {
+      const subId = targetCaseId.replace("new_sub_", "");
+      const subscription = await db.subscription.findUnique({
+        where: { id: subId },
+        include: { user: { include: { elders: true, memberProfile: true } } },
+      });
+      if (subscription) {
+        let elder = subscription.user.elders[0];
+        if (!elder) {
+          const nameParts = (subscription.user.name || "Care Recipient").split(" ");
+          elder = await db.elder.create({
+            data: {
+              userId: subscription.user.id,
+              firstName: nameParts[0] || "Care",
+              lastName: nameParts.slice(1).join(" ") || "Recipient",
+              relationship: "Self",
+              address: subscription.user.memberProfile?.serviceAddress || null,
+            },
+          });
+        }
+        const newCase = await db.careCase.create({
+          data: {
+            elderId: elder.id,
+            subscriptionId: subscription.id,
+            startDate: new Date(),
+            status: "ACTIVE",
+            operationalNotes: "Created via Visit Schedule Calendar",
+          },
+        });
+        targetCaseId = newCase.id;
+      }
+    }
+    dataToUpdate.careCaseId = targetCaseId;
+  }
 
   if (input.date && input.startTime && input.endTime) {
     const start = parseISTDateTimeToUTC(input.date, input.startTime);

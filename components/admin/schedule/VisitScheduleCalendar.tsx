@@ -25,7 +25,11 @@ import {
   Tag,
   Shield,
   FileText,
+  Phone,
+  ShieldCheck,
 } from "lucide-react";
+import { SearchableMemberSelect } from "./SearchableMemberSelect";
+import { SearchableEmployeeSelect } from "./SearchableEmployeeSelect";
 import {
   ScheduleVisitDTO,
   CareScheduleFormData,
@@ -96,6 +100,7 @@ export function VisitScheduleCalendar({
   const [actionLoading, setActionLoading] = useState(false);
 
   // Schedule Modal Form & Availability State
+  const [scheduleCaseSelectionId, setScheduleCaseSelectionId] = useState<string>("");
   const [scheduleDate, setScheduleDate] = useState<string>("");
   const [scheduleStartTime, setScheduleStartTime] = useState<string>("10:00");
   const [scheduleEndTime, setScheduleEndTime] = useState<string>("12:00");
@@ -104,6 +109,7 @@ export function VisitScheduleCalendar({
   const [scheduleAvailLoading, setScheduleAvailLoading] = useState(false);
 
   // Edit Modal Form & Availability State
+  const [editCaseSelectionId, setEditCaseSelectionId] = useState<string>("");
   const [editDate, setEditDate] = useState<string>("");
   const [editStartTime, setEditStartTime] = useState<string>("10:00");
   const [editEndTime, setEditEndTime] = useState<string>("12:00");
@@ -183,6 +189,7 @@ export function VisitScheduleCalendar({
   // Sync Schedule Modal initial state
   useEffect(() => {
     if (showScheduleModal) {
+      setScheduleCaseSelectionId("");
       setScheduleDate(scheduleModalDefaultDate || formatDateKey(new Date()));
       setScheduleStartTime("10:00");
       setScheduleEndTime("12:00");
@@ -222,6 +229,7 @@ export function VisitScheduleCalendar({
   // Sync Edit Modal initial state
   useEffect(() => {
     if (showEditModal && selectedVisit) {
+      setEditCaseSelectionId(selectedVisit.careCaseId || "");
       setEditDate(formatDateKey(selectedVisit.scheduledStart));
       setEditStartTime(formatTimeInputIST(selectedVisit.scheduledStart));
       setEditEndTime(formatTimeInputIST(selectedVisit.scheduledEnd));
@@ -1184,8 +1192,8 @@ export function VisitScheduleCalendar({
       {/* ========================================================================= */}
       {showScheduleModal && canManage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-xl overflow-hidden">
-            <div className="px-6 py-4 bg-[#091329] text-white flex items-center justify-between">
+          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-xl relative">
+            <div className="px-6 py-4 bg-[#091329] text-white flex items-center justify-between rounded-t-2xl">
               <h3 className="font-bold text-base text-white flex items-center gap-2">
                 <Plus className="h-5 w-5 text-[#B08A4A]" /> Schedule Care Visit
               </h3>
@@ -1200,8 +1208,14 @@ export function VisitScheduleCalendar({
                 setActionLoading(true);
                 setActionError(null);
                 const fd = new FormData(e.currentTarget);
+                const selectedCaseId = (fd.get("caseSelectionId") as string) || scheduleCaseSelectionId;
+                if (!selectedCaseId) {
+                  setActionError("Please select a Member / Care Recipient.");
+                  setActionLoading(false);
+                  return;
+                }
                 const res = await createScheduleVisit({
-                  caseSelectionId: fd.get("caseSelectionId") as string,
+                  caseSelectionId: selectedCaseId,
                   date: scheduleDate,
                   startTime: scheduleStartTime,
                   endTime: scheduleEndTime,
@@ -1220,17 +1234,13 @@ export function VisitScheduleCalendar({
               }}
               className="p-6 space-y-4 text-xs"
             >
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Member / Care Recipient *</label>
-                <select name="caseSelectionId" required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs">
-                  <option value="">-- Select Member / Case --</option>
-                  {initialFormData.cases.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <SearchableMemberSelect
+                name="caseSelectionId"
+                value={scheduleCaseSelectionId}
+                onChange={(m) => setScheduleCaseSelectionId(m?.id || "")}
+                initialCases={initialFormData.cases}
+                required
+              />
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
@@ -1286,49 +1296,16 @@ export function VisitScheduleCalendar({
                 </div>
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block font-semibold text-slate-700">Assign Employee</label>
-                  {scheduleAvailLoading && (
-                    <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                      <RefreshCw className="h-2.5 w-2.5 animate-spin" /> Checking availability...
-                    </span>
-                  )}
-                </div>
-                <select
-                  name="assignedEmpId"
-                  value={scheduleAssignedEmp}
-                  onChange={(e) => setScheduleAssignedEmp(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
-                >
-                  <option value="">-- Leave Unassigned --</option>
-                  {initialFormData.employees.map((emp) => {
-                    const avail = scheduleEmpAvailability.find((a) => a.employeeId === emp.id);
-                    const isOccupied = avail && !avail.available;
-                    return (
-                      <option
-                        key={emp.id}
-                        value={emp.id}
-                        disabled={isOccupied}
-                        className={isOccupied ? "text-slate-400 bg-slate-100 italic" : "text-slate-900"}
-                      >
-                        {emp.displayName || `${emp.firstName} ${emp.lastName}`} — {isOccupied ? `Occupied (${avail?.conflictTime || "Overlapping Visit"})` : "Available"}
-                      </option>
-                    );
-                  })}
-                </select>
-                {(() => {
-                  const selectedAvail = scheduleEmpAvailability.find((a) => a.employeeId === scheduleAssignedEmp);
-                  if (scheduleAssignedEmp && selectedAvail && !selectedAvail.available) {
-                    return (
-                      <p className="text-rose-600 text-[11px] font-medium mt-1">
-                        ⚠️ The selected employee is occupied during this time window. Please choose an available employee.
-                      </p>
-                    );
-                  }
-                  return null;
-                })()}
-              </div>
+              <SearchableEmployeeSelect
+                name="assignedEmpId"
+                value={scheduleAssignedEmp}
+                onChange={(empId) => setScheduleAssignedEmp(empId)}
+                date={scheduleDate}
+                startTime={scheduleStartTime}
+                endTime={scheduleEndTime}
+                initialEmployees={initialFormData.employees}
+                allowUnassigned
+              />
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Operational Notes / Reason</label>
@@ -1352,6 +1329,7 @@ export function VisitScheduleCalendar({
                   type="submit"
                   disabled={
                     actionLoading ||
+                    !scheduleCaseSelectionId ||
                     Boolean(
                       scheduleAssignedEmp &&
                       scheduleEmpAvailability.find((a) => a.employeeId === scheduleAssignedEmp)?.available === false
@@ -1372,8 +1350,8 @@ export function VisitScheduleCalendar({
       {/* ========================================================================= */}
       {showRescheduleModal && selectedVisit && canManage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-xl overflow-hidden">
-            <div className="px-6 py-4 bg-[#091329] text-white flex items-center justify-between">
+          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-xl relative">
+            <div className="px-6 py-4 bg-[#091329] text-white flex items-center justify-between rounded-t-2xl">
               <h3 className="font-bold text-base text-white flex items-center gap-2">
                 <CalendarClock className="h-5 w-5 text-[#B08A4A]" /> Reschedule Visit
               </h3>
@@ -1415,9 +1393,44 @@ export function VisitScheduleCalendar({
               }}
               className="p-6 space-y-4 text-xs"
             >
-              <p className="text-slate-600">
-                Rescheduling visit for <span className="font-bold text-slate-900">{selectedVisit.elder.firstName} {selectedVisit.elder.lastName}</span>.
-              </p>
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-slate-900 text-sm">
+                    {selectedVisit.member?.name || `${selectedVisit.elder.firstName} ${selectedVisit.elder.lastName}`}
+                  </span>
+                  {selectedVisit.member?.memberId && (
+                    <span className="font-mono text-[10px] bg-[#091329] text-white px-2 py-0.5 rounded font-semibold tracking-wider">
+                      {selectedVisit.member.memberId}
+                    </span>
+                  )}
+                  {selectedVisit.elder &&
+                    selectedVisit.elder.firstName &&
+                    selectedVisit.elder.firstName.toLowerCase() !==
+                      (selectedVisit.member?.name || "").toLowerCase().split(" ")[0] && (
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        (Elder: {selectedVisit.elder.firstName} {selectedVisit.elder.lastName})
+                      </span>
+                    )}
+                </div>
+
+                <div className="flex items-center gap-3 text-[11px] text-slate-600 flex-wrap">
+                  <span className="inline-flex items-center gap-1 font-semibold text-[#091329] bg-[#B08A4A]/10 px-2 py-0.5 rounded border border-[#B08A4A]/30">
+                    <ShieldCheck className="h-3 w-3 text-[#B08A4A] shrink-0" />
+                    {selectedVisit.carePlanName || "No service plan recorded"}
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-slate-600">
+                    <Phone className="h-3 w-3 text-slate-400 shrink-0" />
+                    {selectedVisit.member?.mobileNumber || "Not available"}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1 text-[11px] text-slate-500">
+                  <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
+                  <span className="truncate" title={selectedVisit.member?.serviceAddress || selectedVisit.elder?.address || "Not available"}>
+                    {selectedVisit.member?.serviceAddress || selectedVisit.elder?.address || "Not available"}
+                  </span>
+                </div>
+              </div>
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">New Date (IST) *</label>
@@ -1456,61 +1469,17 @@ export function VisitScheduleCalendar({
                 </div>
               </div>
 
-              {/* Employee Availability & Conflict Banner */}
-              {(() => {
-                const activeEmpId = rescheduleAssignedEmp;
-                const empAvail = rescheduleEmpAvailability.find((a) => a.employeeId === activeEmpId);
-                const isConflict = Boolean(activeEmpId && empAvail && !empAvail.available);
-
-                return (
-                  <div className="space-y-2 pt-1 border-t border-slate-100">
-                    <div className="flex items-center justify-between">
-                      <label className="block font-semibold text-slate-700">Assigned Employee</label>
-                      {rescheduleAvailLoading && (
-                        <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                          <RefreshCw className="h-2.5 w-2.5 animate-spin" /> Checking availability...
-                        </span>
-                      )}
-                    </div>
-
-                    {isConflict && (
-                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-[11px] space-y-1">
-                        <p className="font-semibold flex items-center gap-1">
-                          <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                          Employee Conflict Detected
-                        </p>
-                        <p>
-                          The assigned employee is occupied during this new time window ({empAvail?.conflictTime || "overlapping appointment"}). Please choose an available employee below or select another time slot.
-                        </p>
-                      </div>
-                    )}
-
-                    <select
-                      name="assignedEmpId"
-                      value={rescheduleAssignedEmp}
-                      onChange={(e) => setRescheduleAssignedEmp(e.target.value)}
-                      className={`w-full px-3 py-2 border rounded-lg text-xs ${isConflict ? "border-amber-400 bg-amber-50/40" : "border-slate-300"
-                        }`}
-                    >
-                      <option value="">-- Leave Unassigned --</option>
-                      {initialFormData.employees.map((emp) => {
-                        const avail = rescheduleEmpAvailability.find((a) => a.employeeId === emp.id);
-                        const isOccupied = avail && !avail.available;
-                        return (
-                          <option
-                            key={emp.id}
-                            value={emp.id}
-                            disabled={isOccupied}
-                            className={isOccupied ? "text-slate-400 bg-slate-100 italic" : "text-slate-900"}
-                          >
-                            {emp.displayName || `${emp.firstName} ${emp.lastName}`} — {isOccupied ? `Occupied (${avail?.conflictTime || "Overlapping Visit"})` : "Available"}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-                );
-              })()}
+              <SearchableEmployeeSelect
+                name="assignedEmpId"
+                value={rescheduleAssignedEmp}
+                onChange={(empId) => setRescheduleAssignedEmp(empId)}
+                date={rescheduleDate}
+                startTime={rescheduleStartTime}
+                endTime={rescheduleEndTime}
+                excludeVisitId={selectedVisit.id}
+                initialEmployees={initialFormData.employees}
+                allowUnassigned
+              />
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Reason for Rescheduling</label>
@@ -1633,8 +1602,8 @@ export function VisitScheduleCalendar({
       {/* ========================================================================= */}
       {showEditModal && selectedVisit && canManage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-xl overflow-hidden">
-            <div className="px-6 py-4 bg-[#091329] text-white flex items-center justify-between">
+          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-xl relative">
+            <div className="px-6 py-4 bg-[#091329] text-white flex items-center justify-between rounded-t-2xl">
               <h3 className="font-bold text-base text-white flex items-center gap-2">
                 <Edit2 className="h-5 w-5 text-[#B08A4A]" /> Edit Care Visit
               </h3>
@@ -1658,6 +1627,7 @@ export function VisitScheduleCalendar({
                   category: (fd.get("category") as any) || "Scheduled",
                   status: fd.get("status") as string,
                   operationalNotes: fd.get("notes") as string,
+                  caseSelectionId: (fd.get("caseSelectionId") as string) || editCaseSelectionId,
                 });
 
                 setActionLoading(false);
@@ -1671,6 +1641,14 @@ export function VisitScheduleCalendar({
               }}
               className="p-6 space-y-4 text-xs"
             >
+              <SearchableMemberSelect
+                name="caseSelectionId"
+                value={editCaseSelectionId}
+                onChange={(m) => setEditCaseSelectionId(m?.id || "")}
+                initialCases={initialFormData.cases}
+                label="Member / Care Recipient"
+                required
+              />
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Date (IST) *</label>
@@ -1728,49 +1706,17 @@ export function VisitScheduleCalendar({
                 </div>
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block font-semibold text-slate-700">Assigned Employee</label>
-                  {editAvailLoading && (
-                    <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                      <RefreshCw className="h-2.5 w-2.5 animate-spin" /> Checking availability...
-                    </span>
-                  )}
-                </div>
-                <select
-                  name="assignedEmpId"
-                  value={editAssignedEmp}
-                  onChange={(e) => setEditAssignedEmp(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
-                >
-                  <option value="">-- Unassigned --</option>
-                  {initialFormData.employees.map((emp) => {
-                    const avail = editEmpAvailability.find((a) => a.employeeId === emp.id);
-                    const isOccupied = avail && !avail.available;
-                    return (
-                      <option
-                        key={emp.id}
-                        value={emp.id}
-                        disabled={isOccupied}
-                        className={isOccupied ? "text-slate-400 bg-slate-100 italic" : "text-slate-900"}
-                      >
-                        {emp.displayName || `${emp.firstName} ${emp.lastName}`} — {isOccupied ? `Occupied (${avail?.conflictTime || "Overlapping Visit"})` : "Available"}
-                      </option>
-                    );
-                  })}
-                </select>
-                {(() => {
-                  const selectedAvail = editEmpAvailability.find((a) => a.employeeId === editAssignedEmp);
-                  if (editAssignedEmp && selectedAvail && !selectedAvail.available) {
-                    return (
-                      <p className="text-rose-600 text-[11px] font-medium mt-1">
-                        ⚠️ The selected employee is occupied during this time window. Please choose an available employee.
-                      </p>
-                    );
-                  }
-                  return null;
-                })()}
-              </div>
+              <SearchableEmployeeSelect
+                name="assignedEmpId"
+                value={editAssignedEmp}
+                onChange={(empId) => setEditAssignedEmp(empId)}
+                date={editDate}
+                startTime={editStartTime}
+                endTime={editEndTime}
+                excludeVisitId={selectedVisit.id}
+                initialEmployees={initialFormData.employees}
+                allowUnassigned
+              />
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Operational Notes</label>

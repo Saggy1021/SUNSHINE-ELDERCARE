@@ -263,3 +263,31 @@ export function formatWeekRangeDisplay(days: Date[]): string {
 
   return `${firstStr} – ${lastStr}`;
 }
+
+/**
+ * Robustly formats plan name and duration from actual subscription record.
+ * Never hardcodes or infers from payments. Returns "No service plan recorded" if absent.
+ */
+export function formatPlanDisplay(sub?: any): string {
+  if (!sub) return "No service plan recorded";
+  const planName = sub.carePlan?.name || sub.plan?.name || sub.customPlan?.title;
+  if (!planName) return "No service plan recorded";
+
+  let durationStr = "";
+  if (sub.durationMonths) {
+    durationStr = `${sub.durationMonths} ${sub.durationMonths === 1 ? "Month" : "Months"}`;
+  } else if (sub.startDate && sub.endDate) {
+    const diffDays = Math.round(
+      (new Date(sub.endDate).getTime() - new Date(sub.startDate).getTime()) / (1000 * 60 * 60 * 24)
+    );
+    const approxMonths = Math.round(diffDays / 30);
+    if (approxMonths > 0) {
+      durationStr = `${approxMonths} ${approxMonths === 1 ? "Month" : "Months"}`;
+    }
+  } else if (sub.plan?.billingInterval) {
+    if (sub.plan.billingInterval === "ANNUAL") durationStr = "12 Months";
+    else if (sub.plan.billingInterval === "MONTHLY") durationStr = "1 Month";
+  }
+
+  return durationStr ? `${planName} – ${durationStr}` : planName;
+}
