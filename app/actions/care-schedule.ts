@@ -11,6 +11,7 @@ import {
   formatTimeIST,
   formatPlanDisplay,
 } from "@/components/admin/schedule/schedule-date-utils";
+import { formatPreferredSchedule } from "@/lib/services/preferred-schedule";
 
 export interface ScheduleVisitDTO {
   id: string;
@@ -30,6 +31,9 @@ export interface ScheduleVisitDTO {
     memberId: string | null;
     serviceAddress: string | null;
     mobileNumber: string | null;
+    preferredVisitDay?: string | null;
+    preferredVisitTime?: string | null;
+    preferredScheduleDisplay?: string;
   };
   elder: {
     id: string;
@@ -77,6 +81,9 @@ export interface ScheduleMemberSearchResult {
   elderName: string; // Care recipient name
   elderId?: string;
   label: string; // Compact display label
+  preferredVisitDay?: string | null;
+  preferredVisitTime?: string | null;
+  preferredScheduleDisplay?: string;
 }
 
 export interface ScheduleEmployeeSearchResult {
@@ -104,6 +111,9 @@ export interface CareScheduleFormData {
     serviceAddress: string | null;
     primaryMobile?: string | null;
     subscribedPlan?: string | null;
+    preferredVisitDay?: string | null;
+    preferredVisitTime?: string | null;
+    preferredScheduleDisplay?: string;
   }>;
   employees: Array<{
     id: string;
@@ -297,6 +307,9 @@ export async function getScheduleVisits(filters: {
         memberId: profile?.memberId || null,
         serviceAddress: profile?.serviceAddress || elder?.address || null,
         mobileNumber: profile?.mobileNumber || elder?.contactNumber || null,
+        preferredVisitDay: profile?.preferredVisitDay || null,
+        preferredVisitTime: profile?.preferredVisitTime || null,
+        preferredScheduleDisplay: formatPreferredSchedule(profile?.preferredVisitDay, profile?.preferredVisitTime),
       },
       elder: {
         id: elder?.id || "",
@@ -392,6 +405,9 @@ export async function getCareScheduleFormData(): Promise<CareScheduleFormData> {
     const subscribedPlan = formatPlanDisplay(sub);
     const primaryMobile = profile?.mobileNumber || "Not available";
     const serviceAddress = profile?.serviceAddress || elder?.address || null;
+    const preferredVisitDay = profile?.preferredVisitDay || null;
+    const preferredVisitTime = profile?.preferredVisitTime || null;
+    const preferredScheduleDisplay = formatPreferredSchedule(preferredVisitDay, preferredVisitTime);
     const label = memberId ? `${memberName} (${memberId}) – ${subscribedPlan}` : `${memberName} — ${subscribedPlan}`;
 
     casesOptions.push({
@@ -404,6 +420,9 @@ export async function getCareScheduleFormData(): Promise<CareScheduleFormData> {
       serviceAddress,
       primaryMobile,
       subscribedPlan,
+      preferredVisitDay,
+      preferredVisitTime,
+      preferredScheduleDisplay,
     });
   }
 
@@ -419,6 +438,9 @@ export async function getCareScheduleFormData(): Promise<CareScheduleFormData> {
     const subscribedPlan = formatPlanDisplay(sub);
     const primaryMobile = profile?.mobileNumber || "Not available";
     const serviceAddress = profile?.serviceAddress || elder?.address || null;
+    const preferredVisitDay = profile?.preferredVisitDay || null;
+    const preferredVisitTime = profile?.preferredVisitTime || null;
+    const preferredScheduleDisplay = formatPreferredSchedule(preferredVisitDay, preferredVisitTime);
     const label = memberId
       ? `${memberName} (${memberId}) [New Case] – ${subscribedPlan}`
       : `${memberName} [New Case] — ${subscribedPlan}`;
@@ -433,6 +455,9 @@ export async function getCareScheduleFormData(): Promise<CareScheduleFormData> {
       serviceAddress,
       primaryMobile,
       subscribedPlan,
+      preferredVisitDay,
+      preferredVisitTime,
+      preferredScheduleDisplay,
     });
   }
 
@@ -610,6 +635,8 @@ export async function searchScheduleMembers(query: string = ""): Promise<Schedul
         mp."lastName" AS "profileLastName",
         mp."serviceAddress" AS "profileServiceAddress",
         mp."mobileNumber" AS "profileMobile",
+        mp."preferredVisitDay" AS "preferredVisitDay",
+        mp."preferredVisitTime" AS "preferredVisitTime",
         sub.id AS "subscriptionId",
         sub."durationMonths" AS "subDurationMonths",
         sub."startDate" AS "subStartDate",
@@ -645,6 +672,8 @@ export async function searchScheduleMembers(query: string = ""): Promise<Schedul
         mp."lastName" AS "profileLastName",
         mp."serviceAddress" AS "profileServiceAddress",
         mp."mobileNumber" AS "profileMobile",
+        mp."preferredVisitDay" AS "preferredVisitDay",
+        mp."preferredVisitTime" AS "preferredVisitTime",
         s.id AS "subscriptionId",
         s."durationMonths" AS "subDurationMonths",
         s."startDate" AS "subStartDate",
@@ -691,6 +720,10 @@ export async function searchScheduleMembers(query: string = ""): Promise<Schedul
     const tag = r.isNewSub ? " [New Case]" : "";
     const label = `${memberName}${memberId !== "Not assigned" ? ` (${memberId})` : ""}${tag} – ${subscribedPlan}`;
 
+    const preferredVisitDay = r.preferredVisitDay || null;
+    const preferredVisitTime = r.preferredVisitTime || null;
+    const preferredScheduleDisplay = formatPreferredSchedule(preferredVisitDay, preferredVisitTime);
+
     return {
       id: r.id,
       careCaseId: r.careCaseId,
@@ -702,6 +735,9 @@ export async function searchScheduleMembers(query: string = ""): Promise<Schedul
       elderName,
       elderId: r.elderId,
       label,
+      preferredVisitDay,
+      preferredVisitTime,
+      preferredScheduleDisplay,
     };
   });
 }

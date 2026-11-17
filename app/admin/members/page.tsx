@@ -304,7 +304,7 @@ export default async function AdminMembersPage({
 
                     {/* 16. SCH Visit */}
                     <td className="px-3.5 py-3 text-slate-700 text-xs whitespace-nowrap font-medium">
-                      {formatMembershipDate(member.scheduledVisitDate)}
+                      {member.preferredScheduleDisplay || "—"}
                     </td>
                   </tr>
                 );

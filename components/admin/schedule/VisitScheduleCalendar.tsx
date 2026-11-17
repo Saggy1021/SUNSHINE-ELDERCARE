@@ -1430,6 +1430,22 @@ export function VisitScheduleCalendar({
                     {selectedVisit.member?.serviceAddress || selectedVisit.elder?.address || "Not available"}
                   </span>
                 </div>
+
+                {/* Preferred Care Visit Schedule Banner/Badge */}
+                {selectedVisit.member?.preferredScheduleDisplay && selectedVisit.member.preferredScheduleDisplay !== "—" ? (
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-indigo-700 bg-indigo-50/90 border border-indigo-200/80 px-2.5 py-1 rounded-md mt-1 w-fit">
+                    <Clock className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                    <span>
+                      Preferred Schedule: <strong className="font-semibold">{selectedVisit.member.preferredScheduleDisplay}</strong>
+                    </span>
+                    <span className="text-indigo-500 font-normal text-[10px]">(Recurring preference)</span>
+                  </div>
+                ) : (
+                  <div className="text-[10px] text-slate-400 italic mt-0.5 flex items-center gap-1">
+                    <Clock className="h-3 w-3 text-slate-400 shrink-0" />
+                    <span>No preferred visit schedule set</span>
+                  </div>
+                )}
               </div>
 
               <div>

@@ -1,7 +1,7 @@
 import { getMemberDetails } from "@/app/actions/admin"
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, UserSquare2, Shield, ShieldAlert, CheckCircle2, Clock, CalendarDays, Receipt, FileText, ClipboardList, Activity, Edit } from "lucide-react"
+import { ArrowLeft, UserSquare2, Shield, ShieldAlert, CheckCircle2, Clock, CalendarDays, Receipt, FileText, ClipboardList, Activity, Edit, Calendar, Info } from "lucide-react"
 import { MembershipDateEditor } from "@/components/admin/membership-date-editor"
 import { auth } from "@/auth"
 import { AuthorizationService } from "@/lib/services/authorization"
@@ -292,6 +292,45 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
         {/* Right Column: Memberships, Financials, Audit */}
         <div className="space-y-6 lg:col-span-2">
           
+          {/* Preferred Care Visit Schedule */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+            <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-2">
+              <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-[#B08A4A]" /> Preferred Care Visit Schedule
+              </h2>
+              <Link
+                href={`/admin/members/${member.id}/edit`}
+                className="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
+              >
+                <Edit className="h-3.5 w-3.5" /> Edit Preference
+              </Link>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Preferred Day</p>
+                <p className="text-base font-bold text-slate-900 mt-1">
+                  {profile?.preferredVisitDay || <span className="text-slate-400 font-normal italic">Not Specified</span>}
+                </p>
+              </div>
+              <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Preferred Time</p>
+                <p className="text-base font-bold text-slate-900 mt-1">
+                  {profile?.preferredVisitTime ? (
+                    `${profile.preferredVisitTime} (IST)`
+                  ) : (
+                    <span className="text-slate-400 font-normal italic">Not Specified</span>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 p-3 bg-amber-50/80 border border-amber-200/80 rounded-lg flex items-start gap-2.5 text-xs text-amber-900 leading-relaxed">
+              <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>
+                This is the member&apos;s recurring care visit preference. It does not represent a confirmed visit booking. Confirmed visits must be scheduled in Visit Schedule.
+              </span>
+            </div>
+          </div>
+
           {/* Memberships (Current and History) */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
             <h2 className="text-lg font-semibold text-slate-900 mb-4 border-b border-slate-100 pb-2">Memberships</h2>

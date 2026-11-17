@@ -3,8 +3,9 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Check, AlertCircle, CalendarDays, Loader2, User, Users, Shield, Activity, HeartPulse, PhoneCall, Building2 } from 'lucide-react'
+import { Check, AlertCircle, CalendarDays, Loader2, User, Users, Shield, Activity, HeartPulse, PhoneCall, Building2, Clock, Calendar, X, Info } from 'lucide-react'
 import { adminUpdateMember } from '@/app/actions/admin'
+import { PREFERRED_VISIT_DAYS, to24HourTime, normalize12HourTime } from '@/lib/services/preferred-schedule'
 
 function formatDateForInput(date: Date | string | null | undefined): string {
   if (!date) return '';
@@ -58,6 +59,10 @@ export function MemberEditForm({ member, catalog }: { member: any; catalog?: any
   const [startDate, setStartDate] = useState(initialStartDate)
   const [endDate, setEndDate] = useState(initialEndDate)
   const [durationMonths, setDurationMonths] = useState<number>(currentSub?.durationMonths || 6)
+
+  // Preferred visit schedule
+  const [preferredDay, setPreferredDay] = useState(profile?.preferredVisitDay || "")
+  const [preferredTime, setPreferredTime] = useState(to24HourTime(profile?.preferredVisitTime) || "")
 
   // Name splitting fallback if firstName/lastName not explicit
   const defaultFirstName = profile?.firstName || member.name?.split(' ')[0] || ''
@@ -530,6 +535,79 @@ export function MemberEditForm({ member, catalog }: { member: any; catalog?: any
             </select>
           </div>
         )}
+      </div>
+
+      {/* SECTION: PREFERRED CARE VISIT SCHEDULE */}
+      <div className="space-y-4 bg-slate-50/70 p-6 rounded-xl border border-slate-200">
+        <div className="border-b border-slate-200 pb-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="h-5 w-5 text-indigo-700" />
+            <h3 className="font-semibold text-lg text-slate-900">Preferred Care Visit Schedule</h3>
+          </div>
+          {(preferredDay || preferredTime) && (
+            <button
+              type="button"
+              onClick={() => {
+                setPreferredDay("")
+                setPreferredTime("")
+              }}
+              className="text-xs text-rose-600 hover:text-rose-800 font-medium inline-flex items-center gap-1 transition-colors"
+            >
+              <X className="h-3.5 w-3.5" /> Clear Preference
+            </button>
+          )}
+        </div>
+
+        <p className="text-xs text-slate-500">
+          Set the member&apos;s recurring weekly care visit day and time preference. Optional.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Preferred Visit Day
+            </label>
+            <select
+              name="preferredVisitDay"
+              value={preferredDay}
+              onChange={(e) => setPreferredDay(e.target.value)}
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:border-[#091329] focus:ring-1 focus:ring-[#091329] outline-none"
+            >
+              <option value="">No preference / Not specified</option>
+              {PREFERRED_VISIT_DAYS.map((day) => (
+                <option key={day} value={day}>
+                  {day}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Preferred Visit Time (IST)
+            </label>
+            <input
+              type="time"
+              name="preferredVisitTime"
+              value={preferredTime}
+              onChange={(e) => setPreferredTime(e.target.value)}
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:border-[#091329] focus:ring-1 focus:ring-[#091329] outline-none"
+            />
+            {preferredTime && (
+              <p className="text-xs text-indigo-700 font-semibold mt-1 flex items-center gap-1">
+                <Clock className="h-3.5 w-3.5 text-indigo-600" />
+                12-Hour Display: {normalize12HourTime(preferredTime)} (IST)
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-2 p-3 bg-amber-50/80 border border-amber-200/80 rounded-lg flex items-start gap-2.5 text-xs text-amber-900 leading-relaxed">
+          <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+          <span>
+            This is a recurring care visit preference and does not auto-generate or reschedule calendar bookings. Confirmed appointments must be managed in Visit Schedule.
+          </span>
+        </div>
       </div>
 
       {/* SECTION 4: HEALTH, MEDICAL & EMERGENCY PROFILE */}

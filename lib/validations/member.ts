@@ -81,6 +81,18 @@ export const memberRegistrationSchema = z.object({
   // SECTION F: HEALTH / MEDICAL INFORMATION (PHASE 20)
   medicalConditions: z.string().optional(),
   bloodGroup: z.string().optional(),
+
+  // SECTION G: PREFERRED CARE VISIT SCHEDULE
+  preferredVisitDay: z.enum([
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+  ]).optional().or(z.literal('')),
+  preferredVisitTime: z.string().trim().optional().or(z.literal('')),
 });
 
 export type MemberRegistrationInput = z.infer<typeof memberRegistrationSchema>;

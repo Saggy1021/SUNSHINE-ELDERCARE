@@ -10,6 +10,7 @@ import { validateUpload } from '@/lib/services/document/validation'
 import { documentService } from '@/lib/services/document'
 import { storageService } from '@/lib/services/storage'
 import { calculateMembershipEndDate } from '@/lib/services/dates'
+import { normalize12HourTime } from '@/lib/services/preferred-schedule'
 
 export type AdminOnboardDependencies = {
   dbClient?: any
@@ -245,6 +246,10 @@ export async function executeAdminOnboardMember(
           spouseIdProofType: validatedData.spouseIdProofType || null,
           spouseIdProofNumber: validatedData.spouseIdProofNumber || null,
           spouseIdProofDocumentId,
+
+          // Preferred Care Visit Schedule (Optional)
+          preferredVisitDay: validatedData.preferredVisitDay || null,
+          preferredVisitTime: normalize12HourTime(validatedData.preferredVisitTime),
         }
       })
       

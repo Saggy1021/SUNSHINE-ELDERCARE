@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Check, AlertCircle, CalendarDays } from 'lucide-react'
+import { Check, AlertCircle, CalendarDays, Clock, Info } from 'lucide-react'
+import { PREFERRED_VISIT_DAYS, normalize12HourTime } from '@/lib/services/preferred-schedule'
 
 function calculateClientEndDate(startDateStr: string, durationMonths: number): string {
   if (!startDateStr) return ""
@@ -44,6 +45,7 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
   const [paymentMethod, setPaymentMethod] = useState<string>('')
   const [paymentFileError, setPaymentFileError] = useState<string | null>(null)
   const [startDateStr, setStartDateStr] = useState<string>(() => new Date().toISOString().split('T')[0])
+  const [preferredVisitTime, setPreferredVisitTime] = useState<string>('')
 
   const selectedPlan = plans.find(p => p.id === selectedPlanId)
   const isCouplePlan = selectedPlan?.variantType === 'COUPLE'
@@ -114,6 +116,8 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
       shiftAuthorization: formData.get('shiftAuthorization') === 'on',
       medicalConditions: formData.get('medicalConditions') || undefined,
       bloodGroup: formData.get('bloodGroup') || undefined,
+      preferredVisitDay: formData.get('preferredVisitDay') || undefined,
+      preferredVisitTime: formData.get('preferredVisitTime') || undefined,
     }
 
     const submissionData = new FormData()
@@ -631,6 +635,63 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
             <input type="checkbox" name="shiftAuthorization" id="shiftAuthorization" className="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
             <label htmlFor="shiftAuthorization" className="text-sm font-medium text-slate-700">Authorize shifting to hospital during emergencies</label>
           </div>
+        </div>
+      </div>
+
+      {/* PREFERRED CARE VISIT SCHEDULE */}
+      <div className="space-y-4 bg-slate-50 p-6 rounded-xl border border-slate-200">
+        <div className="border-b border-slate-200 pb-2 flex items-center justify-between">
+          <h3 className="font-serif text-xl text-slate-800 flex items-center gap-2">
+            <Clock className="h-5 w-5 text-indigo-700" /> Preferred Care Visit Schedule
+          </h3>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-200/70 text-slate-600">
+            Optional
+          </span>
+        </div>
+        <p className="text-xs text-slate-500">
+          Optionally designate the member&apos;s preferred weekly care-visit day and time.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">
+              Preferred Visit Day
+            </label>
+            <select
+              name="preferredVisitDay"
+              className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="">No preference / Not specified</option>
+              {PREFERRED_VISIT_DAYS.map((day) => (
+                <option key={day} value={day}>
+                  {day}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground/80">
+              Preferred Visit Time (IST)
+            </label>
+            <input
+              name="preferredVisitTime"
+              type="time"
+              value={preferredVisitTime}
+              onChange={(e) => setPreferredVisitTime(e.target.value)}
+              className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            />
+            {preferredVisitTime && (
+              <p className="text-xs text-indigo-700 font-semibold mt-1 flex items-center gap-1">
+                <Clock className="h-3.5 w-3.5 text-indigo-600" />
+                12-Hour Display: {normalize12HourTime(preferredVisitTime)} (IST)
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="mt-2 p-3 bg-amber-50/80 border border-amber-200/80 rounded-lg flex items-start gap-2.5 text-xs text-amber-900 leading-relaxed">
+          <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+          <span>
+            This is a recurring care visit preference and does not auto-generate calendar appointments. Confirmed visits must be scheduled in Visit Schedule.
+          </span>
         </div>
       </div>
 

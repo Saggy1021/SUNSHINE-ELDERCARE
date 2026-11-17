@@ -8,6 +8,7 @@ import { notificationService } from "@/lib/services/notification"
 import { AuthorizationService } from "@/lib/services/authorization"
 import { RateLimitService } from "@/lib/services/rate-limit"
 import { calculateMembershipEndDate } from "@/lib/services/dates"
+import { formatPreferredSchedule, normalize12HourTime } from "@/lib/services/preferred-schedule"
 import { EXCLUDED_MEMBER_EMAILS, ADMIN_DISPLAY_EMAILS, DASHBOARD_EXCLUDED_EMAILS } from "@/lib/constants/members"
 
 // --- Authorization Helper ---
@@ -388,6 +389,8 @@ export async function getMembersCore(
             mobileNumber: true,
             bloodGroup: true,
             medicalConditions: true,
+            preferredVisitDay: true,
+            preferredVisitTime: true,
             insuranceDetails: {
               select: {
                 providerName: true,
@@ -516,6 +519,12 @@ export async function getMembersCore(
       primaryMobile: m.memberProfile?.mobileNumber || null,
       secondaryMobile: m.memberProfile?.spouseMobileNumber || null,
       scheduledVisitDate: scheduledDate,
+      preferredVisitDay: m.memberProfile?.preferredVisitDay || null,
+      preferredVisitTime: m.memberProfile?.preferredVisitTime || null,
+      preferredScheduleDisplay: formatPreferredSchedule(
+        m.memberProfile?.preferredVisitDay,
+        m.memberProfile?.preferredVisitTime
+      ),
       maskedMedicalConditions: medical,
       insuranceProvider: insuranceProvider,
     };
@@ -717,6 +726,10 @@ export interface AdminUpdateMemberInput {
   sponsorMobile?: string | null;
   sponsorAlternateNumber?: string | null;
   sponsorEmail?: string | null;
+
+  // Preferred Care Visit Schedule
+  preferredVisitDay?: string | null;
+  preferredVisitTime?: string | null;
 }
 
 export async function adminUpdateMemberCore(
@@ -876,6 +889,14 @@ export async function adminUpdateMemberCore(
       // Medical conditions: Only update if actor has sensitive view permission
       if (hasSensitiveView && input.medicalConditions !== undefined) {
         profileData.medicalConditions = input.medicalConditions?.trim() || null;
+      }
+
+      // Preferred Care Visit Schedule
+      if (input.preferredVisitDay !== undefined) {
+        profileData.preferredVisitDay = input.preferredVisitDay?.trim() || null;
+      }
+      if (input.preferredVisitTime !== undefined) {
+        profileData.preferredVisitTime = normalize12HourTime(input.preferredVisitTime);
       }
 
       let memberProfileId: string;
@@ -1111,6 +1132,9 @@ export async function adminUpdateMember(formData: FormData) {
   const sponsorAlternateNumber = formData.get("sponsorAlternateNumber") as string;
   const sponsorEmail = formData.get("sponsorEmail") as string;
 
+  const preferredVisitDay = formData.has("preferredVisitDay") ? (formData.get("preferredVisitDay") as string) : undefined;
+  const preferredVisitTime = formData.has("preferredVisitTime") ? (formData.get("preferredVisitTime") as string) : undefined;
+
   const input: AdminUpdateMemberInput = {
     userId,
     salutation: salutation || null,
@@ -1165,6 +1189,9 @@ export async function adminUpdateMember(formData: FormData) {
     sponsorMobile: sponsorMobile || null,
     sponsorAlternateNumber: sponsorAlternateNumber || null,
     sponsorEmail: sponsorEmail || null,
+
+    preferredVisitDay: preferredVisitDay !== undefined ? (preferredVisitDay.trim() || null) : undefined,
+    preferredVisitTime: preferredVisitTime !== undefined ? (preferredVisitTime.trim() || null) : undefined,
   };
 
   const result = await adminUpdateMemberCore(input, sessionUser, db, hasSensitiveView);
