@@ -93,9 +93,9 @@ async function runTestSuite() {
   };
 
   // ============================================================================
-  // SECTION 1: EMPLOYEE DELETION TESTS (NO OTP REQUIRED)
+  // SECTION 1: EMPLOYEE PERMANENT DELETION TESTS (NO OTP REQUIRED)
   // ============================================================================
-  console.log('\n--- SECTION 1: EMPLOYEE DELETION TESTS ---');
+  console.log('\n--- SECTION 1: EMPLOYEE PERMANENT DELETION TESTS ---');
 
   // Test 1.1: Eligible Employee (Zero Dependencies) - Deletion Succeeds without OTP
   console.log('[TEST 1.1] Eligible employee with zero dependencies is permanently deleted without OTP');
@@ -112,6 +112,9 @@ async function runTestSuite() {
               employeeId: 'SEC/105/JODO',
               firstName: 'John',
               lastName: 'Doe',
+              designation: 'Caregiver',
+              contactNumber: '+91 98765 43210',
+              email: 'john.doe@example.com',
               userId: null,
               visits: [],
               visitAssignments: [],
@@ -125,9 +128,6 @@ async function runTestSuite() {
           deletedId = where.id;
           return { id: where.id };
         },
-      },
-      adminInvitation: {
-        findFirst: async () => null,
       },
       auditLog: {
         create: async ({ data }: any) => {
@@ -146,164 +146,352 @@ async function runTestSuite() {
     console.log('✓ PASS: Eligible employee deleted and audited with no OTP challenge');
   }
 
-  // Test 1.2: Ineligible Employee - Blocked by Historical Visits
-  console.log('\n[TEST 1.2] Employee with historical Care Visits is blocked from deletion');
+  // Test 1.2: Employee with Historical Care Visits - Visits Preserved & Employee Deleted
+  console.log('\n[TEST 1.2] Employee with historical Care Visits is permanently deleted while visits are preserved');
   {
-    let deletedCalled = false;
+    let deletedId = '';
+    let updatedVisits: any[] = [];
+    let auditRecords: any[] = [];
+
     const mockDb: any = {
+      $transaction: async (fn: any) => fn(mockDb),
       employee: {
         findUnique: async () => ({
           id: 'emp_visits_002',
           employeeId: 'SEC/102/PRTY',
           firstName: 'Priya',
           lastName: 'Sharma',
+          designation: 'Nurse',
+          contactNumber: '+91 98765 43211',
+          email: 'priya.s@example.com',
           userId: null,
-          visits: [{ id: 'visit_999' }],
+          visits: [
+            { id: 'visit_999', operationalNotes: 'Regular BP check completed.' },
+            { id: 'visit_1000', operationalNotes: null },
+          ],
           visitAssignments: [],
           assignments: [],
           tasks: [],
         }),
-        delete: async () => {
-          deletedCalled = true;
+        delete: async ({ where }: any) => {
+          deletedId = where.id;
+          return { id: where.id };
         },
       },
-      adminInvitation: { findFirst: async () => null },
+      careVisit: {
+        update: async ({ where, data }: any) => {
+          updatedVisits.push({ id: where.id, ...data });
+          return { id: where.id, ...data };
+        },
+      },
+      auditLog: {
+        create: async ({ data }: any) => {
+          auditRecords.push(data);
+          return { id: 'audit_002', ...data };
+        },
+      },
     };
 
     const result = await deleteEmployeeCore('emp_visits_002', primaryOwnerId, mockDb);
-    assert.strictEqual(result.success, false, 'Deletion must fail');
-    assert.strictEqual(result.hasDependencies, true, 'hasDependencies must be true');
-    assert.strictEqual(deletedCalled, false, 'Database delete must NEVER be called');
-    assert.ok(result.error?.includes('deactivate'), 'Error must advise user to deactivate instead');
-    console.log('✓ PASS: Employee with visits blocked; cascade deletion prevented');
+    assert.strictEqual(result.success, true, 'Permanent deletion must succeed');
+    assert.strictEqual(deletedId, 'emp_visits_002', 'Employee must be deleted from database');
+    assert.strictEqual(updatedVisits.length, 2, 'All historical visits must be updated to preserve history');
+    assert.strictEqual(updatedVisits[0].assignedEmpId, null, 'Employee ID reference must be detached');
+    assert.ok(
+      updatedVisits[0].operationalNotes.includes('[Formerly assigned to: Priya Sharma (SEC/102/PRTY)]'),
+      'Former caregiver attribution must be recorded in operationalNotes'
+    );
+    assert.ok(
+      updatedVisits[0].operationalNotes.includes('Regular BP check completed.'),
+      'Original operational notes must be preserved'
+    );
+    assert.strictEqual(updatedVisits[1].assignedEmpId, null);
+    assert.strictEqual(
+      updatedVisits[1].operationalNotes,
+      '[Formerly assigned to: Priya Sharma (SEC/102/PRTY)]'
+    );
+    assert.strictEqual(auditRecords[0].metadata.retainedVisitsCount, 2);
+    console.log('✓ PASS: Care visits safely preserved with caregiver notes, employee permanently deleted');
   }
 
-  // Test 1.3: Ineligible Employee - Blocked by Care Assignments
-  console.log('\n[TEST 1.3] Employee with Care Assignments is blocked from deletion');
+  // Test 1.3: Employee with Visit Assignments - Assignments Cleaned Up & Employee Deleted
+  console.log('\n[TEST 1.3] Employee with Visit Assignments has assignments removed and is deleted');
   {
-    let deletedCalled = false;
+    let deletedId = '';
+    let deletedVisitAssignmentsWhere: any = null;
+
     const mockDb: any = {
+      $transaction: async (fn: any) => fn(mockDb),
       employee: {
         findUnique: async () => ({
-          id: 'emp_assign_003',
-          employeeId: 'SEC/103/ASGN',
+          id: 'emp_vasgn_003',
+          employeeId: 'SEC/103/VASG',
+          firstName: 'Ramesh',
+          lastName: 'Kumar',
+          designation: 'Care Assistant',
+          userId: null,
+          visits: [],
+          visitAssignments: [{ id: 'vasgn_101' }],
+          assignments: [],
+          tasks: [],
+        }),
+        delete: async ({ where }: any) => {
+          deletedId = where.id;
+          return { id: where.id };
+        },
+      },
+      visitAssignment: {
+        deleteMany: async ({ where }: any) => {
+          deletedVisitAssignmentsWhere = where;
+          return { count: 1 };
+        },
+      },
+      auditLog: {
+        create: async ({ data }: any) => ({ id: 'audit_003', ...data }),
+      },
+    };
+
+    const result = await deleteEmployeeCore('emp_vasgn_003', primaryOwnerId, mockDb);
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(deletedId, 'emp_vasgn_003');
+    assert.deepStrictEqual(deletedVisitAssignmentsWhere, { employeeId: 'emp_vasgn_003' });
+    console.log('✓ PASS: Visit assignments safely removed and employee permanently deleted');
+  }
+
+  // Test 1.4: Employee with Care Assignments - Assignments Removed & CareCase Preserved
+  console.log('\n[TEST 1.4] Employee with Care Assignments has assignments deleted without affecting CareCase');
+  {
+    let deletedId = '';
+    let deletedCareAssignmentsWhere: any = null;
+
+    const mockDb: any = {
+      $transaction: async (fn: any) => fn(mockDb),
+      employee: {
+        findUnique: async () => ({
+          id: 'emp_assign_004',
+          employeeId: 'SEC/104/ASGN',
           firstName: 'Amit',
           lastName: 'Ghosh',
+          designation: 'Physiotherapist',
           userId: null,
           visits: [],
           visitAssignments: [],
           assignments: [{ id: 'assign_111' }],
           tasks: [],
         }),
-        delete: async () => {
-          deletedCalled = true;
+        delete: async ({ where }: any) => {
+          deletedId = where.id;
+          return { id: where.id };
         },
       },
-      adminInvitation: { findFirst: async () => null },
+      careAssignment: {
+        deleteMany: async ({ where }: any) => {
+          deletedCareAssignmentsWhere = where;
+          return { count: 1 };
+        },
+      },
+      auditLog: {
+        create: async ({ data }: any) => ({ id: 'audit_004', ...data }),
+      },
     };
 
-    const result = await deleteEmployeeCore('emp_assign_003', primaryOwnerId, mockDb);
-    assert.strictEqual(result.success, false);
-    assert.strictEqual(result.hasDependencies, true);
-    assert.strictEqual(deletedCalled, false);
-    console.log('✓ PASS: Employee with assignments blocked');
+    const result = await deleteEmployeeCore('emp_assign_004', primaryOwnerId, mockDb);
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(deletedId, 'emp_assign_004');
+    assert.deepStrictEqual(deletedCareAssignmentsWhere, { employeeId: 'emp_assign_004' });
+    console.log('✓ PASS: Care assignments unlinked; employee permanently deleted');
   }
 
-  // Test 1.4: Ineligible Employee - Blocked by Care Tasks
-  console.log('\n[TEST 1.4] Employee with Care Tasks is blocked from deletion');
+  // Test 1.5: Employee with Care Tasks - Tasks Preserved & Employee Deleted
+  console.log('\n[TEST 1.5] Employee with Care Tasks has tasks preserved and is permanently deleted');
   {
-    let deletedCalled = false;
+    let deletedId = '';
+    let updatedTasks: any[] = [];
+
     const mockDb: any = {
+      $transaction: async (fn: any) => fn(mockDb),
       employee: {
         findUnique: async () => ({
-          id: 'emp_task_004',
-          employeeId: 'SEC/104/TASK',
+          id: 'emp_task_005',
+          employeeId: 'SEC/105/TASK',
           firstName: 'Sunita',
           lastName: 'Paul',
+          designation: 'Elder Companion',
           userId: null,
           visits: [],
           visitAssignments: [],
           assignments: [],
-          tasks: [{ id: 'task_222' }],
+          tasks: [{ id: 'task_222', completionNote: 'Morning walk assistance.' }],
         }),
-        delete: async () => {
-          deletedCalled = true;
+        delete: async ({ where }: any) => {
+          deletedId = where.id;
+          return { id: where.id };
         },
       },
-      adminInvitation: { findFirst: async () => null },
-    };
-
-    const result = await deleteEmployeeCore('emp_task_004', primaryOwnerId, mockDb);
-    assert.strictEqual(result.success, false);
-    assert.strictEqual(result.hasDependencies, true);
-    assert.strictEqual(deletedCalled, false);
-    console.log('✓ PASS: Employee with tasks blocked');
-  }
-
-  // Test 1.5: Ineligible Employee - Blocked by Linked User Account
-  console.log('\n[TEST 1.5] Employee with linked system User account is blocked from deletion');
-  {
-    let deletedCalled = false;
-    const mockDb: any = {
-      employee: {
-        findUnique: async () => ({
-          id: 'emp_user_005',
-          employeeId: 'SEC/106/USER',
-          firstName: 'Rahul',
-          lastName: 'Verma',
-          userId: 'usr_linked_777',
-          visits: [],
-          visitAssignments: [],
-          assignments: [],
-          tasks: [],
-        }),
-        delete: async () => {
-          deletedCalled = true;
+      careTask: {
+        update: async ({ where, data }: any) => {
+          updatedTasks.push({ id: where.id, ...data });
+          return { id: where.id, ...data };
         },
       },
-      adminInvitation: { findFirst: async () => null },
+      auditLog: {
+        create: async ({ data }: any) => ({ id: 'audit_005', ...data }),
+      },
     };
 
-    const result = await deleteEmployeeCore('emp_user_005', primaryOwnerId, mockDb);
-    assert.strictEqual(result.success, false);
-    assert.strictEqual(result.hasDependencies, true);
-    assert.strictEqual(deletedCalled, false);
-    console.log('✓ PASS: Employee with linked User account blocked');
+    const result = await deleteEmployeeCore('emp_task_005', primaryOwnerId, mockDb);
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(deletedId, 'emp_task_005');
+    assert.strictEqual(updatedTasks.length, 1);
+    assert.strictEqual(updatedTasks[0].assignedEmpId, null);
+    assert.ok(
+      updatedTasks[0].completionNote.includes('[Formerly assigned to: Sunita Paul (SEC/105/TASK)]')
+    );
+    console.log('✓ PASS: Care tasks preserved with former caregiver notes, employee permanently deleted');
   }
 
-  // Test 1.6: Ineligible Employee - Blocked by Admin Invitation Link
-  console.log('\n[TEST 1.6] Employee with associated Admin Invitation is blocked from deletion');
+  // Test 1.6: Employee with Admin Invitations - Invitations Revoked & Employee Deleted
+  console.log('\n[TEST 1.6] Employee with associated Admin Invitation has invitation revoked');
   {
-    let deletedCalled = false;
+    let deletedId = '';
+    let updatedInvitations: any[] = [];
+
     const mockDb: any = {
+      $transaction: async (fn: any) => fn(mockDb),
       employee: {
         findUnique: async () => ({
           id: 'emp_invite_006',
-          employeeId: 'SEC/107/INVT',
+          employeeId: 'SEC/106/INVT',
           firstName: 'Anjali',
           lastName: 'Dey',
+          designation: 'Admin Coordinator',
           userId: null,
           visits: [],
           visitAssignments: [],
           assignments: [],
           tasks: [],
         }),
-        delete: async () => {
-          deletedCalled = true;
+        delete: async ({ where }: any) => {
+          deletedId = where.id;
+          return { id: where.id };
         },
       },
       adminInvitation: {
-        findFirst: async ({ where }: any) => {
-          return { id: 'invitation_888' };
+        updateMany: async ({ where, data }: any) => {
+          updatedInvitations.push({ where, data });
+          return { count: 1 };
         },
+      },
+      auditLog: {
+        create: async ({ data }: any) => ({ id: 'audit_006', ...data }),
       },
     };
 
     const result = await deleteEmployeeCore('emp_invite_006', primaryOwnerId, mockDb);
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(deletedId, 'emp_invite_006');
+    assert.strictEqual(updatedInvitations.length, 1);
+    assert.strictEqual(updatedInvitations[0].data.status, 'REVOKED');
+    assert.strictEqual(updatedInvitations[0].data.employeeId, null);
+    console.log('✓ PASS: Admin invitations cleanly revoked upon employee deletion');
+  }
+
+  // Test 1.7: Primary Owner Protection - Deletion STRICTLY BLOCKED
+  console.log('\n[TEST 1.7] Employee linked to Primary Owner (info.sunshineeldercare@gmail.com) is STRICTLY BLOCKED');
+  {
+    let deleteCalled = false;
+
+    const mockDb: any = {
+      employee: {
+        findUnique: async () => ({
+          id: 'emp_owner_007',
+          employeeId: 'SEC/001/OWNR',
+          firstName: 'Tanish',
+          lastName: 'Bansal',
+          designation: 'Director',
+          userId: 'owner_usr_001',
+          user: {
+            id: 'owner_usr_001',
+            email: 'info.sunshineeldercare@gmail.com',
+            role: 'SUPERADMIN',
+          },
+          visits: [],
+          visitAssignments: [],
+          assignments: [],
+          tasks: [],
+        }),
+        delete: async () => {
+          deleteCalled = true;
+        },
+      },
+    };
+
+    const result = await deleteEmployeeCore('emp_owner_007', primaryOwnerId, mockDb);
     assert.strictEqual(result.success, false);
-    assert.strictEqual(result.hasDependencies, true);
-    assert.strictEqual(deletedCalled, false);
-    console.log('✓ PASS: Employee with Admin Invitation blocked');
+    assert.strictEqual(deleteCalled, false, 'Primary owner must never be deleted');
+    assert.ok(
+      result.error?.includes('Protected account: The Primary Owner account (info.sunshineeldercare@gmail.com) cannot be deleted'),
+      'Must identify Primary Owner protection'
+    );
+    console.log('✓ PASS: Primary Owner account strictly protected from deletion');
+  }
+
+  // Test 1.8: Employee linked to Regular Admin Account - Admin Credentials Safely Revoked
+  console.log('\n[TEST 1.8] Employee linked to regular admin account: credentials revoked, employee deleted');
+  {
+    let deletedId = '';
+    let deletedRolesWhere: any = null;
+    let updatedUser: any = null;
+
+    const mockDb: any = {
+      $transaction: async (fn: any) => fn(mockDb),
+      employee: {
+        findUnique: async () => ({
+          id: 'emp_admin_008',
+          employeeId: 'SEC/108/ADMN',
+          firstName: 'Karan',
+          lastName: 'Mehta',
+          designation: 'Operations Lead',
+          userId: 'usr_karan_777',
+          user: {
+            id: 'usr_karan_777',
+            email: 'karan.m@sunshineeldercare.in',
+            role: 'ADMIN',
+          },
+          visits: [],
+          visitAssignments: [],
+          assignments: [],
+          tasks: [],
+        }),
+        delete: async ({ where }: any) => {
+          deletedId = where.id;
+          return { id: where.id };
+        },
+      },
+      userRole: {
+        deleteMany: async ({ where }: any) => {
+          deletedRolesWhere = where;
+          return { count: 2 };
+        },
+      },
+      user: {
+        update: async ({ where, data }: any) => {
+          updatedUser = { id: where.id, ...data };
+          return updatedUser;
+        },
+      },
+      auditLog: {
+        create: async ({ data }: any) => ({ id: 'audit_008', ...data }),
+      },
+    };
+
+    const result = await deleteEmployeeCore('emp_admin_008', primaryOwnerId, mockDb);
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(deletedId, 'emp_admin_008');
+    assert.deepStrictEqual(deletedRolesWhere, { userId: 'usr_karan_777' });
+    assert.strictEqual(updatedUser.status, 'INACTIVE');
+    assert.ok(updatedUser.sessionVersion?.increment === 1);
+    console.log('✓ PASS: Admin credentials safely revoked (roles deleted, user deactivated, sessions invalidated)');
   }
 
   // ============================================================================

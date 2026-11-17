@@ -229,79 +229,181 @@ export async function deactivateEmployee(id: string): Promise<{ success: boolean
 }
 
 /**
- * Deletes an employee only if there are zero historical care visits, assignments, tasks,
- * user credentials, or admin invitations.
- * Preserves historical records by preventing cascade deletion.
+ * Permanently deletes an employee profile and safely handles foreign-key relationships:
+ * 1. Historical Care Visits (CareVisit): Retains all visit records, member associations,
+ *    and appointment timings; detaches assignedEmpId (set to null) and appends former caregiver
+ *    attribution notes to operationalNotes.
+ * 2. Visit Assignments (VisitAssignment): Deletes assignment links for this employee.
+ * 3. Care Assignments (CareAssignment): Deletes case assignment records for this employee,
+ *    leaving the underlying CareCase and Member records intact.
+ * 4. Care Tasks (CareTask): Retains tasks; detaches assignedEmpId (set to null) and appends
+ *    former caregiver attribution notes to completionNote.
+ * 5. Admin Invitations (AdminInvitation): Revokes any pending/existing invitations referencing
+ *    this employee (employeeId: null, status: 'REVOKED').
+ * 6. Administrative Credentials / User Account (User):
+ *    - Strictly prevents deletion or revocation of Primary Owner (info.sunshineeldercare@gmail.com).
+ *    - Revokes administrative credentials for other linked user accounts: deletes userRole records,
+ *      sets user status to 'INACTIVE', and increments sessionVersion to invalidate active sessions.
+ * 7. Permanently deletes the Employee record and records EMPLOYEE_DELETED in the AuditLog.
+ *
+ * No OTP is required.
  */
 export async function deleteEmployeeCore(
   id: string,
   actorUserId: string,
   database: any = db
-): Promise<{ success: boolean; hasDependencies?: boolean; error?: string }> {
+): Promise<{ success: boolean; hasDependencies?: boolean; error?: string; message?: string }> {
   const employee = await database.employee.findUnique({
     where: { id },
     include: {
-      visits: { select: { id: true }, take: 1 },
-      visitAssignments: { select: { id: true }, take: 1 },
-      assignments: { select: { id: true }, take: 1 },
-      tasks: { select: { id: true }, take: 1 },
+      user: { select: { id: true, email: true, role: true } },
+      visits: { select: { id: true, operationalNotes: true } },
+      tasks: { select: { id: true, completionNote: true } },
+      assignments: { select: { id: true } },
+      visitAssignments: { select: { id: true } },
     },
   });
 
   if (!employee) return { success: false, error: "Employee not found." };
 
-  // Check for linked user account or admin invitation
-  let hasInvitation = false;
-  if (employee.employeeId && database.adminInvitation) {
-    const invite = await database.adminInvitation.findFirst({
-      where: {
-        OR: [
-          { employeeId: employee.employeeId },
-          { employeeId: employee.id }
-        ]
-      },
-      select: { id: true },
-    });
-    if (invite) hasInvitation = true;
-  }
-
-  if (
-    employee.visits?.length > 0 ||
-    employee.visitAssignments?.length > 0 ||
-    employee.assignments?.length > 0 ||
-    employee.tasks?.length > 0 ||
-    Boolean(employee.userId) ||
-    hasInvitation
-  ) {
+  // Strict Primary Owner Protection
+  if (employee.user?.email === "info.sunshineeldercare@gmail.com") {
     return {
       success: false,
-      hasDependencies: true,
-      error: "Cannot permanently delete employee because they have associated care appointments, operational tasks, or administrative credentials. You can deactivate this employee instead to preserve historical records.",
+      error: "Protected account: The Primary Owner account (info.sunshineeldercare@gmail.com) cannot be deleted or revoked.",
     };
   }
 
-  await database.employee.delete({ where: { id } });
+  const runDeleteTx = async (tx: any) => {
+    const formerNote = `[Formerly assigned to: ${employee.firstName} ${employee.lastName} (${employee.employeeId})]`;
 
-  await logAudit(
-    actorUserId,
-    "EMPLOYEE_DELETED",
-    "Employee",
-    id,
-    {
-      employeeId: employee.employeeId,
-      name: `${employee.firstName} ${employee.lastName}`,
-    },
-    database
-  );
+    // 1. Preserve historical Care Visits:
+    // Retain all visits, dates, status and tasks; detach employee and record former caregiver in operationalNotes
+    if (employee.visits && employee.visits.length > 0 && tx.careVisit) {
+      for (const visit of employee.visits) {
+        const updatedNotes = visit.operationalNotes
+          ? `${visit.operationalNotes}\n${formerNote}`
+          : formerNote;
+        await tx.careVisit.update({
+          where: { id: visit.id },
+          data: {
+            assignedEmpId: null,
+            operationalNotes: updatedNotes,
+          },
+        });
+      }
+    }
 
-  return { success: true };
+    // 2. Clean up VisitAssignments for this employee
+    if (tx.visitAssignment) {
+      await tx.visitAssignment.deleteMany({
+        where: { employeeId: id },
+      });
+    }
+
+    // 3. Clean up CareAssignments (caregiver case assignments - onDelete: Restrict)
+    // Deleting these allows employee deletion while keeping CareCase and Member intact
+    if (tx.careAssignment) {
+      await tx.careAssignment.deleteMany({
+        where: { employeeId: id },
+      });
+    }
+
+    // 4. Preserve CareTasks:
+    // Detach employee and record former caregiver in completionNote
+    if (employee.tasks && employee.tasks.length > 0 && tx.careTask) {
+      for (const task of employee.tasks) {
+        const updatedCompNote = task.completionNote
+          ? `${task.completionNote} ${formerNote}`
+          : formerNote;
+        await tx.careTask.update({
+          where: { id: task.id },
+          data: {
+            assignedEmpId: null,
+            completionNote: updatedCompNote,
+          },
+        });
+      }
+    }
+
+    // 5. Clean up AdminInvitations referencing this employee
+    if (tx.adminInvitation) {
+      await tx.adminInvitation.updateMany({
+        where: {
+          OR: [
+            { employeeId: employee.employeeId },
+            { employeeId: employee.id },
+          ],
+        },
+        data: {
+          employeeId: null,
+          status: "REVOKED",
+        },
+      });
+    }
+
+    // 6. Safely revoke linked administrative credentials (if any)
+    if (employee.userId) {
+      if (tx.userRole) {
+        await tx.userRole.deleteMany({
+          where: { userId: employee.userId },
+        });
+      }
+      if (tx.user) {
+        await tx.user.update({
+          where: { id: employee.userId },
+          data: {
+            status: "INACTIVE",
+            sessionVersion: { increment: 1 },
+          },
+        });
+      }
+    }
+
+    // 7. Permanently delete the employee profile record
+    await tx.employee.delete({
+      where: { id },
+    });
+
+    // 8. Record in AuditLog
+    await logAudit(
+      actorUserId,
+      "EMPLOYEE_DELETED",
+      "Employee",
+      id,
+      {
+        employeeId: employee.employeeId,
+        name: `${employee.firstName} ${employee.lastName}`,
+        designation: employee.designation,
+        contactNumber: employee.contactNumber,
+        email: employee.email,
+        retainedVisitsCount: employee.visits?.length || 0,
+        retainedTasksCount: employee.tasks?.length || 0,
+        hadLinkedUser: Boolean(employee.userId),
+        deletedAt: new Date().toISOString(),
+      },
+      tx
+    );
+  };
+
+  if (typeof database.$transaction === "function") {
+    await database.$transaction(runDeleteTx);
+  } else {
+    await runDeleteTx(database);
+  }
+
+  return {
+    success: true,
+    message: `Employee ${employee.firstName} ${employee.lastName} (${employee.employeeId}) has been permanently deleted.`,
+  };
 }
 
 /**
- * Server Action for deleting an employee.
- * Strictly checks permissions and dependencies. Does not require OTP.
+ * Server Action for permanently deleting an employee.
+ * Safely cascades cleanup of assignments while preserving historical visits and tasks.
+ * Strictly checks permissions and Primary Owner protection. Does not require OTP.
  */
-export async function deleteEmployee(id: string): Promise<{ success: boolean; hasDependencies?: boolean; error?: string }> {
+export async function deleteEmployee(id: string): Promise<{ success: boolean; hasDependencies?: boolean; error?: string; message?: string }> {
   try {
     const admin = await requirePermission("EMPLOYEE_DEACTIVATE");
     const result = await deleteEmployeeCore(id, admin.userId, db);

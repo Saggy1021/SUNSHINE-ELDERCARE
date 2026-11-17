@@ -310,7 +310,8 @@ export function EmployeesClient({
       }
       setEmployeeList((prev) => prev.filter((e) => e.id !== deletingEmployee.id));
       setEmployeeSuccessMsg(
-        `Employee ${deletingEmployee.firstName} ${deletingEmployee.lastName} (${deletingEmployee.employeeId}) has been permanently deleted.`
+        res.message ||
+          `Employee ${deletingEmployee.firstName} ${deletingEmployee.lastName} (${deletingEmployee.employeeId}) has been permanently deleted.`
       );
       setDeletingEmployee(null);
       router.refresh();
@@ -1369,7 +1370,7 @@ export function EmployeesClient({
               <div className="p-2 bg-rose-50 rounded-lg">
                 <Trash2 className="h-5 w-5" />
               </div>
-              <h3 className="text-lg font-bold text-slate-900">Confirm Employee Deletion</h3>
+              <h3 className="text-lg font-bold text-slate-900">Permanently Delete Employee</h3>
             </div>
             <p className="text-sm text-slate-600 mb-4 leading-relaxed">
               Are you sure you want to permanently delete employee{" "}
@@ -1390,9 +1391,16 @@ export function EmployeesClient({
               </div>
             )}
 
-            <p className="text-xs text-slate-500 mb-5 leading-relaxed">
-              This action permanently deletes the employee record. If this employee has historical care visits, assignments, operational tasks, or administrative credentials, permanent deletion will be prevented to protect data integrity, and you can deactivate them instead.
-            </p>
+            <div className="text-xs text-slate-600 mb-5 space-y-1.5 bg-slate-50 p-3 rounded-lg border border-slate-200">
+              <div className="font-medium text-slate-800">What will happen:</div>
+              <ul className="list-disc list-inside space-y-1 text-slate-600">
+                <li>Employee profile and Employee ID will be permanently deleted.</li>
+                <li>Historical care visit records are preserved with caregiver history archived.</li>
+                <li>Care tasks will be unassigned and preserved for continuity.</li>
+                <li>Any associated administrative credentials will be automatically revoked.</li>
+              </ul>
+              <div className="text-[11px] text-rose-600 font-medium pt-1">This action cannot be undone.</div>
+            </div>
 
             <div className="flex justify-end gap-3">
               <button
@@ -1412,7 +1420,7 @@ export function EmployeesClient({
                 disabled={isDeletingEmployee}
                 className="px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 disabled:opacity-50 text-sm font-semibold transition-colors flex items-center gap-2 shadow-sm"
               >
-                {isDeletingEmployee ? "Deleting..." : "Delete Employee"}
+                {isDeletingEmployee ? "Deleting..." : "Permanently Delete Employee"}
               </button>
             </div>
           </div>
