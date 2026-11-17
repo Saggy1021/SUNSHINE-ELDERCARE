@@ -15,46 +15,53 @@ export default async function EmployeesPage() {
   const user = await requireAuth();
   const isOwner = user.email === "info.sunshineeldercare@gmail.com";
 
-  const canManageAdmins = isOwner || (await AuthorizationService.can(user.id, "ADMIN_USER_MANAGE", user.email));
-  const canViewAdmins = isOwner || canManageAdmins || (await AuthorizationService.can(user.id, "ADMIN_USER_VIEW", user.email));
-  const canViewEmployees = isOwner || (await AuthorizationService.can(user.id, "EMPLOYEE_VIEW", user.email));
-  const canCreateEmployee = isOwner || (await AuthorizationService.can(user.id, "EMPLOYEE_CREATE", user.email));
-  const canEditEmployee = isOwner || (await AuthorizationService.can(user.id, "EMPLOYEE_EDIT", user.email));
-  const canDeactivateEmployee = isOwner || (await AuthorizationService.can(user.id, "EMPLOYEE_DEACTIVATE", user.email));
+  let canManageAdmins = isOwner;
+  let canViewAdmins = isOwner;
+  let canViewEmployees = isOwner;
+  let canCreateEmployee = isOwner;
+  let canEditEmployee = isOwner;
+  let canDeactivateEmployee = isOwner;
+
+  if (!isOwner) {
+    const userPerms = await AuthorizationService.getUserPermissions(user.id);
+    canManageAdmins = userPerms.has("ADMIN_USER_MANAGE");
+    canViewAdmins = canManageAdmins || userPerms.has("ADMIN_USER_VIEW");
+    canViewEmployees = userPerms.has("EMPLOYEE_VIEW");
+    canCreateEmployee = userPerms.has("EMPLOYEE_CREATE");
+    canEditEmployee = userPerms.has("EMPLOYEE_EDIT");
+    canDeactivateEmployee = userPerms.has("EMPLOYEE_DEACTIVATE");
+  }
 
   if (!isOwner && !canViewEmployees && !canViewAdmins && !canCreateEmployee) {
     redirect("/admin");
   }
 
-  let users: any = [];
-  let invitations: any = [];
-  let invitationError = false;
-
-  if (canViewAdmins) {
-    try {
-      users = await AdminUserService.getEmployeeUsers(user.id);
-    } catch (e) {
-      console.error("Error fetching admin users:", e);
-    }
-
-    try {
-      invitations = await AdminUserService.getAdminInvitations(user.id);
-    } catch (error: any) {
-      if (error.code === "P2021") {
-        invitationError = true;
-        console.error("AdminInvitation table missing - skipping invitations query.");
-      } else {
-        throw error;
-      }
-    }
-  }
-
-  const [roles, employees] = await Promise.all([
+  // Execute all admin users, invitations, roles, and employees queries in parallel
+  const [usersResult, invitationsResult, roles, employees] = await Promise.all([
+    canViewAdmins
+      ? AdminUserService.getEmployeeUsers(user.id).catch((e) => {
+          console.error("Error fetching admin users:", e);
+          return [];
+        })
+      : Promise.resolve([]),
+    canViewAdmins
+      ? AdminUserService.getAdminInvitations(user.id)
+          .then((invs) => ({ invitations: invs, invitationError: false }))
+          .catch((error: any) => {
+            if (error?.code === "P2021") {
+              console.error("AdminInvitation table missing - skipping invitations query.");
+              return { invitations: [], invitationError: true };
+            }
+            throw error;
+          })
+      : Promise.resolve({ invitations: [], invitationError: false }),
     db.role.findMany({ orderBy: { name: "asc" } }),
-    db.employee.findMany({
-      orderBy: { createdAt: "desc" },
-    }),
+    db.employee.findMany({ orderBy: { createdAt: "desc" } }),
   ]);
+
+  const users = usersResult || [];
+  const invitations = invitationsResult.invitations || [];
+  const invitationError = invitationsResult.invitationError || false;
 
   return (
     <div className="space-y-6">

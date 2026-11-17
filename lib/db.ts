@@ -46,6 +46,35 @@ function redactAuditMetadata(metadata: any): any {
   return redacted;
 }
 
+function getOptimizedDatabaseUrl(): string | undefined {
+  const url = process.env.DATABASE_URL;
+  if (!url) return undefined;
+
+  try {
+    // When connecting to Supabase PgBouncer / Supavisor pooler, ensure serverless transaction mode:
+    // 1. Port 6543 (Transaction mode) instead of Port 5432 (Session mode with max pool size 15)
+    // 2. pgbouncer=true to disable prepared statements incompatible with transaction mode
+    // 3. connection_limit=1 to prevent serverless lambdas from creating redundant connections
+    if (url.includes('.pooler.supabase.com')) {
+      let optimized = url;
+      if (optimized.includes(':5432/')) {
+        optimized = optimized.replace(':5432/', ':6543/');
+      }
+      if (!optimized.includes('pgbouncer=true')) {
+        optimized += (optimized.includes('?') ? '&' : '?') + 'pgbouncer=true';
+      }
+      if (!optimized.includes('connection_limit=')) {
+        optimized += '&connection_limit=1';
+      }
+      return optimized;
+    }
+  } catch (e) {
+    console.warn('[db] Failed to optimize DATABASE_URL, using original:', e);
+  }
+
+  return url;
+}
+
 function createPrismaClient() {
 
   if (!process.env.DATABASE_URL) {
@@ -60,7 +89,9 @@ function createPrismaClient() {
     }
     // Still allow client creation — PrismaClient itself validates on connect
   }
+  const optimizedUrl = getOptimizedDatabaseUrl();
   const client = new PrismaClient({
+    ...(optimizedUrl ? { datasources: { db: { url: optimizedUrl } } } : {}),
     log:
       process.env.NODE_ENV === "development"
         ? ["error", "warn"]

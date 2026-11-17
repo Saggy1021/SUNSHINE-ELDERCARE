@@ -1151,57 +1151,49 @@ export async function getMemberDetails(userId: string) {
   // Check if they have sensitive view
   const hasSensitiveView = await AuthorizationService.can(sessionUser, "MEMBER_SENSITIVE_VIEW", session?.user?.email || undefined);
 
-  // Parallelize relation queries across connection pool to eliminate sequential waterfalls
-  const [
-    user,
-    memberProfile,
-    subscriptions,
-    renewalRequests,
-    emergencyContact,
-    feedback,
-    invoices,
-    receipts,
-    payments,
-    ownedDocuments,
-    auditLogs
-  ] = await Promise.all([
-    db.user.findUnique({ where: { id: userId } }),
-    db.memberProfile.findUnique({
-      where: { userId },
-      include: {
-        sponsor: true,
-        insuranceDetails: true,
-        medicalAuth: true,
-        idProofDocument: true,
-        spouseIdProofDocument: true,
-      }
-    }),
-    db.subscription.findMany({
-      where: { userId },
-      include: { carePlan: true, addOns: { include: { addOn: true } }, customPlan: true },
-      orderBy: { createdAt: 'desc' }
-    }),
-    db.renewalRequest.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' }
-    }),
-    db.emergencyContact.findUnique({ where: { userId } }),
-    db.feedback.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' }
-    }),
-    db.invoice.findMany({
-      where: { userId, invoiceNumber: { not: null } },
-      orderBy: { issueDate: 'desc' }
-    }),
-    db.receipt.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' }
-    }),
-    db.payment.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' }
-    }),
+  // Consolidate relational fetching to eliminate connection pool contention and round-trips
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    include: {
+      memberProfile: {
+        include: {
+          sponsor: true,
+          insuranceDetails: true,
+          medicalAuth: true,
+          idProofDocument: true,
+          spouseIdProofDocument: true,
+        }
+      },
+      subscriptions: {
+        include: { carePlan: true, addOns: { include: { addOn: true } }, customPlan: true },
+        orderBy: { createdAt: 'desc' }
+      },
+      renewalRequests: {
+        orderBy: { createdAt: 'desc' }
+      },
+      emergencyContact: true,
+      feedback: {
+        orderBy: { createdAt: 'desc' }
+      },
+      invoices: {
+        where: { invoiceNumber: { not: null } },
+        orderBy: { issueDate: 'desc' }
+      },
+      receipts: {
+        orderBy: { createdAt: 'desc' }
+      },
+      payments: {
+        orderBy: { createdAt: 'desc' }
+      },
+    }
+  });
+
+  if (!user) {
+    return null;
+  }
+
+  const profileId = user.memberProfile?.id;
+  const [ownedDocuments, auditLogs] = await Promise.all([
     db.memberDocument.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' }
@@ -1211,38 +1203,16 @@ export async function getMemberDetails(userId: string) {
         OR: [
           { actorUserId: userId },
           { entityId: userId, entityType: 'USER' },
+          ...(profileId ? [{ entityId: profileId, entityType: 'MEMBER_PROFILE' }] : []),
         ]
       },
       orderBy: { createdAt: 'desc' },
-      take: 20
+      take: 30
     })
   ]);
 
-  if (!user) {
-    return null;
-  }
-
-  // Also include profile-level audit logs if present
-  if (memberProfile?.id) {
-    const profileLogs = await db.auditLog.findMany({
-      where: { entityId: memberProfile.id, entityType: 'MEMBER_PROFILE' },
-      orderBy: { createdAt: 'desc' },
-      take: 10
-    });
-    auditLogs.push(...profileLogs);
-    auditLogs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }
-
   const fullUser: any = {
     ...user,
-    memberProfile,
-    subscriptions,
-    renewalRequests,
-    emergencyContact,
-    feedback,
-    invoices,
-    receipts,
-    payments,
     ownedDocuments,
     auditLogs
   };

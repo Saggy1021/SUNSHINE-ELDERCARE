@@ -36,9 +36,11 @@ export class AuthorizationService {
    * Optional userEmail short-circuits owner checks without database roundtrips.
    */
   static async can(userId: string, permissionCode: string, userEmail?: string | null): Promise<boolean> {
-    if (userEmail === 'info.sunshineeldercare@gmail.com') return true;
-    
-    if (await this.isOwner(userId)) return true;
+    if (userEmail !== undefined && userEmail !== null) {
+      if (userEmail === 'info.sunshineeldercare@gmail.com') return true;
+    } else {
+      if (await this.isOwner(userId)) return true;
+    }
     
     const permissions = await this.getUserPermissions(userId);
     return permissions.has(permissionCode);
@@ -58,7 +60,11 @@ export class AuthorizationService {
    * Checks if a user has ALL of the given permissions.
    */
   static async requireAll(userId: string, permissionCodes: string[], userEmail?: string | null): Promise<void> {
-    if (userEmail === 'info.sunshineeldercare@gmail.com' || await this.isOwner(userId)) return;
+    if (userEmail !== undefined && userEmail !== null) {
+      if (userEmail === 'info.sunshineeldercare@gmail.com') return;
+    } else {
+      if (await this.isOwner(userId)) return;
+    }
 
     const permissions = await this.getUserPermissions(userId);
     for (const code of permissionCodes) {
@@ -72,7 +78,11 @@ export class AuthorizationService {
    * Checks if a user has ANY of the given permissions.
    */
   static async requireAny(userId: string, permissionCodes: string[], userEmail?: string | null): Promise<void> {
-    if (userEmail === 'info.sunshineeldercare@gmail.com' || await this.isOwner(userId)) return;
+    if (userEmail !== undefined && userEmail !== null) {
+      if (userEmail === 'info.sunshineeldercare@gmail.com') return;
+    } else {
+      if (await this.isOwner(userId)) return;
+    }
 
     const permissions = await this.getUserPermissions(userId);
     const hasAny = permissionCodes.some(code => permissions.has(code));
@@ -108,7 +118,11 @@ export class AuthorizationService {
    * based on having any core administrative permissions.
    */
   static async hasAdminPortalAccess(userId: string, userEmail?: string | null): Promise<boolean> {
-    if (userEmail === 'info.sunshineeldercare@gmail.com' || await this.isOwner(userId)) return true;
+    if (userEmail !== undefined && userEmail !== null) {
+      if (userEmail === 'info.sunshineeldercare@gmail.com') return true;
+    } else {
+      if (await this.isOwner(userId)) return true;
+    }
     
     // Core permissions that justify access to /admin
     const adminPerms = [

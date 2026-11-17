@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { Menu, X, LogOut, ChevronRight } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { usePathname } from 'next/navigation'
+import { WorkspaceNavigationProvider, useWorkspaceNavigation } from './workspace-nav-context'
 
 interface WorkspaceShellProps {
   portalName: string
@@ -12,7 +13,46 @@ interface WorkspaceShellProps {
   children: React.ReactNode
 }
 
-export function WorkspaceShell({ portalName, userDisplay, sidebarNav, children }: WorkspaceShellProps) {
+function TopProgressBar() {
+  const { isNavigating } = useWorkspaceNavigation()
+  const [visible, setVisible] = useState(false)
+  const [progress, setProgress] = useState(0)
+
+  useEffect(() => {
+    let timer1: NodeJS.Timeout
+    let timer2: NodeJS.Timeout
+    if (isNavigating) {
+      setVisible(true)
+      setProgress(30)
+      timer1 = setTimeout(() => setProgress(70), 200)
+      timer2 = setTimeout(() => setProgress(90), 600)
+    } else {
+      setProgress(100)
+      const hideTimer = setTimeout(() => {
+        setVisible(false)
+        setProgress(0)
+      }, 250)
+      return () => clearTimeout(hideTimer)
+    }
+    return () => {
+      clearTimeout(timer1)
+      clearTimeout(timer2)
+    }
+  }, [isNavigating])
+
+  if (!visible) return null
+
+  return (
+    <div className="fixed top-0 left-0 right-0 z-[100] h-[3px] bg-transparent pointer-events-none">
+      <div
+        className="h-full bg-gradient-to-r from-[#B08A4A] via-amber-300 to-[#B08A4A] transition-all duration-300 ease-out shadow-[0_0_8px_rgba(176,138,74,0.6)]"
+        style={{ width: `${progress}%` }}
+      />
+    </div>
+  )
+}
+
+function WorkspaceShellContent({ portalName, userDisplay, sidebarNav, children }: WorkspaceShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
 
@@ -30,6 +70,8 @@ export function WorkspaceShell({ portalName, userDisplay, sidebarNav, children }
 
   return (
     <div className="flex h-screen bg-[#FAF9F5] font-sans text-[#172033] overflow-hidden">
+      <TopProgressBar />
+
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -54,6 +96,7 @@ export function WorkspaceShell({ portalName, userDisplay, sidebarNav, children }
           <button
             className="ml-auto lg:hidden text-slate-400 hover:text-white"
             onClick={() => setSidebarOpen(false)}
+            aria-label="Close sidebar"
           >
             <X className="h-5 w-5" />
           </button>
@@ -86,6 +129,7 @@ export function WorkspaceShell({ portalName, userDisplay, sidebarNav, children }
           <button
             className="lg:hidden text-slate-500 hover:text-[#162850]"
             onClick={() => setSidebarOpen(true)}
+            aria-label="Open sidebar"
           >
             <Menu className="h-5 w-5" />
           </button>
@@ -105,5 +149,13 @@ export function WorkspaceShell({ portalName, userDisplay, sidebarNav, children }
         </main>
       </div>
     </div>
+  )
+}
+
+export function WorkspaceShell(props: WorkspaceShellProps) {
+  return (
+    <WorkspaceNavigationProvider>
+      <WorkspaceShellContent {...props} />
+    </WorkspaceNavigationProvider>
   )
 }
