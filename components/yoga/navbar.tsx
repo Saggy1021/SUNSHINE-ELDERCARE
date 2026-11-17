@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { Menu, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Lotus } from './ornaments'
@@ -16,8 +17,13 @@ const links = [
 ]
 
 export function Navbar({ isAuthenticated = false }: { isAuthenticated?: boolean }) {
+  const pathname = usePathname()
   const [scrolled, setScrolled] = useState(false)
   const [open, setOpen] = useState(false)
+
+  // Portal routes have their own workspace navigation header; do not render public marketing navbar
+  const isPortal = pathname?.startsWith('/admin') || pathname?.startsWith('/dashboard') || pathname?.startsWith('/employee')
+  if (isPortal) return null
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40)

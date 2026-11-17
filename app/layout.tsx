@@ -55,9 +55,11 @@ export default async function RootLayout({
       lang="en"
       className={`${cinzel.variable} ${cormorant.variable} ${forum.variable} ${inter.variable} bg-background`}
     >
-      <body className="font-sans antialiased">
+      <body className="font-sans antialiased flex flex-col min-h-screen">
         <Navbar isAuthenticated={!!session?.user} />
-        {children}
+        <div className="flex-1 flex flex-col min-w-0">
+          {children}
+        </div>
         <Footer settings={settingsMap} />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

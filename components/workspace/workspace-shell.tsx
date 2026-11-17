@@ -69,7 +69,7 @@ function WorkspaceShellContent({ portalName, userDisplay, sidebarNav, children }
     : 'Overview'
 
   return (
-    <div className="flex h-screen bg-[#FAF9F5] font-sans text-[#172033] overflow-hidden">
+    <div className="flex flex-1 min-h-screen relative bg-[#FAF9F5] font-sans text-[#172033]">
       <TopProgressBar />
 
       {/* Mobile overlay */}
@@ -82,7 +82,7 @@ function WorkspaceShellContent({ portalName, userDisplay, sidebarNav, children }
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#091329] text-white transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static flex flex-col border-r border-[#162850] shadow-xl lg:shadow-none ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#091329] text-white transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:sticky lg:top-0 lg:h-screen flex flex-col border-r border-[#162850] shadow-xl lg:shadow-none flex-shrink-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -123,9 +123,9 @@ function WorkspaceShellContent({ portalName, userDisplay, sidebarNav, children }
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 relative">
         {/* Workspace Header */}
-        <header className="h-16 flex-shrink-0 flex items-center gap-4 border-b border-[#E2E8F0] bg-white px-4 sm:px-6 lg:px-8 shadow-sm z-10">
+        <header className="h-16 flex-shrink-0 flex items-center gap-4 border-b border-[#E2E8F0] bg-white px-4 sm:px-6 lg:px-8 shadow-sm z-20 sticky top-0">
           <button
             className="lg:hidden text-slate-500 hover:text-[#162850]"
             onClick={() => setSidebarOpen(true)}
@@ -142,7 +142,7 @@ function WorkspaceShellContent({ portalName, userDisplay, sidebarNav, children }
         </header>
 
         {/* Scrollable Content Area */}
-        <main className="flex-1 overflow-auto bg-[#FAF9F5] p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 bg-[#FAF9F5] p-4 sm:p-6 lg:p-8 relative">
           <div className="mx-auto max-w-6xl">
             {children}
           </div>

@@ -575,7 +575,7 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
             <label className="mb-2 block text-sm font-medium text-slate-700">Select Base Plan *</label>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {plans.map(plan => (
-                <label key={plan.id} className="cursor-pointer">
+                <label key={plan.id} className="cursor-pointer relative block">
                   <input
                     type="radio"
                     name="planId"
