@@ -45,11 +45,16 @@ export class MemberIdentityService {
     const strippedFirst = (firstName || "").trim().replace(titleRegex, "").trim();
     const strippedLast = (lastName || "").trim();
 
-    // Get first 2 ASCII letters of first name and last name, with deterministic 'XX' padding
+    // Canonical Standard: First 2 ASCII letters of First Name + LAST 2 ASCII letters of Surname
     const cleanFirst = (strippedFirst || firstName || "").replace(/[^A-Za-z]/g, "").toUpperCase();
     const cleanLast = (strippedLast || lastName || "").replace(/[^A-Za-z]/g, "").toUpperCase();
     const fInitial = (cleanFirst + "XX").substring(0, 2);
-    const lInitial = (cleanLast + "XX").substring(0, 2);
+    let lInitial = "XX";
+    if (cleanLast.length >= 2) {
+      lInitial = cleanLast.slice(-2);
+    } else if (cleanLast.length === 1) {
+      lInitial = `${cleanLast}X`;
+    }
     const initials = `${fInitial}${lInitial}`;
 
     // Special reservation check: If generating specifically for Prabir Chakraverty

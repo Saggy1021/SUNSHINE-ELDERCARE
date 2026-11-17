@@ -207,15 +207,15 @@ async function runMembershipDatesAndTableTests() {
   };
 
   const nextMemberSenior = await MemberIdentityService.generateMemberId('Ananya', 'Sen', 'S', mockDbNext);
-  assert.strictEqual(nextMemberSenior, 'SECS1002ANSE', 'Single member must receive SECS prefix and sequence 1002');
+  assert.strictEqual(nextMemberSenior, 'SECS1002ANEN', 'Single member must receive SECS prefix and sequence 1002 with AN + EN');
   assert.ok(!nextMemberSenior.includes('/'), 'Senior membership ID must not contain slashes');
 
   const nextMemberCouple = await MemberIdentityService.generateMemberId('Rohit', 'Verma', 'D', mockDbNext);
-  assert.strictEqual(nextMemberCouple, 'SECD1003ROVE', 'Couple member must receive SECD prefix and sequence 1003');
+  assert.strictEqual(nextMemberCouple, 'SECD1003ROMA', 'Couple member must receive SECD prefix and sequence 1003 with RO + MA');
 
   console.log('  ✓ Requirement 1 passed: SECD1001PRTY generated without slashes.');
   console.log('  ✓ Requirement 2 passed: SECS prefix generated for single / senior memberships.');
-  console.log('  ✓ Requirement 3 passed: Sequential generation begins at 1002 (SECS1002ANSE).');
+  console.log('  ✓ Requirement 3 passed: Sequential generation begins at 1002 (SECS1002ANEN).');
   console.log('  ✓ Requirement 6 passed: Prabir retains canonical SECD1001PRTY.');
 
   // ---------------------------------------------------------------------------

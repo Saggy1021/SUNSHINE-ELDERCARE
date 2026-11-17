@@ -83,8 +83,8 @@ async function runSequentialMemberIdTests() {
     'D',
     mockDbFresh
   );
-  assert.strictEqual(firstNewMemberId, 'SECD1002RASH', 'First new member must receive 1002');
-  console.log('  ✓ Verified fresh database sequence starts at 1002 (SECD1002RASH).');
+  assert.strictEqual(firstNewMemberId, 'SECD1002RAMA', 'First new member must receive 1002 with RA + MA');
+  console.log('  ✓ Verified fresh database sequence starts at 1002 (SECD1002RAMA).');
 
   // Test 4: Existing Sequence at 1001 Advances to 1002 on Next Registration
   console.log('--- TEST 4: Existing Sequence at 1001 Increments to 1002 ---');
@@ -104,7 +104,7 @@ async function runSequentialMemberIdTests() {
     'S',
     mockDbExisting
   );
-  assert.strictEqual(nextMemberId, 'SECS1002AMRO', 'Next member after 1001 must receive 1002');
+  assert.strictEqual(nextMemberId, 'SECS1002AMOY', 'Next member after 1001 must receive 1002 with AM + OY');
   assert.strictEqual(existingSeq, 1002);
   console.log('  ✓ Verified existing sequence at 1001 correctly increments to 1002.');
 
@@ -116,7 +116,7 @@ async function runSequentialMemberIdTests() {
     'D',
     mockDbExisting
   );
-  assert.strictEqual(member3, 'SECD1003SNMU');
+  assert.strictEqual(member3, 'SECD1003SNEE');
 
   const member4 = await MemberIdentityService.generateMemberId(
     'Debashis',
@@ -124,7 +124,7 @@ async function runSequentialMemberIdTests() {
     'S',
     mockDbExisting
   );
-  assert.strictEqual(member4, 'SECS1004DEBA');
+  assert.strictEqual(member4, 'SECS1004DEEE');
   console.log('  ✓ Verified consecutive registrations generate 1003, 1004 without gaps.');
 
   // Test 6: Concurrency Safety Under High Load
@@ -173,9 +173,9 @@ async function runSequentialMemberIdTests() {
     },
   };
   const singleId = await MemberIdentityService.generateMemberId('John', 'Smith', 'S', mockVariantDb);
-  assert.strictEqual(singleId, 'SECS1051JOSM');
+  assert.strictEqual(singleId, 'SECS1051JOTH');
   const coupleId = await MemberIdentityService.generateMemberId('John', 'Smith', 'D', mockVariantDb);
-  assert.strictEqual(coupleId, 'SECD1052JOSM');
+  assert.strictEqual(coupleId, 'SECD1052JOTH');
   console.log('  ✓ Verified variant type prefix is properly applied (SECS vs SECD without slashes).');
 
   // Test 8: Initials Suffix Resilience & Padding

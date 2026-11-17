@@ -415,7 +415,7 @@ async function runSalutationAndMemberIdTests() {
     let profileRecord: any = {
       id: 'prof_edit_1',
       userId: 'usr_edit_1',
-      memberId: 'SECD1002BAKU', // Existing Member ID
+      memberId: 'SECD1002BADU', // Existing Member ID (BADU: BA from Basudeb + DU from Kundu)
       salutation: 'Mr',
       firstName: 'Basudeb',
       lastName: 'Kundu',
@@ -513,14 +513,15 @@ async function runSalutationAndMemberIdTests() {
     assert.strictEqual(sponsorRecord.salutation, 'Capt', 'Sponsor salutation updated to Capt');
     assert.strictEqual(sponsorRecord.fullName, 'Capt Deepak Kundu');
     assert.strictEqual(userRecord.name, 'Dr Basudeb Kundu');
-    assert.strictEqual(profileRecord.memberId, 'SECD1002BAKU', 'Existing Member ID must remain intact');
+    assert.strictEqual(profileRecord.memberId, 'SECD1002BADU', 'Existing Member ID must remain intact');
     console.log('  ✓ Verified editing existing records preserves memberId, updates salutations without data loss.');
   }
 
   // ===========================================================================
   // TEST 9: Member ID Generated Exclusively from Primary Member First and Last Name
+  // (First 2 Letters of First Name + LAST 2 Letters of Surname)
   // ===========================================================================
-  console.log('\n--- TEST 9: Member ID Generated Exclusively from First & Last Name ---');
+  console.log('\n--- TEST 9: Member ID Generated Exclusively from First & Last Name (First 2 + Last 2) ---');
   {
     let currentSeq = 1001;
     const mockDbSeq: any = {
@@ -536,23 +537,23 @@ async function runSalutationAndMemberIdTests() {
       },
     };
 
-    // 1. Basudeb Kundu with "Mr"
+    // 1. Basudeb Kundu with "Mr" -> BA + DU = BADU
     const idWithMr = await MemberIdentityService.generateMemberId('Mr Basudeb', 'Kundu', 'D', mockDbSeq);
-    assert.strictEqual(idWithMr, 'SECD1002BAKU', 'ID must be SECD1002BAKU (BA from Basudeb + KU from Kundu)');
+    assert.strictEqual(idWithMr, 'SECD1002BADU', 'ID must be SECD1002BADU (BA from Basudeb + DU from Kundu)');
 
-    // 2. Basudeb Kundu with "Dr"
+    // 2. Basudeb Kundu with "Dr" -> BA + DU = BADU
     const idWithDr = await MemberIdentityService.generateMemberId('Dr Basudeb', 'Kundu', 'D', mockDbSeq);
-    assert.strictEqual(idWithDr, 'SECD1003BAKU', 'ID must be SECD1003BAKU (BA from Basudeb + KU from Kundu)');
+    assert.strictEqual(idWithDr, 'SECD1003BADU', 'ID must be SECD1003BADU (BA from Basudeb + DU from Kundu)');
 
-    // 3. Basudeb Kundu with "Grp Cpt"
+    // 3. Basudeb Kundu with "Grp Cpt" -> BA + DU = BADU
     const idWithGrpCpt = await MemberIdentityService.generateMemberId('Grp Cpt Basudeb', 'Kundu', 'D', mockDbSeq);
-    assert.strictEqual(idWithGrpCpt, 'SECD1004BAKU', 'ID must be SECD1004BAKU (BA from Basudeb + KU from Kundu)');
+    assert.strictEqual(idWithGrpCpt, 'SECD1004BADU', 'ID must be SECD1004BADU (BA from Basudeb + DU from Kundu)');
 
-    // 4. Clean First and Last Name (without prefix)
+    // 4. Clean First and Last Name (without prefix) -> BA + DU = BADU
     const idClean = await MemberIdentityService.generateMemberId('Basudeb', 'Kundu', 'D', mockDbSeq);
-    assert.strictEqual(idClean, 'SECD1005BAKU', 'ID must be SECD1005BAKU');
+    assert.strictEqual(idClean, 'SECD1005BADU', 'ID must be SECD1005BADU');
 
-    console.log('  ✓ Verified Member ID uses exclusively First & Last name; salutations NEVER alter the suffix.');
+    console.log('  ✓ Verified Member ID uses exclusively First 2 + Last 2 name letters; salutations NEVER alter the suffix.');
   }
 
   // ===========================================================================
@@ -560,7 +561,7 @@ async function runSalutationAndMemberIdTests() {
   // ===========================================================================
   console.log('\n--- TEST 10: Existing Member IDs Remain Strictly Unchanged ---');
   {
-    // 1. Prabir Chakraverty special reservation
+    // 1. Prabir Chakraverty special reservation (PR + TY = PRTY)
     const prabirId1 = await MemberIdentityService.generateMemberId('Wg Cdr PRABIR', 'CHAKRAVERTY', 'D');
     assert.strictEqual(prabirId1, 'SECD1001PRTY', 'Prabir reservation must strictly return SECD1001PRTY');
 
@@ -571,7 +572,7 @@ async function runSalutationAndMemberIdTests() {
     const mockDbPreserve: any = {
       memberProfile: {
         findUnique: async () => ({
-          memberId: 'SECD1002BAKU',
+          memberId: 'SECD1002BADU',
           firstName: 'Basudeb',
           lastName: 'Kundu',
         }),
@@ -582,8 +583,8 @@ async function runSalutationAndMemberIdTests() {
     };
 
     const preservedId = await MemberIdentityService.ensureMemberIdForUser('usr_basudeb', 'COUPLE', mockDbPreserve);
-    assert.strictEqual(preservedId, 'SECD1002BAKU', 'Existing canonical ID must be returned unchanged');
-    console.log('  ✓ Verified existing member IDs (SECD1001PRTY and SECD1002BAKU) are strictly preserved.');
+    assert.strictEqual(preservedId, 'SECD1002BADU', 'Existing canonical ID must be returned unchanged');
+    console.log('  ✓ Verified existing member IDs (SECD1001PRTY and SECD1002BADU) are strictly preserved.');
   }
 
   // ===========================================================================
