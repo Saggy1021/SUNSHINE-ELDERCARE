@@ -44,7 +44,7 @@ console.log("\n[TEST 1] Validation Schema - Required & Optional Fields");
     firstName: "Rajesh",
     lastName: "Sen",
     designation: "Care Coordinator",
-    employeeId: "SEC/173/RASE",
+    employeeId: "SEC173RAEN",
     contactNumber: "+91 98301 23456",
     email: "rajesh.sen@sunshineeldercare.in",
     status: "ACTIVE",
@@ -70,23 +70,19 @@ console.log("\n[TEST 1] Validation Schema - Required & Optional Fields");
 console.log("\n[TEST 2] Canonical Employee ID Generation & Initials Handling");
 
 {
-  // Test initials generation via simulated logic identical to EmployeeIdentityService
-  function extractInitials(firstName: string, lastName: string): string {
-    const f = (firstName || "").trim().toUpperCase().replace(/[^A-Z]/g, "");
-    const l = (lastName || "").trim().toUpperCase().replace(/[^A-Z]/g, "");
-    const fInit = (f.slice(0, 2) + "XX").slice(0, 2);
-    const lInit = (l.slice(0, 2) + "XX").slice(0, 2);
-    return `${fInit}${lInit}`;
-  }
+  // Test initials generation via authoritative EmployeeIdentityService
+  assert.strictEqual(EmployeeIdentityService.extractSuffix("Sagnik", "Kar"), "SAAR", "Initials for Sagnik Kar should be SAAR");
+  assert.strictEqual(EmployeeIdentityService.extractSuffix("Tanish", "Alam"), "TAAM", "Initials for Tanish Alam should be TAAM");
+  assert.strictEqual(EmployeeIdentityService.extractSuffix("Rahul", "Sharma"), "RAMA", "Initials for Rahul Sharma should be RAMA");
+  assert.strictEqual(EmployeeIdentityService.extractSuffix("Amit", "Mukherjee"), "AMEE", "Initials for Amit Mukherjee should be AMEE");
+  assert.strictEqual(EmployeeIdentityService.extractSuffix("Basudeb", "Kundu"), "BADU", "Initials for Basudeb Kundu should be BADU");
+  assert.strictEqual(EmployeeIdentityService.extractSuffix("A", "B"), "AXBX", "Short names should be padded safely with X to ensure 2 letters each");
 
-  assert.strictEqual(extractInitials("Sagnik", "Kar"), "SAKA", "Initials for Sagnik Kar should be SAKA");
-  assert.strictEqual(extractInitials("Prabir", "Chakraverty"), "PRCH", "Initials for Prabir Chakraverty should be PRCH");
-  assert.strictEqual(extractInitials("A", "B"), "AXBX", "Short names should be padded safely with X to ensure 2 letters each");
-
-  // Format check: SEC/{number}/{initials}
-  const sampleId = `SEC/173/${extractInitials("Ananya", "Roy")}`;
-  assert.match(sampleId, /^SEC\/\d+\/[A-Z]{4}$/, "Canonical Employee ID must match SEC/{number}/{initials} pattern");
-  assert.strictEqual(sampleId, "SEC/173/ANRO", "Generated ID matches expected format");
+  // Format check: SEC{number}{initials} with strictly NO slashes
+  const sampleId = `SEC173${EmployeeIdentityService.extractSuffix("Ananya", "Roy")}`;
+  assert.match(sampleId, /^SEC\d+[A-Z]{4}$/, "Canonical Employee ID must match SEC{number}{initials} pattern without slashes");
+  assert.strictEqual(sampleId, "SEC173ANOY", "Generated ID matches expected format");
+  assert.strictEqual(sampleId.includes("/"), false, "Canonical Employee ID must contain zero slashes");
 
   console.log("✓ Employee ID format and initials extraction validated.");
 }
@@ -119,7 +115,7 @@ console.log("\n[TEST 3] Employee vs Admin Account Separation");
   function createMockEmployee(input: { firstName: string; lastName: string; designation: string }): MockEmployeeRecord {
     return {
       id: "emp_" + Math.random().toString(36).substring(2, 9),
-      employeeId: "SEC/174/TEST",
+      employeeId: "SEC174TEST",
       firstName: input.firstName,
       lastName: input.lastName,
       designation: input.designation,
@@ -160,8 +156,8 @@ console.log("\n[TEST 4] Duplicate Employee ID Detection & Prevention");
 
 {
   const existingEmployees = [
-    { id: "e1", employeeId: "SEC/101/SAKA", firstName: "Sagnik", lastName: "Kar" },
-    { id: "e2", employeeId: "SEC/172/NUTE", firstName: "Nurse", lastName: "Test" },
+    { id: "e1", employeeId: "SEC101SAAR", firstName: "Sagnik", lastName: "Kar" },
+    { id: "e2", employeeId: "SEC172NUTE", firstName: "Nurse", lastName: "Test" },
   ];
 
   function validateEmployeeIdUniqueness(targetId: string, currentEmpId?: string) {
@@ -175,20 +171,20 @@ console.log("\n[TEST 4] Duplicate Employee ID Detection & Prevention");
   }
 
   // Duplicate custom ID on create
-  const checkDuplicate = validateEmployeeIdUniqueness("SEC/101/SAKA");
+  const checkDuplicate = validateEmployeeIdUniqueness("SEC101SAAR");
   assert.strictEqual(checkDuplicate.success, false, "Collision on existing employee ID must be rejected");
   assert.ok(checkDuplicate.error?.includes("already exists"), "Error message must indicate duplicate ID");
 
   // Unique custom ID on create
-  const checkUnique = validateEmployeeIdUniqueness("SEC/200/CUST");
+  const checkUnique = validateEmployeeIdUniqueness("SEC200CUST");
   assert.strictEqual(checkUnique.success, true, "Unique custom employee ID must be accepted");
 
   // Self-update with same ID on edit should be allowed
-  const checkSelfUpdate = validateEmployeeIdUniqueness("SEC/101/SAKA", "e1");
+  const checkSelfUpdate = validateEmployeeIdUniqueness("SEC101SAAR", "e1");
   assert.strictEqual(checkSelfUpdate.success, true, "Updating employee with their own current ID must be allowed");
 
   // Updating employee with another employee's ID must be rejected
-  const checkConflictUpdate = validateEmployeeIdUniqueness("SEC/172/NUTE", "e1");
+  const checkConflictUpdate = validateEmployeeIdUniqueness("SEC172NUTE", "e1");
   assert.strictEqual(checkConflictUpdate.success, false, "Updating employee with another employee ID must be rejected");
 
   console.log("✓ Duplicate Employee ID collision checks verified.");
@@ -202,7 +198,7 @@ console.log("\n[TEST 5] Employee Status Transitions & Auditing");
 {
   let emp = {
     id: "emp_100",
-    employeeId: "SEC/100/TEST",
+    employeeId: "SEC100TEST",
     status: "ACTIVE" as "ACTIVE" | "INACTIVE",
   };
 

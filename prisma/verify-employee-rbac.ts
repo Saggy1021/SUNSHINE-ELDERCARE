@@ -63,16 +63,21 @@ async function runTests() {
     const empId1 = await EmployeeIdentityService.generateEmployeeId("Sagnik", "Kar");
     const empId2 = await EmployeeIdentityService.generateEmployeeId("John", "Doe");
     
-    // Test formatting SEC/101/SAKA
-    if (!empId1.startsWith("SEC/") || !empId1.endsWith("/SAKA")) {
+    // Test formatting SEC101SAAR (strictly NO slashes, First 2 + Last 2 rule)
+    if (!empId1.startsWith("SEC") || !empId1.endsWith("SAAR") || empId1.includes("/")) {
       throw new Error(`Invalid employee ID format for Sagnik Kar: ${empId1}`);
     }
-    if (!empId2.startsWith("SEC/") || !empId2.endsWith("/JODO")) {
+    if (!empId2.startsWith("SEC") || !empId2.endsWith("JODE") || empId2.includes("/")) {
       throw new Error(`Invalid employee ID format for John Doe: ${empId2}`);
     }
 
-    const serial1 = parseInt(empId1.split('/')[1]);
-    const serial2 = parseInt(empId2.split('/')[1]);
+    const match1 = empId1.match(/^SEC(\d+)[A-Z]{4}$/);
+    const match2 = empId2.match(/^SEC(\d+)[A-Z]{4}$/);
+    if (!match1 || !match2) {
+      throw new Error(`Generated employee IDs do not match canonical regex: ${empId1}, ${empId2}`);
+    }
+    const serial1 = parseInt(match1[1]);
+    const serial2 = parseInt(match2[1]);
 
     if (serial1 >= serial2) {
       throw new Error("Employee sequence did not increment properly");

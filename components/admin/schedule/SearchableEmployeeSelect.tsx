@@ -378,7 +378,7 @@ export function SearchableEmployeeSelect({
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={disabled}
-              placeholder="Search employee by name, ID (e.g. SEC/184), designation..."
+              placeholder="Search employee by name, ID (e.g. SEC184), designation..."
               className="w-full pl-9 pr-9 py-2.5 border border-slate-300 rounded-xl text-xs bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#091329]/20 focus:border-[#091329] transition-all"
             />
             {isSearching ? (
@@ -457,7 +457,7 @@ export function SearchableEmployeeSelect({
                   <div>
                     <p className="font-semibold text-slate-700">No employees found</p>
                     <p className="text-[11px] text-slate-400 mt-0.5">
-                      Try searching with another name, Employee ID (e.g. SEC/184), or designation.
+                      Try searching with another name, Employee ID (e.g. SEC184), or designation.
                     </p>
                   </div>
                 )}

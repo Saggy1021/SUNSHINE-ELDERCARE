@@ -49,18 +49,9 @@ export async function createEmployee(data: EmployeeInput): Promise<{ success: bo
     
     const { firstName, lastName, designation, contactNumber, email, photoReference, status, publicBiography } = parsed.data;
 
-    let employeeId = (data.employeeId || "").trim();
-
-    if (employeeId) {
-      // Validate custom employee ID format and uniqueness
-      const existing = await db.employee.findUnique({ where: { employeeId } });
-      if (existing) {
-        return { success: false, error: `An employee with Employee ID "${employeeId}" already exists.` };
-      }
-    } else {
-      // Auto-generate canonical Employee ID (e.g. SEC/101/SAKA)
-      employeeId = await EmployeeIdentityService.generateEmployeeId(firstName, lastName);
-    }
+    // Authoritative canonical Employee ID generation: strictly derived from first name, last name, and sequence
+    // Frontend input is not allowed to override the authoritative ID
+    const employeeId = await EmployeeIdentityService.generateEmployeeId(firstName, lastName);
 
     // Creating an employee MUST NEVER create an administrator account or user login
     const employee = await db.employee.create({
@@ -104,16 +95,19 @@ export async function updateEmployee(id: string, data: Partial<EmployeeInput>): 
     if (!current) return { success: false, error: "Employee not found." };
 
     let targetEmployeeId = current.employeeId;
-    if (data.employeeId && data.employeeId.trim() !== current.employeeId) {
-      targetEmployeeId = data.employeeId.trim();
-      const existing = await db.employee.findFirst({
-        where: {
-          employeeId: targetEmployeeId,
-          id: { not: id },
-        },
-      });
-      if (existing) {
-        return { success: false, error: `An employee with Employee ID "${targetEmployeeId}" already exists.` };
+    if (data.employeeId) {
+      const normalizedInput = EmployeeIdentityService.normalizeEmployeeId(data.employeeId);
+      if (normalizedInput && normalizedInput !== current.employeeId) {
+        targetEmployeeId = normalizedInput;
+        const existing = await db.employee.findFirst({
+          where: {
+            employeeId: targetEmployeeId,
+            id: { not: id },
+          },
+        });
+        if (existing) {
+          return { success: false, error: `An employee with Employee ID "${targetEmployeeId}" already exists.` };
+        }
       }
     }
 

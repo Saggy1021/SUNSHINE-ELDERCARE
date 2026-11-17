@@ -221,7 +221,7 @@ const mockMembers: MockMemberData[] = [
 const mockEmployees: MockEmployeeData[] = [
   {
     id: "emp-sagnik",
-    employeeId: "SEC/184/SAKA",
+    employeeId: "SEC184SAAR",
     firstName: "Sagnik",
     lastName: "Kar",
     designation: "Zone Coordinator",
@@ -230,7 +230,7 @@ const mockEmployees: MockEmployeeData[] = [
   },
   {
     id: "emp-tanish",
-    employeeId: "SEC/185/TAAL",
+    employeeId: "SEC185TAAM",
     firstName: "Tanish",
     lastName: "Alam",
     designation: "Zone Coordinator",
@@ -239,7 +239,7 @@ const mockEmployees: MockEmployeeData[] = [
   },
   {
     id: "emp-inactive",
-    employeeId: "SEC/120/INAC",
+    employeeId: "SEC120INAC",
     firstName: "Retired",
     lastName: "Caregiver",
     designation: "Former Care Specialist",
@@ -325,10 +325,12 @@ function simulateEmployeeSearch(params: {
     if (terms.length === 0) return true;
     return terms.every((term) => {
       const lower = term.toLowerCase();
+      const cleanLower = lower.replace(/[\/\s-]/g, "");
       return (
         e.firstName.toLowerCase().includes(lower) ||
         e.lastName.toLowerCase().includes(lower) ||
         e.employeeId.toLowerCase().includes(lower) ||
+        (cleanLower ? e.employeeId.toLowerCase().includes(cleanLower) : false) ||
         e.designation.toLowerCase().includes(lower) ||
         (e.department && e.department.toLowerCase().includes(lower))
       );
@@ -554,10 +556,10 @@ console.log("\n--- PART B: EMPLOYEE SEARCH & REAL-TIME AVAILABILITY TESTS ---");
   console.log("  ✓ Test 13 Passed: Case-insensitive employee name search ('sagnik', 'SAGNIK') verified");
 }
 
-// Test 14: Employee ID search
+// Test 14: Employee ID search (both canonical SEC184 and legacy SEC/184)
 {
   const res = simulateEmployeeSearch({
-    query: "SEC/184",
+    query: "SEC184",
     date: "2026-11-17",
     startTime: "14:00",
     endTime: "15:00",
@@ -565,9 +567,22 @@ console.log("\n--- PART B: EMPLOYEE SEARCH & REAL-TIME AVAILABILITY TESTS ---");
     visits: [],
   });
   assert.strictEqual(res.length, 1);
-  assert.strictEqual(res[0].employeeId, "SEC/184/SAKA");
+  assert.strictEqual(res[0].employeeId, "SEC184SAAR");
   assert.strictEqual(res[0].name, "Sagnik Kar");
-  console.log("  ✓ Test 14 Passed: Canonical Employee ID search ('SEC/184') matched exact employee");
+
+  // Also verify legacy query "SEC/184" matches normalized
+  const resLegacy = simulateEmployeeSearch({
+    query: "SEC/184",
+    date: "2026-11-17",
+    startTime: "14:00",
+    endTime: "15:00",
+    employees: mockEmployees,
+    visits: [],
+  });
+  assert.strictEqual(resLegacy.length, 1);
+  assert.strictEqual(resLegacy[0].employeeId, "SEC184SAAR");
+
+  console.log("  ✓ Test 14 Passed: Canonical Employee ID search ('SEC184' and 'SEC/184') matched exact employee");
 }
 
 // Test 15: Designation search

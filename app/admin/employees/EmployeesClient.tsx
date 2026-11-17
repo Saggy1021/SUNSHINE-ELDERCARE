@@ -129,11 +129,12 @@ export function EmployeesClient({
   const filteredEmployees = useMemo(() => {
     return employeeList.filter((emp) => {
       const q = employeeSearch.toLowerCase().trim();
+      const qNorm = q.replace(/[\/\s-]/g, "");
       const matchesSearch =
         !q ||
         (emp.firstName && emp.firstName.toLowerCase().includes(q)) ||
         (emp.lastName && emp.lastName.toLowerCase().includes(q)) ||
-        (emp.employeeId && emp.employeeId.toLowerCase().includes(q)) ||
+        (emp.employeeId && (emp.employeeId.toLowerCase().includes(q) || (qNorm && emp.employeeId.toLowerCase().includes(qNorm)))) ||
         (emp.designation && emp.designation.toLowerCase().includes(q)) ||
         (emp.contactNumber && emp.contactNumber.toLowerCase().includes(q)) ||
         (emp.email && emp.email.toLowerCase().includes(q));
@@ -1128,15 +1129,16 @@ export function EmployeesClient({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Employee ID <span className="text-slate-400 font-normal">(Optional)</span>
+                  Employee ID <span className="text-slate-400 font-normal">(Auto-generated)</span>
                 </label>
                 <input
                   name="employeeId"
-                  placeholder="Leave blank to auto-generate (e.g. SEC/173/ANRO)"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-[#1A365D] outline-none placeholder:font-sans"
+                  disabled
+                  placeholder="Auto-assigned (e.g. SEC186TAAM)"
+                  className="w-full px-3 py-2 border border-slate-200 bg-slate-50 text-slate-500 rounded-lg text-sm font-mono cursor-not-allowed"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
-                  If left empty, canonical sequence numbering will be assigned automatically.
+                  Sequential Employee ID without slashes is automatically generated using First 2 + Last 2 name rule.
                 </p>
               </div>
 

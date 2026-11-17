@@ -88,7 +88,7 @@ export interface ScheduleMemberSearchResult {
 
 export interface ScheduleEmployeeSearchResult {
   id: string; // employee cuid
-  employeeId: string; // canonical SEC/184/SAKA
+  employeeId: string; // canonical SEC184SAAR
   name: string; // Full name "FirstName LastName"
   firstName: string;
   lastName: string;
@@ -882,14 +882,20 @@ export async function searchScheduleEmployees(params: {
   if (terms.length > 0) {
     whereFilter = {
       status: "ACTIVE",
-      AND: terms.map((term) => ({
-        OR: [
-          { firstName: { contains: term, mode: "insensitive" } },
-          { lastName: { contains: term, mode: "insensitive" } },
-          { employeeId: { contains: term, mode: "insensitive" } },
-          { designation: { contains: term, mode: "insensitive" } },
-        ],
-      })),
+      AND: terms.map((term) => {
+        const cleanTerm = term.replace(/[\/\s-]/g, "");
+        return {
+          OR: [
+            { firstName: { contains: term, mode: "insensitive" } },
+            { lastName: { contains: term, mode: "insensitive" } },
+            { employeeId: { contains: term, mode: "insensitive" } },
+            ...(cleanTerm && cleanTerm !== term
+              ? [{ employeeId: { contains: cleanTerm, mode: "insensitive" } }]
+              : []),
+            { designation: { contains: term, mode: "insensitive" } },
+          ],
+        };
+      }),
     };
   }
 

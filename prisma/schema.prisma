@@ -655,7 +655,7 @@ model MemberSequence {
 model Employee {
   visitAssignments VisitAssignment[]
   id             String  @id @default(cuid())
-  employeeId     String  @unique // e.g. SEC/101/SAKA
+  employeeId     String  @unique // e.g. SEC101SAAR
   firstName      String
   lastName       String
   photoReference String? @db.Text
