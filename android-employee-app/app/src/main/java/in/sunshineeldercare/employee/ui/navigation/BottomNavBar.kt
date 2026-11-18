@@ -2,12 +2,12 @@ package `in`.sunshineeldercare.employee.ui.navigation
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import `in`.sunshineeldercare.employee.ui.theme.DeepNavy
-import `in`.sunshineeldercare.employee.ui.theme.GoldPrimary
 import `in`.sunshineeldercare.employee.ui.theme.Slate400
 import `in`.sunshineeldercare.employee.ui.theme.Slate600
 
@@ -16,12 +16,16 @@ fun BottomNavBar(
     currentRoute: String,
     onTabSelected: (BottomTab) -> Unit
 ) {
+    val tabs = remember {
+        BottomTab.items.filterNotNull().filter { it.route.isNotBlank() }
+    }
+
     NavigationBar(
         containerColor = Color.White,
         tonalElevation = 8.dp
     ) {
-        BottomTab.items.forEach { tab ->
-            val isSelected = currentRoute == tab.route
+        tabs.forEach { tab ->
+            val isSelected = currentRoute.isNotBlank() && currentRoute == tab.route
 
             NavigationBarItem(
                 selected = isSelected,

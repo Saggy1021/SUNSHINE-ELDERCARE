@@ -27,6 +27,12 @@ sealed class BottomTab(
     object Profile : BottomTab("tab_profile", "Profile", Icons.Filled.Person, Icons.Outlined.Person)
 
     companion object {
-        val items = listOf(Home, Today, Upcoming, Completed, Profile)
+        val items: List<BottomTab>
+            get() = listOfNotNull(Home, Today, Upcoming, Completed, Profile)
+
+        fun fromRoute(route: String?): BottomTab {
+            if (route.isNullOrBlank()) return Home
+            return items.firstOrNull { it.route.equals(route.trim(), ignoreCase = true) } ?: Home
+        }
     }
 }

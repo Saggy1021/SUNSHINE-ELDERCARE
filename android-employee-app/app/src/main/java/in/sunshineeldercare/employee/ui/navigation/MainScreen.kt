@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import `in`.sunshineeldercare.employee.ui.screens.home.HomeScreen
 import `in`.sunshineeldercare.employee.ui.screens.profile.ProfileScreen
@@ -17,13 +18,16 @@ fun MainScreen(
     onVisitClick: (String) -> Unit,
     onLogout: () -> Unit
 ) {
-    var currentTab by remember { mutableStateOf<BottomTab>(BottomTab.Home) }
+    var currentTabRoute by rememberSaveable { mutableStateOf(BottomTab.Home.route) }
+    val currentTab = remember(currentTabRoute) { BottomTab.fromRoute(currentTabRoute) }
 
     Scaffold(
         bottomBar = {
             BottomNavBar(
                 currentRoute = currentTab.route,
-                onTabSelected = { currentTab = it }
+                onTabSelected = { selectedTab ->
+                    currentTabRoute = selectedTab.route
+                }
             )
         }
     ) { paddingValues ->
@@ -34,8 +38,8 @@ fun MainScreen(
         ) {
             when (currentTab) {
                 BottomTab.Home -> HomeScreen(
-                    onNavigateToToday = { currentTab = BottomTab.Today },
-                    onNavigateToUpcoming = { currentTab = BottomTab.Upcoming },
+                    onNavigateToToday = { currentTabRoute = BottomTab.Today.route },
+                    onNavigateToUpcoming = { currentTabRoute = BottomTab.Upcoming.route },
                     onVisitClick = onVisitClick
                 )
                 BottomTab.Today -> TodayVisitsScreen(onVisitClick = onVisitClick)
