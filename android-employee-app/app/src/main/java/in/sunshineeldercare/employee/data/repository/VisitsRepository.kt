@@ -157,12 +157,18 @@ class VisitsRepository(
 
     suspend fun completeVisit(
         visitId: String,
-        workDescription: String? = null
+        workDescription: String? = null,
+        actualArrival: String? = null,
+        actualDeparture: String? = null
     ): Result<EmployeeVisitDto> {
         return try {
             val response = apiService.completeVisit(
                 visitId = visitId,
-                request = CompleteVisitRequest(workDescription = workDescription)
+                request = CompleteVisitRequest(
+                    workDescription = workDescription,
+                    actualArrival = actualArrival,
+                    actualDeparture = actualDeparture
+                )
             )
             if (response.isSuccessful && response.body() != null) {
                 val completedVisit = response.body()!!.visit

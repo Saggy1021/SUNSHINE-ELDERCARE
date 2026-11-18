@@ -82,16 +82,22 @@ export async function POST(
       );
     }
 
-    if (visit.status === "COMPLETED") {
-      return NextResponse.json(
-        { success: false, error: "This visit has already been marked as completed." },
-        { status: 400 }
-      );
+    if (visit.status === "COMPLETED" && visit.actualStart && visit.actualEnd && visit.completedAt) {
+      return NextResponse.json({
+        success: true,
+        message: "This visit has already been marked as completed.",
+        visit: formatEmployeeVisit(visit),
+      });
     }
 
     // Resolve Arrival Time
     let arrivalDate = visit.actualStart;
-    if (body.actualArrival) {
+    if (
+      body.actualArrival !== undefined &&
+      body.actualArrival !== null &&
+      typeof body.actualArrival === "string" &&
+      body.actualArrival.trim() !== ""
+    ) {
       const d = parseToDate(body.actualArrival, visit.scheduledStart);
       if (d) arrivalDate = d;
     }
@@ -105,7 +111,12 @@ export async function POST(
 
     // Resolve Departure Time
     let departureDate = visit.actualEnd;
-    if (body.actualDeparture) {
+    if (
+      body.actualDeparture !== undefined &&
+      body.actualDeparture !== null &&
+      typeof body.actualDeparture === "string" &&
+      body.actualDeparture.trim() !== ""
+    ) {
       const d = parseToDate(body.actualDeparture, visit.scheduledStart);
       if (d) departureDate = d;
     }
@@ -126,7 +137,10 @@ export async function POST(
     }
 
     // Resolve Work Description
-    let workDesc = (typeof body.workDescription === "string" ? body.workDescription.trim() : "") || visit.workDescription?.trim() || "";
+    let workDesc =
+      (typeof body.workDescription === "string" ? body.workDescription.trim() : "") ||
+      visit.workDescription?.trim() ||
+      "";
     if (!workDesc) {
       return NextResponse.json(
         { success: false, error: "Please enter a description of work performed before completing the visit." },
@@ -143,8 +157,8 @@ export async function POST(
         actualEnd: departureDate,
         workDescription: workDesc,
         status: "COMPLETED",
-        completedAt: now,
-        completedById: employee.id,
+        completedAt: visit.completedAt || now,
+        completedById: visit.completedById || employee.id,
       },
       include: careVisitEmployeeIncludes,
     });

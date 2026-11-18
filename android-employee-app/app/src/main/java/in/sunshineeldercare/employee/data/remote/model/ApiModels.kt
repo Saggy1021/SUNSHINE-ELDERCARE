@@ -165,7 +165,9 @@ data class UpdateWorkDescriptionResponse(
 
 @Serializable
 data class CompleteVisitRequest(
-    val workDescription: String? = null
+    val workDescription: String? = null,
+    val actualArrival: String? = null,
+    val actualDeparture: String? = null
 )
 
 @Serializable

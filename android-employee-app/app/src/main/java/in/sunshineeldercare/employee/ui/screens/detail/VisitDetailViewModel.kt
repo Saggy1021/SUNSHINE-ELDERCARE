@@ -128,12 +128,15 @@ class VisitDetailViewModel(
     private fun saveArrival(time: String) {
         viewModelScope.launch(coroutineExceptionHandler) {
             _uiState.update { it.copy(isSavingTime = true, errorMessage = null) }
-            val result = visitsRepository.updateTime(visitId, actualArrival = time)
-            result.onSuccess {
+            val currentDep = _uiState.value.departureInput.ifBlank { _uiState.value.visit?.actualDepartureDisplay.orEmpty() }.ifBlank { null }
+            val result = visitsRepository.updateTime(visitId, actualArrival = time, actualDeparture = currentDep)
+            result.onSuccess { updatedVisit ->
                 _uiState.update {
                     it.copy(
                         isSavingTime = false,
-                        successMessage = "Actual arrival time recorded as $time"
+                        successMessage = "Actual arrival time recorded as $time",
+                        arrivalInput = updatedVisit.actualArrivalDisplay ?: time,
+                        departureInput = updatedVisit.actualDepartureDisplay ?: it.departureInput
                     )
                 }
             }.onFailure { err ->
@@ -150,12 +153,15 @@ class VisitDetailViewModel(
     private fun saveDeparture(time: String) {
         viewModelScope.launch(coroutineExceptionHandler) {
             _uiState.update { it.copy(isSavingTime = true, errorMessage = null) }
-            val result = visitsRepository.updateTime(visitId, actualDeparture = time)
-            result.onSuccess {
+            val currentArr = _uiState.value.arrivalInput.ifBlank { _uiState.value.visit?.actualArrivalDisplay.orEmpty() }.ifBlank { null }
+            val result = visitsRepository.updateTime(visitId, actualArrival = currentArr, actualDeparture = time)
+            result.onSuccess { updatedVisit ->
                 _uiState.update {
                     it.copy(
                         isSavingTime = false,
-                        successMessage = "Actual departure time recorded as $time"
+                        successMessage = "Actual departure time recorded as $time",
+                        arrivalInput = updatedVisit.actualArrivalDisplay ?: it.arrivalInput,
+                        departureInput = updatedVisit.actualDepartureDisplay ?: time
                     )
                 }
             }.onFailure { err ->
@@ -225,19 +231,29 @@ class VisitDetailViewModel(
         }
 
         viewModelScope.launch(coroutineExceptionHandler) {
-            _uiState.update { it.copy(isCompleting = true, errorMessage = null) }
-            val result = visitsRepository.completeVisit(visitId, workDescription = desc)
-            result.onSuccess {
+            _uiState.update { it.copy(isCompleting = true, errorMessage = null, showCompleteConfirmation = false) }
+            val result = visitsRepository.completeVisit(
+                visitId = visitId,
+                workDescription = desc,
+                actualArrival = arrival,
+                actualDeparture = departure
+            )
+            result.onSuccess { completedVisit ->
                 _uiState.update {
                     it.copy(
                         isCompleting = false,
-                        successMessage = "Care Visit marked as COMPLETED successfully!"
+                        showCompleteConfirmation = false,
+                        successMessage = "Care Visit marked as COMPLETED successfully!",
+                        arrivalInput = completedVisit.actualArrivalDisplay ?: it.arrivalInput,
+                        departureInput = completedVisit.actualDepartureDisplay ?: it.departureInput,
+                        workDescriptionInput = completedVisit.workDescription ?: it.workDescriptionInput
                     )
                 }
             }.onFailure { err ->
                 _uiState.update {
                     it.copy(
                         isCompleting = false,
+                        showCompleteConfirmation = false,
                         errorMessage = err.message ?: "Failed to complete visit"
                     )
                 }

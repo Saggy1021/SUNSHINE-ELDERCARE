@@ -84,37 +84,43 @@ export async function PATCH(
       );
     }
 
-    let parsedArrival: Date | null = undefined as any;
-    let parsedDeparture: Date | null = undefined as any;
+    let parsedArrival: Date | null | undefined = undefined;
+    let parsedDeparture: Date | null | undefined = undefined;
 
-    if (body.actualArrival !== undefined) {
-      if (body.actualArrival === null || body.actualArrival === "") {
-        parsedArrival = null;
-      } else {
-        const d = parseToDate(body.actualArrival, visit.scheduledStart);
-        if (!d) {
-          return NextResponse.json(
-            { success: false, error: "Invalid actual arrival date format." },
-            { status: 400 }
-          );
-        }
-        parsedArrival = d;
+    if (body.clearArrival === true) {
+      parsedArrival = null;
+    } else if (
+      body.actualArrival !== undefined &&
+      body.actualArrival !== null &&
+      typeof body.actualArrival === "string" &&
+      body.actualArrival.trim() !== ""
+    ) {
+      const d = parseToDate(body.actualArrival, visit.scheduledStart);
+      if (!d) {
+        return NextResponse.json(
+          { success: false, error: "Invalid actual arrival date format." },
+          { status: 400 }
+        );
       }
+      parsedArrival = d;
     }
 
-    if (body.actualDeparture !== undefined) {
-      if (body.actualDeparture === null || body.actualDeparture === "") {
-        parsedDeparture = null;
-      } else {
-        const d = parseToDate(body.actualDeparture, visit.scheduledStart);
-        if (!d) {
-          return NextResponse.json(
-            { success: false, error: "Invalid actual departure date format." },
-            { status: 400 }
-          );
-        }
-        parsedDeparture = d;
+    if (body.clearDeparture === true) {
+      parsedDeparture = null;
+    } else if (
+      body.actualDeparture !== undefined &&
+      body.actualDeparture !== null &&
+      typeof body.actualDeparture === "string" &&
+      body.actualDeparture.trim() !== ""
+    ) {
+      const d = parseToDate(body.actualDeparture, visit.scheduledStart);
+      if (!d) {
+        return NextResponse.json(
+          { success: false, error: "Invalid actual departure date format." },
+          { status: 400 }
+        );
       }
+      parsedDeparture = d;
     }
 
     // Determine the effective arrival and departure to validate chronological order

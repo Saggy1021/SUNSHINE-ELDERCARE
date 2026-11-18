@@ -1529,8 +1529,19 @@ export async function updateCareVisitStatus(
   if (!existing) return { success: false, error: "Visit not found." };
 
   const dataToUpdate: any = { status: newStatus };
-  if (newStatus === "COMPLETED" && !existing.actualEnd) {
-    dataToUpdate.actualEnd = new Date();
+  if (newStatus === "COMPLETED") {
+    if (!existing.completedAt) {
+      dataToUpdate.completedAt = new Date();
+    }
+    if (!existing.completedById) {
+      dataToUpdate.completedById = admin.userId;
+    }
+    if (!existing.actualEnd) {
+      dataToUpdate.actualEnd = new Date();
+    }
+    if (!existing.actualStart) {
+      dataToUpdate.actualStart = existing.scheduledStart;
+    }
   }
   if (newStatus === "IN_PROGRESS" && !existing.actualStart) {
     dataToUpdate.actualStart = new Date();

@@ -1244,7 +1244,25 @@ export function VisitScheduleCalendar({
                     <div>
                       <span className="text-slate-500 block text-[11px]">Actual Duration</span>
                       <span className="font-semibold text-slate-900">
-                        {selectedVisit.actualDurationDisplay || (selectedVisit.actualStart && selectedVisit.actualEnd ? "Recorded" : "In Progress")}
+                        {selectedVisit.actualDurationDisplay ||
+                          (selectedVisit.actualStart && selectedVisit.actualEnd
+                            ? (() => {
+                                const start = new Date(selectedVisit.actualStart).getTime();
+                                const end = new Date(selectedVisit.actualEnd).getTime();
+                                const diff = end - start;
+                                if (diff >= 0) {
+                                  const totalMins = Math.round(diff / 60000);
+                                  const hrs = Math.floor(totalMins / 60);
+                                  const mins = totalMins % 60;
+                                  return hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+                                }
+                                return "Recorded";
+                              })()
+                            : selectedVisit.status === "COMPLETED"
+                            ? "—"
+                            : selectedVisit.actualStart
+                            ? "In Progress"
+                            : "—")}
                       </span>
                     </div>
                   </div>

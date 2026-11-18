@@ -17,6 +17,7 @@ object RetrofitClient {
         isLenient = true
         coerceInputValues = true
         encodeDefaults = true
+        explicitNulls = false
     }
 
     fun create(
