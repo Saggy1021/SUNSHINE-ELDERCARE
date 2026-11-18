@@ -1,4 +1,3 @@
-import { db } from "@/lib/db";
 import { EXCLUDED_MEMBER_EMAILS, ADMIN_DISPLAY_EMAILS } from "@/lib/constants/members";
 
 export type BirthdayPersonType = "PRIMARY" | "SPOUSE";
@@ -260,8 +259,9 @@ export class BirthdayCalendarService {
    */
   static async getBirthdayCalendarData(
     referenceDateInput?: Date | string,
-    database: any = db
+    database?: any
   ): Promise<BirthdayCalendarPayload> {
+    const dbClient = database || (await import("@/lib/db")).db;
     const referenceDate = referenceDateInput
       ? typeof referenceDateInput === "string"
         ? new Date(referenceDateInput)
@@ -275,7 +275,7 @@ export class BirthdayCalendarService {
     )}-${String(refParts.day).padStart(2, "0")}`;
 
     // Query confirmed members from database
-    const users = await database.user.findMany({
+    const users = await dbClient.user.findMany({
       where: {
         status: { not: "ARCHIVED" },
         email: { notIn: [...EXCLUDED_MEMBER_EMAILS, ...ADMIN_DISPLAY_EMAILS] },
