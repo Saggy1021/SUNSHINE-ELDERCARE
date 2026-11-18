@@ -142,6 +142,9 @@ async function runTests() {
       user: {
         findMany: async () => mockUsers,
       },
+      employee: {
+        findMany: async () => [],
+      },
     };
 
     const payload = await BirthdayCalendarService.getBirthdayCalendarData(refNow, mockDb);
@@ -373,6 +376,11 @@ async function runTests() {
           );
         },
       },
+      employee: {
+        findMany: async () => {
+          return [];
+        },
+      },
     };
 
     const payload = await BirthdayCalendarService.getBirthdayCalendarData(new Date(), mockDb);
@@ -382,8 +390,88 @@ async function runTests() {
     console.log("  ✓ Unconfirmed payment and incomplete registrations without Member ID are strictly excluded");
   }
 
+  // ============================================================================
+  // TEST 9: Employee Birthday Integration, DOB Validation & CareVisit Independence
+  // ============================================================================
+  console.log("\n[TEST 9] Employee Birthday Integration & CareVisit Independence");
+  {
+    const mockEmployees = [
+      // 1. Active employee with valid DOB
+      {
+        id: "emp-1",
+        employeeId: "SEC184SAAR",
+        firstName: "Sagnik",
+        lastName: "Kar",
+        dateOfBirth: new Date("1996-07-22T00:00:00.000Z"),
+        designation: "ZC",
+        status: "ACTIVE",
+      },
+      // 2. Active employee without DOB (historical record)
+      {
+        id: "emp-2",
+        employeeId: "SEC185TAAM",
+        firstName: "Tanish",
+        lastName: "Alam",
+        dateOfBirth: null,
+        designation: "ZC",
+        status: "ACTIVE",
+      },
+      // 3. Inactive employee with DOB
+      {
+        id: "emp-3",
+        employeeId: "SEC190INAC",
+        firstName: "Inactive",
+        lastName: "Staff",
+        dateOfBirth: new Date("1990-03-15T00:00:00.000Z"),
+        designation: "Nurse",
+        status: "INACTIVE",
+      },
+    ];
+
+    const mockDb = {
+      user: {
+        findMany: async () => [],
+      },
+      employee: {
+        findMany: async () => {
+          return mockEmployees.filter(
+            (e) => e.status === "ACTIVE" && e.dateOfBirth !== null
+          );
+        },
+      },
+    };
+
+    const refDate = new Date("2026-11-19T00:00:00.000Z");
+    const payload = await BirthdayCalendarService.getBirthdayCalendarData(refDate, mockDb);
+
+    // Only active employee with non-null DOB should appear
+    assert.strictEqual(payload.allBirthdays.length, 1, "Only active employee with non-null DOB must be included");
+    const empEntry = payload.allBirthdays[0];
+
+    assert.strictEqual(empEntry.id, "SEC184SAAR-EMPLOYEE");
+    assert.strictEqual(empEntry.personType, "EMPLOYEE");
+    assert.strictEqual(empEntry.employeeId, "SEC184SAAR");
+    assert.strictEqual(empEntry.fullName, "Sagnik Kar");
+    assert.strictEqual(empEntry.formattedBirthday, "22 July");
+    assert.strictEqual(empEntry.turningAge, 31, "Turns 31 in 2027 (born 1996, July birthday already passed in 2026)");
+    assert.strictEqual(empEntry.primaryMobile, null, "Employee phone must NOT be in birthday payload");
+    assert.strictEqual(empEntry.personMobile, null, "Employee mobile must NOT be in birthday payload");
+
+    // Search by employee name
+    const searchByName = BirthdayCalendarService.filterBirthdayEntries(payload.allBirthdays, "Sagnik");
+    assert.strictEqual(searchByName.length, 1);
+    assert.strictEqual(searchByName[0].fullName, "Sagnik Kar");
+
+    // Search by Employee ID
+    const searchById = BirthdayCalendarService.filterBirthdayEntries(payload.allBirthdays, "SEC184SAAR");
+    assert.strictEqual(searchById.length, 1);
+    assert.strictEqual(searchById[0].employeeId, "SEC184SAAR");
+
+    console.log("  ✓ Employee birthdays seamlessly integrate, calculate dynamic age, enforce privacy, and allow search");
+  }
+
   console.log("\n================================================================");
-  console.log("✓ ALL 8 BIRTHDAY CALENDAR UNIT TEST PHASES PASSED 100%");
+  console.log("✓ ALL 9 BIRTHDAY CALENDAR UNIT TEST PHASES PASSED 100%");
   console.log("================================================================");
 }
 

@@ -47,23 +47,50 @@ export async function createEmployee(data: EmployeeInput): Promise<{ success: bo
       return { success: false, error: firstErr };
     }
     
-    const { firstName, lastName, designation, contactNumber, email, photoReference, status, publicBiography } = parsed.data;
+    const { firstName, lastName, designation, contactNumber, email, dateOfBirth, photoReference, publicBiography } = parsed.data;
+
+    // Check for duplicate email across employees
+    const existingEmail = await db.employee.findFirst({
+      where: {
+        email: {
+          equals: email.trim(),
+          mode: "insensitive",
+        },
+      },
+    });
+    if (existingEmail) {
+      return {
+        success: false,
+        error: `An employee with email "${email.trim()}" already exists.`,
+      };
+    }
 
     // Authoritative canonical Employee ID generation: strictly derived from first name, last name, and sequence
     // Frontend input is not allowed to override the authoritative ID
     const employeeId = await EmployeeIdentityService.generateEmployeeId(firstName, lastName);
 
+    const dobDate = new Date(dateOfBirth);
+    const digitsOnly = contactNumber.trim().replace(/\D/g, "");
+    const normalizedContact =
+      digitsOnly.length === 12 && digitsOnly.startsWith("91")
+        ? digitsOnly.slice(2)
+        : digitsOnly.length === 11 && digitsOnly.startsWith("0")
+        ? digitsOnly.slice(1)
+        : digitsOnly;
+
     // Creating an employee MUST NEVER create an administrator account or user login
+    // Operational status is removed from registration and automatically set to default ACTIVE
     const employee = await db.employee.create({
       data: {
         employeeId,
         firstName,
         lastName,
         designation,
-        contactNumber: contactNumber || null,
-        email: email || null,
+        dateOfBirth: dobDate,
+        contactNumber: normalizedContact,
+        email: email.trim().toLowerCase(),
         photoReference: photoReference || null,
-        status: status || "ACTIVE",
+        status: "ACTIVE", // Default ACTIVE status
         publicBiography: publicBiography || null,
         userId: null, // Zero dashboard access
       }
@@ -94,22 +121,86 @@ export async function updateEmployee(id: string, data: Partial<EmployeeInput>): 
     const current = await db.employee.findUnique({ where: { id } });
     if (!current) return { success: false, error: "Employee not found." };
 
-    let targetEmployeeId = current.employeeId;
-    if (data.employeeId) {
-      const normalizedInput = EmployeeIdentityService.normalizeEmployeeId(data.employeeId);
-      if (normalizedInput && normalizedInput !== current.employeeId) {
-        targetEmployeeId = normalizedInput;
-        const existing = await db.employee.findFirst({
-          where: {
-            employeeId: targetEmployeeId,
-            id: { not: id },
-          },
-        });
-        if (existing) {
-          return { success: false, error: `An employee with Employee ID "${targetEmployeeId}" already exists.` };
-        }
-      }
+    if (data.firstName !== undefined && (!data.firstName || data.firstName.trim().length < 2)) {
+      return { success: false, error: "First name must be at least 2 characters." };
     }
+    if (data.lastName !== undefined && (!data.lastName || data.lastName.trim().length < 1)) {
+      return { success: false, error: "Last name is required." };
+    }
+    if (data.designation !== undefined && (!data.designation || data.designation.trim().length < 2)) {
+      return { success: false, error: "Designation is required." };
+    }
+
+    // Contact number validation (mandatory when editing)
+    let sanitizedContact: string | null = current.contactNumber;
+    if (data.contactNumber !== undefined) {
+      const trimmedContact = data.contactNumber.trim();
+      if (!trimmedContact) {
+        return { success: false, error: "Contact / Mobile number is required." };
+      }
+      const digitsOnly = trimmedContact.replace(/\D/g, "");
+      const is10 = digitsOnly.length === 10;
+      const is12 = digitsOnly.length === 12 && digitsOnly.startsWith("91");
+      const is11 = digitsOnly.length === 11 && digitsOnly.startsWith("0");
+      if (!is10 && !is12 && !is11) {
+        return { success: false, error: "Mobile number must be a valid 10-digit number." };
+      }
+      sanitizedContact = is12 ? digitsOnly.slice(2) : is11 ? digitsOnly.slice(1) : digitsOnly;
+    }
+
+    // Email validation and duplicate check
+    let sanitizedEmail: string | null = current.email;
+    if (data.email !== undefined) {
+      const trimmedEmail = data.email.trim().toLowerCase();
+      if (!trimmedEmail) {
+        return { success: false, error: "Email address is required." };
+      }
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(trimmedEmail)) {
+        return { success: false, error: "Invalid email address." };
+      }
+      // Check for conflict with another employee
+      const existingEmail = await db.employee.findFirst({
+        where: {
+          email: {
+            equals: trimmedEmail,
+            mode: "insensitive",
+          },
+          id: { not: id },
+        },
+      });
+      if (existingEmail) {
+        return {
+          success: false,
+          error: `An employee with email "${trimmedEmail}" already exists.`,
+        };
+      }
+      sanitizedEmail = trimmedEmail;
+    }
+
+    // Date of Birth validation
+    let dobDate: Date | null = current.dateOfBirth;
+    if (data.dateOfBirth !== undefined) {
+      const dobStr = data.dateOfBirth?.trim();
+      if (!dobStr) {
+        return { success: false, error: "Date of Birth is required." };
+      }
+      const parsedDob = new Date(dobStr);
+      if (isNaN(parsedDob.getTime())) {
+        return { success: false, error: "Invalid Date of Birth format." };
+      }
+      const now = new Date();
+      if (parsedDob > now) {
+        return { success: false, error: "Date of Birth cannot be in the future." };
+      }
+      if (parsedDob.getFullYear() < 1900) {
+        return { success: false, error: "Date of Birth year must be 1900 or later." };
+      }
+      dobDate = parsedDob;
+    }
+
+    // Employee ID must remain strictly read-only: do NOT allow changing employeeId
+    const targetEmployeeId = current.employeeId;
 
     const employee = await db.employee.update({
       where: { id },
@@ -118,8 +209,9 @@ export async function updateEmployee(id: string, data: Partial<EmployeeInput>): 
         firstName: data.firstName !== undefined ? data.firstName.trim() : current.firstName,
         lastName: data.lastName !== undefined ? data.lastName.trim() : current.lastName,
         designation: data.designation !== undefined ? data.designation.trim() : current.designation,
-        contactNumber: data.contactNumber !== undefined ? (data.contactNumber?.trim() || null) : current.contactNumber,
-        email: data.email !== undefined ? (data.email?.trim() || null) : current.email,
+        dateOfBirth: dobDate,
+        contactNumber: sanitizedContact,
+        email: sanitizedEmail,
         photoReference: data.photoReference !== undefined ? data.photoReference : current.photoReference,
         status: data.status || current.status,
         publicBiography: data.publicBiography !== undefined ? data.publicBiography : current.publicBiography,

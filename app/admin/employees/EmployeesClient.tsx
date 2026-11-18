@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { 
   Plus, Edit2, Shield, Lock, Activity, UserX, Search, Users, 
   CheckCircle, XCircle, Phone, Mail, Calendar, AlertCircle, 
-  Briefcase, Check, Sparkles, Building, UserCheck, Trash2, KeyRound, RefreshCw, ArrowLeft
+  Briefcase, Check, Sparkles, Building, UserCheck, Trash2, KeyRound, RefreshCw, ArrowLeft, Cake
 } from "lucide-react";
 import { 
   inviteAdminUserAction, 
@@ -180,9 +180,9 @@ export function EmployeesClient({
     const lastName = (formData.get("lastName") as string)?.trim();
     const designation = (formData.get("designation") as string)?.trim();
     const employeeId = (formData.get("employeeId") as string)?.trim() || undefined;
-    const contactNumber = (formData.get("contactNumber") as string)?.trim() || undefined;
-    const email = (formData.get("email") as string)?.trim() || undefined;
-    const status = (formData.get("status") as "ACTIVE" | "INACTIVE") || "ACTIVE";
+    const contactNumber = (formData.get("contactNumber") as string)?.trim();
+    const email = (formData.get("email") as string)?.trim();
+    const dateOfBirth = (formData.get("dateOfBirth") as string)?.trim();
     const publicBiography = (formData.get("publicBiography") as string)?.trim() || undefined;
 
     try {
@@ -193,7 +193,8 @@ export function EmployeesClient({
         employeeId,
         contactNumber,
         email,
-        status,
+        dateOfBirth,
+        status: "ACTIVE",
         publicBiography,
       });
 
@@ -228,10 +229,10 @@ export function EmployeesClient({
     const firstName = (formData.get("firstName") as string)?.trim();
     const lastName = (formData.get("lastName") as string)?.trim();
     const designation = (formData.get("designation") as string)?.trim();
-    const employeeId = (formData.get("employeeId") as string)?.trim();
-    const contactNumber = (formData.get("contactNumber") as string)?.trim() || undefined;
-    const email = (formData.get("email") as string)?.trim() || undefined;
-    const status = (formData.get("status") as "ACTIVE" | "INACTIVE") || "ACTIVE";
+    const contactNumber = (formData.get("contactNumber") as string)?.trim();
+    const email = (formData.get("email") as string)?.trim();
+    const dateOfBirth = (formData.get("dateOfBirth") as string)?.trim();
+    const status = (formData.get("status") as "ACTIVE" | "INACTIVE") || editingEmployee.status;
     const publicBiography = (formData.get("publicBiography") as string)?.trim() || undefined;
 
     try {
@@ -239,9 +240,9 @@ export function EmployeesClient({
         firstName,
         lastName,
         designation,
-        employeeId,
         contactNumber,
         email,
+        dateOfBirth,
         status,
         publicBiography,
       });
@@ -758,6 +759,12 @@ export function EmployeesClient({
                                   <span className="truncate max-w-[180px]">{emp.email}</span>
                                 </div>
                               )}
+                              {emp.dateOfBirth && (
+                                <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                                  <Cake className="h-3 w-3 text-amber-500 shrink-0" />
+                                  <span>{new Date(emp.dateOfBirth).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
+                                </div>
+                              )}
                             </div>
                           </td>
 
@@ -1115,16 +1122,30 @@ export function EmployeesClient({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Designation / Role <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  name="designation"
-                  required
-                  placeholder="e.g. Care Coordinator, Nurse, Attendant, Physiotherapist"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Designation / Role <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    name="designation"
+                    required
+                    placeholder="e.g. Care Coordinator, Nurse, Attendant"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Date of Birth <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    name="dateOfBirth"
+                    required
+                    max={new Date().toISOString().split("T")[0]}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none"
+                  />
+                </div>
               </div>
 
               <div>
@@ -1145,40 +1166,28 @@ export function EmployeesClient({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Contact / Mobile <span className="text-slate-400 font-normal">(Optional)</span>
+                    Contact / Mobile <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="tel"
                     name="contactNumber"
-                    placeholder="e.g. +91 98301 23456"
+                    required
+                    placeholder="e.g. 9830123456"
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Email Address <span className="text-slate-400 font-normal">(Optional)</span>
+                    Email Address <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="email"
                     name="email"
+                    required
                     placeholder="e.g. staff@sunshineeldercare.in"
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Operational Status <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  name="status"
-                  defaultValue="ACTIVE"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none bg-white"
-                >
-                  <option value="ACTIVE">ACTIVE (Available for visit assignments)</option>
-                  <option value="INACTIVE">INACTIVE (Excluded from scheduling)</option>
-                </select>
               </div>
 
               <div>
@@ -1265,50 +1274,77 @@ export function EmployeesClient({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Designation / Role <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  name="designation"
-                  defaultValue={editingEmployee.designation}
-                  required
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Employee ID <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  name="employeeId"
-                  defaultValue={editingEmployee.employeeId}
-                  required
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-[#1A365D] outline-none"
-                />
-              </div>
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Contact / Mobile
+                    Designation / Role <span className="text-rose-500">*</span>
                   </label>
                   <input
-                    type="tel"
-                    name="contactNumber"
-                    defaultValue={editingEmployee.contactNumber || ""}
+                    name="designation"
+                    defaultValue={editingEmployee.designation}
+                    required
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Email Address
+                    Date of Birth <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    name="dateOfBirth"
+                    defaultValue={
+                      editingEmployee.dateOfBirth
+                        ? new Date(editingEmployee.dateOfBirth).toISOString().split("T")[0]
+                        : ""
+                    }
+                    required
+                    max={new Date().toISOString().split("T")[0]}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Employee ID <span className="text-slate-400 font-normal">(Read-only)</span>
+                </label>
+                <input
+                  name="employeeId"
+                  value={editingEmployee.employeeId}
+                  disabled
+                  readOnly
+                  className="w-full px-3 py-2 border border-slate-200 bg-slate-50 text-slate-500 rounded-lg text-sm font-mono cursor-not-allowed"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Canonical Employee ID is immutable and strictly preserved across updates.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Contact / Mobile <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    name="contactNumber"
+                    defaultValue={editingEmployee.contactNumber || ""}
+                    required
+                    placeholder="e.g. 9830123456"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Email Address <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="email"
                     name="email"
                     defaultValue={editingEmployee.email || ""}
+                    required
+                    placeholder="e.g. staff@sunshineeldercare.in"
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1A365D] outline-none"
                   />
                 </div>
@@ -1330,7 +1366,7 @@ export function EmployeesClient({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Public Biography / Operational Notes
+                  Public Biography / Operational Notes <span className="text-slate-400 font-normal">(Optional)</span>
                 </label>
                 <textarea
                   name="publicBiography"

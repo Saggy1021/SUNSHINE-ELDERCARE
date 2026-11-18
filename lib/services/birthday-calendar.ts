@@ -1,12 +1,13 @@
 import { EXCLUDED_MEMBER_EMAILS, ADMIN_DISPLAY_EMAILS } from "@/lib/constants/members";
 
-export type BirthdayPersonType = "PRIMARY" | "SPOUSE";
+export type BirthdayPersonType = "PRIMARY" | "SPOUSE" | "EMPLOYEE";
 
 export interface BirthdayEntry {
-  id: string; // Unique deterministic entry ID: `${memberId}-PRIMARY` or `${memberId}-SPOUSE`
-  userId: string; // User ID for linking to /admin/members/[userId]
-  memberProfileId: string;
-  memberId: string; // Canonical Member ID e.g. "SECD1001PRTY"
+  id: string; // Unique deterministic entry ID: `${memberId}-PRIMARY` or `${memberId}-SPOUSE` or `${employeeId}-EMPLOYEE`
+  userId?: string; // User ID for linking to /admin/members/[userId] (omitted for employees)
+  memberProfileId?: string;
+  memberId?: string; // Canonical Member ID e.g. "SECD1001PRTY"
+  employeeId?: string; // Canonical Employee ID e.g. "SEC186TAAM"
   personType: BirthdayPersonType;
 
   // Name Details
@@ -405,6 +406,62 @@ export class BirthdayCalendarService {
       }
     }
 
+    // Query active employees with valid DOB from database
+    const employees = dbClient.employee?.findMany
+      ? await dbClient.employee.findMany({
+          where: {
+            dateOfBirth: { not: null },
+            status: "ACTIVE",
+          },
+          select: {
+            id: true,
+            employeeId: true,
+            firstName: true,
+            lastName: true,
+            dateOfBirth: true,
+            designation: true,
+          },
+          orderBy: {
+            createdAt: "asc",
+          },
+        })
+      : [];
+
+    for (const emp of employees) {
+      if (!emp.dateOfBirth || !emp.employeeId) continue;
+
+      const occ = this.calculateBirthdayOccurrence(
+        emp.dateOfBirth,
+        referenceDate
+      );
+      const employeeFullName = `${emp.firstName} ${emp.lastName}`.trim();
+
+      allBirthdays.push({
+        id: `${emp.employeeId.trim().toUpperCase()}-EMPLOYEE`,
+        employeeId: emp.employeeId.trim().toUpperCase(),
+        personType: "EMPLOYEE",
+        salutation: null,
+        firstName: emp.firstName,
+        lastName: emp.lastName,
+        fullName: employeeFullName,
+        primaryMobile: null, // Strictly omitted for privacy: no phone or email in employee birthday card
+        personMobile: null, // Strictly omitted for privacy: no phone or email in employee birthday card
+        originalDob: emp.dateOfBirth.toISOString(),
+        birthMonth: occ.birthMonth,
+        birthDay: occ.birthDay,
+        birthYear: occ.birthYear,
+        formattedBirthday: occ.formattedBirthday,
+        isLeapDay: occ.isLeapDay,
+        nextOccurrenceDate: occ.nextOccurrenceDate,
+        nextOccurrenceFormatted: occ.nextOccurrenceFormatted,
+        nextOccurrenceYear: occ.nextOccurrenceYear,
+        daysUntil: occ.daysUntil,
+        isToday: occ.isToday,
+        turningAge: occ.turningAge,
+        leapDayNote: occ.leapDayNote,
+      });
+    }
+
     // Filter today's birthdays
     const todayBirthdays = allBirthdays.filter((b) => b.isToday);
 
@@ -461,14 +518,19 @@ export class BirthdayCalendarService {
       const matchPrimaryName = entry.primaryMemberName
         ? entry.primaryMemberName.toLowerCase().includes(q)
         : false;
-      const matchMemberId =
-        entry.memberId.toLowerCase().includes(q) ||
-        entry.memberId.replace(/[\/\s-]/g, "").toLowerCase().includes(unslashedQ);
+      const matchMemberId = entry.memberId
+        ? entry.memberId.toLowerCase().includes(q) ||
+          entry.memberId.replace(/[\/\s-]/g, "").toLowerCase().includes(unslashedQ)
+        : false;
+      const matchEmployeeId = entry.employeeId
+        ? entry.employeeId.toLowerCase().includes(q) ||
+          entry.employeeId.replace(/[\/\s-]/g, "").toLowerCase().includes(unslashedQ)
+        : false;
       const matchMobile =
         (entry.personMobile && entry.personMobile.includes(q)) ||
         (entry.primaryMobile && entry.primaryMobile.includes(q));
 
-      return matchName || matchPrimaryName || matchMemberId || matchMobile;
+      return matchName || matchPrimaryName || matchMemberId || matchEmployeeId || matchMobile;
     });
   }
 

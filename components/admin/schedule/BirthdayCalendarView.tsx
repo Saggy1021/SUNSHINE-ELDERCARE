@@ -282,7 +282,7 @@ export function BirthdayCalendarView({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search member, Member ID, spouse..."
+            placeholder="Search member, Member ID, spouse, employee..."
             className="w-full pl-9 pr-8 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#091329]/15 focus:border-[#091329]"
           />
           {searchQuery && (
@@ -328,7 +328,7 @@ export function BirthdayCalendarView({
                 No Birthdays Today
               </h3>
               <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                No confirmed members or spouses have birthdays on{" "}
+                No confirmed members, spouses, or employees have birthdays on{" "}
                 {new Intl.DateTimeFormat("en-IN", {
                   timeZone: "Asia/Kolkata",
                   day: "numeric",
@@ -374,7 +374,7 @@ export function BirthdayCalendarView({
               </p>
             </div>
             <span className="text-xs text-slate-500 font-medium">
-              Showing {upcomingBirthdays.length} confirmed member & spouse birthdays
+              Showing {upcomingBirthdays.length} confirmed member, spouse & employee birthdays
             </span>
           </div>
 
@@ -511,6 +511,11 @@ export function BirthdayCalendarView({
                           <div className="min-w-0">
                             <div className="font-semibold text-slate-900 truncate flex items-center gap-1">
                               <span>{b.fullName}</span>
+                              {b.personType === "EMPLOYEE" && (
+                                <span className="text-[10px] text-teal-800 bg-teal-50 px-1 rounded font-normal border border-teal-200">
+                                  Employee
+                                </span>
+                              )}
                               {b.personType === "SPOUSE" && (
                                 <span className="text-[10px] text-amber-700 bg-amber-50 px-1 rounded font-normal">
                                   Spouse
@@ -519,7 +524,7 @@ export function BirthdayCalendarView({
                             </div>
                             <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
                               <span className="font-mono text-[10px] text-slate-400">
-                                {b.memberId}
+                                {b.employeeId || b.memberId}
                               </span>
                               {b.turningAge && (
                                 <span>• Age {b.turningAge}</span>
@@ -556,6 +561,7 @@ function BirthdayCard({
   showMonthSpecificDay?: boolean;
 }) {
   const isSpouse = entry.personType === "SPOUSE";
+  const isEmployee = entry.personType === "EMPLOYEE";
 
   return (
     <div
@@ -565,22 +571,32 @@ function BirthdayCard({
           : "bg-white border-slate-200/90 shadow-2xs hover:shadow-xs hover:border-slate-300"
       }`}
     >
-      {/* Top Header: Person Badge + MID + Countdown */}
+      {/* Top Header: Person Badge + ID + Countdown */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span
             className={`px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase ${
-              isSpouse
+              isEmployee
+                ? "bg-teal-100 text-teal-900 border border-teal-200"
+                : isSpouse
                 ? "bg-amber-100 text-amber-900 border border-amber-200"
                 : "bg-blue-100 text-[#1A365D] border border-blue-200"
             }`}
           >
-            {isSpouse ? "Spouse" : "Primary Member"}
+            {isEmployee ? "Employee" : isSpouse ? "Spouse" : "Primary Member"}
           </span>
 
-          <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">
-            {entry.memberId}
-          </span>
+          {entry.employeeId && (
+            <span className="font-mono text-xs font-bold text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded">
+              {entry.employeeId}
+            </span>
+          )}
+
+          {entry.memberId && (
+            <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">
+              {entry.memberId}
+            </span>
+          )}
         </div>
 
         {/* Days Until Countdown Pill */}
@@ -631,7 +647,7 @@ function BirthdayCard({
             {entry.formattedBirthday}
             {entry.turningAge !== null && (
               <span className="font-normal text-slate-500 ml-1">
-                (Turns {entry.turningAge})
+                (Age {entry.turningAge})
               </span>
             )}
           </span>
@@ -656,46 +672,57 @@ function BirthdayCard({
       </div>
 
       {/* Contact & Actions Footer */}
-      <div className="pt-1 flex items-center justify-between gap-2">
-        {/* Phone / WhatsApp Quick Links */}
-        <div className="flex items-center gap-1.5">
-          {entry.personMobile ? (
-            <>
-              <a
-                href={`tel:${entry.personMobile}`}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 px-2.5 py-1 rounded-lg transition-colors shadow-2xs"
-                title={`Call ${entry.personMobile}`}
-              >
-                <Phone className="h-3 w-3 text-emerald-600" />
-                <span className="font-mono text-[10px]">{entry.personMobile}</span>
-              </a>
+      {isEmployee ? (
+        <div className="pt-1 flex items-center justify-between text-xs text-slate-400">
+          <span className="inline-flex items-center gap-1 text-[11px] text-teal-700 bg-teal-50/70 px-2 py-0.5 rounded border border-teal-100 font-medium">
+            Sunshine Staff
+          </span>
+          <span className="text-[10px] text-slate-400 font-mono">Internal Record</span>
+        </div>
+      ) : (
+        <div className="pt-1 flex items-center justify-between gap-2">
+          {/* Phone / WhatsApp Quick Links */}
+          <div className="flex items-center gap-1.5">
+            {entry.personMobile ? (
+              <>
+                <a
+                  href={`tel:${entry.personMobile}`}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 px-2.5 py-1 rounded-lg transition-colors shadow-2xs"
+                  title={`Call ${entry.personMobile}`}
+                >
+                  <Phone className="h-3 w-3 text-emerald-600" />
+                  <span className="font-mono text-[10px]">{entry.personMobile}</span>
+                </a>
 
-              <a
-                href={`https://wa.me/91${entry.personMobile.replace(/\D/g, "")}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="p-1 text-emerald-600 hover:bg-emerald-50 rounded border border-transparent hover:border-emerald-200 transition-colors"
-                title="Send WhatsApp Greeting"
-              >
-                <MessageCircle className="h-3.5 w-3.5" />
-              </a>
-            </>
-          ) : (
-            <span className="text-[11px] text-slate-400 italic">
-              No mobile recorded
-            </span>
+                <a
+                  href={`https://wa.me/91${entry.personMobile.replace(/\D/g, "")}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1 text-emerald-600 hover:bg-emerald-50 rounded border border-transparent hover:border-emerald-200 transition-colors"
+                  title="Send WhatsApp Greeting"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" />
+                </a>
+              </>
+            ) : (
+              <span className="text-[11px] text-slate-400 italic">
+                No mobile recorded
+              </span>
+            )}
+          </div>
+
+          {/* View Member Profile */}
+          {entry.userId && (
+            <Link
+              href={`/admin/members/${entry.userId}`}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#1A365D] hover:text-[#091329] hover:underline"
+            >
+              <span>Member Profile</span>
+              <ExternalLink className="h-3 w-3" />
+            </Link>
           )}
         </div>
-
-        {/* View Member Profile */}
-        <Link
-          href={`/admin/members/${entry.userId}`}
-          className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#1A365D] hover:text-[#091329] hover:underline"
-        >
-          <span>Member Profile</span>
-          <ExternalLink className="h-3 w-3" />
-        </Link>
-      </div>
+      )}
     </div>
   );
 }

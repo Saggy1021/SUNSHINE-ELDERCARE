@@ -658,6 +658,7 @@ model Employee {
   employeeId     String  @unique // e.g. SEC101SAAR
   firstName      String
   lastName       String
+  dateOfBirth    DateTime?
   photoReference String? @db.Text
   designation    String
   contactNumber  String?
