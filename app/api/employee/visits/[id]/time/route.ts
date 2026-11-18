@@ -1,24 +1,12 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getAuthenticatedEmployee } from "@/lib/auth/employee-auth";
-
-function formatTime12HourIST(date: Date): string {
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Kolkata",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).format(date);
-}
-
-function formatDateIST(date: Date): string {
-  return new Intl.DateTimeFormat("en-IN", {
-    timeZone: "Asia/Kolkata",
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(date);
-}
+import {
+  careVisitEmployeeIncludes,
+  formatEmployeeVisit,
+  formatTime12HourIST,
+  formatDateIST,
+} from "@/lib/services/employee-visit-formatter";
 
 function parseToDate(input: string, baseDate: Date): Date | null {
   if (!input) return null;
@@ -157,11 +145,13 @@ export async function PATCH(
     const updated = await db.careVisit.update({
       where: { id },
       data: dataToUpdate,
+      include: careVisitEmployeeIncludes,
     });
 
     return NextResponse.json({
       success: true,
       message: "Actual visit timing updated successfully.",
+      visit: formatEmployeeVisit(updated),
       actual: {
         arrival: updated.actualStart ? updated.actualStart.toISOString() : null,
         departure: updated.actualEnd ? updated.actualEnd.toISOString() : null,

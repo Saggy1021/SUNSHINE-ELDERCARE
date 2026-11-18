@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getAuthenticatedEmployee } from "@/lib/auth/employee-auth";
+import {
+  careVisitEmployeeIncludes,
+  formatEmployeeVisit,
+} from "@/lib/services/employee-visit-formatter";
 
 function parseToDate(input: string, baseDate: Date): Date | null {
   if (!input) return null;
@@ -142,6 +146,7 @@ export async function POST(
         completedAt: now,
         completedById: employee.id,
       },
+      include: careVisitEmployeeIncludes,
     });
 
     // Audit logging
@@ -166,14 +171,7 @@ export async function POST(
     return NextResponse.json({
       success: true,
       message: "Visit marked as completed successfully.",
-      visit: {
-        id: updated.id,
-        status: updated.status,
-        actualArrival: updated.actualStart?.toISOString(),
-        actualDeparture: updated.actualEnd?.toISOString(),
-        workDescription: updated.workDescription,
-        completedAt: updated.completedAt?.toISOString(),
-      },
+      visit: formatEmployeeVisit(updated),
     });
   } catch (error: any) {
     console.error("[complete-visit] Error:", error);

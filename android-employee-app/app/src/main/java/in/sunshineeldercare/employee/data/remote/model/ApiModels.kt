@@ -4,30 +4,45 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class EmployeeProfile(
-    val id: String,
-    val employeeId: String,
-    val name: String,
-    val designation: String,
-    val department: String,
-    val email: String
-)
+    val id: String = "",
+    val employeeId: String = "",
+    val name: String = "",
+    val firstName: String? = null,
+    val lastName: String? = null,
+    val designation: String = "",
+    val department: String = "Care Operations",
+    val email: String = "",
+    val contactNumber: String? = null,
+    val photoReference: String? = null,
+    val status: String? = null
+) {
+    val displayName: String
+        get() {
+            if (name.isNotBlank()) return name
+            val full = listOfNotNull(firstName, lastName).joinToString(" ").trim()
+            return if (full.isNotBlank()) full else employeeId
+        }
+
+    val displayDepartment: String
+        get() = if (department.isNotBlank()) department else designation.ifBlank { "Care Operations" }
+}
 
 @Serializable
 data class EmployeeVisitDto(
-    val id: String,
-    val memberId: String,
-    val primaryMemberName: String,
+    val id: String = "",
+    val memberId: String = "",
+    val primaryMemberName: String = "",
     val spouseName: String? = null,
-    val primaryMobile: String,
-    val serviceAddress: String,
-    val scheduledDate: String,
-    val scheduledStartTime: String,
-    val scheduledEndTime: String,
-    val scheduledWindowDisplay: String,
+    val primaryMobile: String = "",
+    val serviceAddress: String = "",
+    val scheduledDate: String = "",
+    val scheduledStartTime: String = "",
+    val scheduledEndTime: String = "",
+    val scheduledWindowDisplay: String = "",
     val actualArrivalDisplay: String? = null,
     val actualDepartureDisplay: String? = null,
     val workDescription: String? = null,
-    val status: String,
+    val status: String = "SCHEDULED",
     val completedAt: String? = null
 )
 
@@ -40,7 +55,7 @@ data class InitiateActivationRequest(
 @Serializable
 data class InitiateActivationResponse(
     val success: Boolean,
-    val message: String,
+    val message: String = "",
     val maskedEmail: String? = null
 )
 
@@ -53,7 +68,7 @@ data class VerifyActivationRequest(
 @Serializable
 data class VerifyActivationResponse(
     val success: Boolean,
-    val message: String,
+    val message: String = "",
     val activationToken: String? = null
 )
 
@@ -68,10 +83,14 @@ data class SetPasswordRequest(
 @Serializable
 data class SetPasswordResponse(
     val success: Boolean,
-    val message: String,
+    val message: String = "",
     val sessionToken: String? = null,
+    val token: String? = null,
     val employee: EmployeeProfile? = null
-)
+) {
+    val effectiveToken: String?
+        get() = sessionToken ?: token
+}
 
 @Serializable
 data class LoginRequest(
@@ -82,21 +101,25 @@ data class LoginRequest(
 @Serializable
 data class LoginResponse(
     val success: Boolean,
-    val message: String,
+    val message: String = "",
     val sessionToken: String? = null,
+    val token: String? = null,
     val employee: EmployeeProfile? = null
-)
+) {
+    val effectiveToken: String?
+        get() = sessionToken ?: token
+}
 
 @Serializable
 data class MeResponse(
     val success: Boolean,
-    val employee: EmployeeProfile
+    val employee: EmployeeProfile? = null
 )
 
 @Serializable
 data class LogoutResponse(
     val success: Boolean,
-    val message: String
+    val message: String = ""
 )
 
 // Visits Models
@@ -104,6 +127,7 @@ data class LogoutResponse(
 data class VisitsListResponse(
     val success: Boolean,
     val count: Int = 0,
+    val total: Int = 0,
     val filter: String = "all",
     val visits: List<EmployeeVisitDto> = emptyList()
 )
@@ -111,7 +135,7 @@ data class VisitsListResponse(
 @Serializable
 data class VisitDetailsResponse(
     val success: Boolean,
-    val visit: EmployeeVisitDto
+    val visit: EmployeeVisitDto? = null
 )
 
 @Serializable
@@ -123,7 +147,7 @@ data class UpdateTimeRequest(
 @Serializable
 data class UpdateTimeResponse(
     val success: Boolean,
-    val message: String,
+    val message: String = "",
     val visit: EmployeeVisitDto? = null
 )
 
@@ -135,7 +159,7 @@ data class UpdateWorkDescriptionRequest(
 @Serializable
 data class UpdateWorkDescriptionResponse(
     val success: Boolean,
-    val message: String,
+    val message: String = "",
     val visit: EmployeeVisitDto? = null
 )
 
@@ -147,7 +171,7 @@ data class CompleteVisitRequest(
 @Serializable
 data class CompleteVisitResponse(
     val success: Boolean,
-    val message: String,
+    val message: String = "",
     val visit: EmployeeVisitDto? = null
 )
 

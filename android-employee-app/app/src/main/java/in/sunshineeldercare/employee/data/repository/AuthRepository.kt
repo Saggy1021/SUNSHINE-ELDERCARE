@@ -75,8 +75,9 @@ class AuthRepository(
             )
             if (response.isSuccessful && response.body() != null) {
                 val body = response.body()!!
-                if (!body.sessionToken.isNullOrBlank() && body.employee != null) {
-                    saveSession(body.sessionToken, body.employee)
+                val token = body.effectiveToken
+                if (!token.isNullOrBlank() && body.employee != null) {
+                    saveSession(token, body.employee)
                 }
                 Result.success(body)
             } else {
@@ -98,8 +99,9 @@ class AuthRepository(
             )
             if (response.isSuccessful && response.body() != null) {
                 val body = response.body()!!
-                if (!body.sessionToken.isNullOrBlank() && body.employee != null) {
-                    saveSession(body.sessionToken, body.employee)
+                val token = body.effectiveToken
+                if (!token.isNullOrBlank() && body.employee != null) {
+                    saveSession(token, body.employee)
                 }
                 Result.success(body)
             } else {
@@ -114,8 +116,12 @@ class AuthRepository(
     suspend fun refreshProfile(): Result<EmployeeProfile> {
         return try {
             val response = apiService.getMe()
-            if (response.isSuccessful && response.body() != null) {
-                val emp = response.body()!!.employee
+            if (response.isSuccessful && response.body()?.employee != null) {
+                val rawEmp = response.body()!!.employee!!
+                val emp = rawEmp.copy(
+                    name = rawEmp.displayName,
+                    department = rawEmp.displayDepartment
+                )
                 _profile.value = emp
                 tokenManager.employeeName = emp.name
                 tokenManager.employeeDesignation = emp.designation
@@ -145,14 +151,20 @@ class AuthRepository(
     }
 
     private fun saveSession(token: String, employee: EmployeeProfile) {
+        val resolvedName = employee.displayName
+        val resolvedDept = employee.displayDepartment
+
         tokenManager.sessionToken = token
         tokenManager.employeeId = employee.employeeId
-        tokenManager.employeeName = employee.name
+        tokenManager.employeeName = resolvedName
         tokenManager.employeeDesignation = employee.designation
         tokenManager.employeeEmail = employee.email
 
         _isLoggedIn.value = true
-        _profile.value = employee
+        _profile.value = employee.copy(
+            name = resolvedName,
+            department = resolvedDept
+        )
     }
 
     private fun parseErrorMessage(errorBody: String?): String {

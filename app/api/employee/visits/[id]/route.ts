@@ -1,24 +1,10 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getAuthenticatedEmployee } from "@/lib/auth/employee-auth";
-
-function formatTime12HourIST(date: Date): string {
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Kolkata",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).format(date);
-}
-
-function formatDateIST(date: Date): string {
-  return new Intl.DateTimeFormat("en-IN", {
-    timeZone: "Asia/Kolkata",
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(date);
-}
+import {
+  careVisitEmployeeIncludes,
+  formatEmployeeVisit,
+} from "@/lib/services/employee-visit-formatter";
 
 export async function GET(
   req: Request,
@@ -38,22 +24,7 @@ export async function GET(
 
     const visit = await db.careVisit.findUnique({
       where: { id },
-      include: {
-        careCase: {
-          include: {
-            elder: {
-              include: {
-                user: {
-                  include: {
-                    memberProfile: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-        assignments: true,
-      },
+      include: careVisitEmployeeIncludes,
     });
 
     if (!visit) {
@@ -66,7 +37,7 @@ export async function GET(
     // STRICT OWNER CHECK: Is this visit assigned to the authenticated employee?
     const isAssigned =
       visit.assignedEmpId === employee.id ||
-      visit.assignments.some((a) => a.employeeId === employee.id);
+      visit.assignments.some((a: any) => a.employeeId === employee.id);
 
     if (!isAssigned) {
       return NextResponse.json(
@@ -75,59 +46,9 @@ export async function GET(
       );
     }
 
-    const elder = visit.careCase?.elder;
-    const memberUser = elder?.user;
-    const profile = memberUser?.memberProfile;
-
-    const primaryName = [
-      profile?.salutation?.trim(),
-      profile?.firstName?.trim() || memberUser?.name,
-      profile?.lastName?.trim(),
-    ].filter(Boolean).join(" ").trim() || "Member";
-
-    const hasSpouse = Boolean(
-      profile?.spouseFirstName?.trim() || profile?.spouseLastName?.trim()
-    );
-    const spouseName = hasSpouse
-      ? [
-          profile?.spouseSalutation?.trim(),
-          profile?.spouseFirstName?.trim(),
-          profile?.spouseLastName?.trim(),
-        ].filter(Boolean).join(" ").trim()
-      : "—";
-
     return NextResponse.json({
       success: true,
-      visit: {
-        id: visit.id,
-        status: visit.status,
-        member: {
-          primaryName,
-          spouseName,
-          memberId: profile?.memberId || null,
-          mobileNumber: profile?.mobileNumber || null,
-          serviceAddress: profile?.serviceAddress || null,
-        },
-        scheduled: {
-          start: visit.scheduledStart.toISOString(),
-          end: visit.scheduledEnd.toISOString(),
-          dateDisplay: formatDateIST(visit.scheduledStart),
-          timeDisplay: `${formatTime12HourIST(visit.scheduledStart)} – ${formatTime12HourIST(visit.scheduledEnd)}`,
-          startTimeDisplay: formatTime12HourIST(visit.scheduledStart),
-          endTimeDisplay: formatTime12HourIST(visit.scheduledEnd),
-        },
-        actual: {
-          arrival: visit.actualStart ? visit.actualStart.toISOString() : null,
-          departure: visit.actualEnd ? visit.actualEnd.toISOString() : null,
-          arrivalDisplay: visit.actualStart ? formatTime12HourIST(visit.actualStart) : null,
-          departureDisplay: visit.actualEnd ? formatTime12HourIST(visit.actualEnd) : null,
-          arrivalDateDisplay: visit.actualStart ? formatDateIST(visit.actualStart) : null,
-          departureDateDisplay: visit.actualEnd ? formatDateIST(visit.actualEnd) : null,
-        },
-        workDescription: visit.workDescription || null,
-        operationalNotes: visit.operationalNotes || null,
-        completedAt: visit.completedAt ? visit.completedAt.toISOString() : null,
-      },
+      visit: formatEmployeeVisit(visit),
     });
   } catch (error: any) {
     console.error("[get-employee-visit-detail] Error:", error);

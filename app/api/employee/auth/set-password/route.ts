@@ -85,17 +85,22 @@ export async function POST(req: Request) {
 
     // Create session token
     const sessionToken = await createEmployeeSession(updatedEmployee.id);
+    const fullName = `${updatedEmployee.firstName} ${updatedEmployee.lastName}`.trim();
+    const department = updatedEmployee.designation || "Care Operations";
 
     return NextResponse.json({
       success: true,
       message: "Password created successfully. Your account is now active.",
       token: sessionToken,
+      sessionToken: sessionToken,
       employee: {
         id: updatedEmployee.id,
         employeeId: updatedEmployee.employeeId,
+        name: fullName,
         firstName: updatedEmployee.firstName,
         lastName: updatedEmployee.lastName,
         designation: updatedEmployee.designation,
+        department: department,
         email: updatedEmployee.email,
         contactNumber: updatedEmployee.contactNumber,
       },

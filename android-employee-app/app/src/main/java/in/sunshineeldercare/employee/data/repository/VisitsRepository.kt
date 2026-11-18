@@ -60,8 +60,8 @@ class VisitsRepository(
     suspend fun fetchVisitDetails(visitId: String): Result<EmployeeVisitDto> {
         return try {
             val response = apiService.getVisitById(visitId)
-            if (response.isSuccessful && response.body() != null) {
-                val visitDto = response.body()!!.visit
+            if (response.isSuccessful && response.body()?.visit != null) {
+                val visitDto = response.body()!!.visit!!
                 visitDao.insert(VisitEntity.fromDto(visitDto))
                 Result.success(visitDto)
             } else {
@@ -87,9 +87,13 @@ class VisitsRepository(
                 )
             )
             if (response.isSuccessful && response.body() != null) {
-                val updatedVisit = response.body()!!.visit!!
-                visitDao.insert(VisitEntity.fromDto(updatedVisit))
-                Result.success(updatedVisit)
+                val updatedVisit = response.body()!!.visit
+                if (updatedVisit != null) {
+                    visitDao.insert(VisitEntity.fromDto(updatedVisit))
+                    Result.success(updatedVisit)
+                } else {
+                    fetchVisitDetails(visitId)
+                }
             } else {
                 val errorMsg = parseErrorMessage(response.errorBody()?.string())
                 Result.failure(Exception(errorMsg))
@@ -109,9 +113,13 @@ class VisitsRepository(
                 request = UpdateWorkDescriptionRequest(workDescription = workDescription)
             )
             if (response.isSuccessful && response.body() != null) {
-                val updatedVisit = response.body()!!.visit!!
-                visitDao.insert(VisitEntity.fromDto(updatedVisit))
-                Result.success(updatedVisit)
+                val updatedVisit = response.body()!!.visit
+                if (updatedVisit != null) {
+                    visitDao.insert(VisitEntity.fromDto(updatedVisit))
+                    Result.success(updatedVisit)
+                } else {
+                    fetchVisitDetails(visitId)
+                }
             } else {
                 val errorMsg = parseErrorMessage(response.errorBody()?.string())
                 Result.failure(Exception(errorMsg))
@@ -131,9 +139,13 @@ class VisitsRepository(
                 request = CompleteVisitRequest(workDescription = workDescription)
             )
             if (response.isSuccessful && response.body() != null) {
-                val completedVisit = response.body()!!.visit!!
-                visitDao.insert(VisitEntity.fromDto(completedVisit))
-                Result.success(completedVisit)
+                val completedVisit = response.body()!!.visit
+                if (completedVisit != null) {
+                    visitDao.insert(VisitEntity.fromDto(completedVisit))
+                    Result.success(completedVisit)
+                } else {
+                    fetchVisitDetails(visitId)
+                }
             } else {
                 val errorMsg = parseErrorMessage(response.errorBody()?.string())
                 Result.failure(Exception(errorMsg))

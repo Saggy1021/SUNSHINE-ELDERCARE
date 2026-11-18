@@ -4,9 +4,11 @@ import crypto from "crypto";
 export interface AuthenticatedEmployee {
   id: string;
   employeeId: string;
+  name: string;
   firstName: string;
   lastName: string;
   designation: string;
+  department: string;
   email: string | null;
   contactNumber: string | null;
   photoReference: string | null;
@@ -99,9 +101,11 @@ export async function getAuthenticatedEmployee(req: Request): Promise<{
     employee: {
       id: session.employee.id,
       employeeId: session.employee.employeeId,
+      name: `${session.employee.firstName} ${session.employee.lastName}`.trim(),
       firstName: session.employee.firstName,
       lastName: session.employee.lastName,
       designation: session.employee.designation,
+      department: session.employee.designation || "Care Operations",
       email: session.employee.email,
       contactNumber: session.employee.contactNumber,
       photoReference: session.employee.photoReference,

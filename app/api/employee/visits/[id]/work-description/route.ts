@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getAuthenticatedEmployee } from "@/lib/auth/employee-auth";
+import {
+  careVisitEmployeeIncludes,
+  formatEmployeeVisit,
+} from "@/lib/services/employee-visit-formatter";
 
 export async function PATCH(
   req: Request,
@@ -49,11 +53,13 @@ export async function PATCH(
       data: {
         workDescription: workDescription || null,
       },
+      include: careVisitEmployeeIncludes,
     });
 
     return NextResponse.json({
       success: true,
       message: "Work description saved successfully.",
+      visit: formatEmployeeVisit(updated),
       workDescription: updated.workDescription,
     });
   } catch (error: any) {
