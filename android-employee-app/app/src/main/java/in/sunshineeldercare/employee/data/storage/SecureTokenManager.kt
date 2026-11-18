@@ -2,13 +2,18 @@ package `in`.sunshineeldercare.employee.data.storage
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
-class SecureTokenManager(context: Context) {
+class SecureTokenManager(private val context: Context) {
 
     private val prefs: SharedPreferences by lazy {
-        try {
+        initPrefs()
+    }
+
+    private fun initPrefs(): SharedPreferences {
+        return try {
             val masterKey = MasterKey.Builder(context)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
                 .build()
@@ -20,37 +25,70 @@ class SecureTokenManager(context: Context) {
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
-        } catch (e: Exception) {
-            // Fallback for edge cases in testing environments
-            context.getSharedPreferences(PREFS_FILE_NAME + "_fallback", Context.MODE_PRIVATE)
+        } catch (e: Throwable) {
+            Log.e("SecureTokenManager", "Failed to initialize EncryptedSharedPreferences, falling back to standard prefs", e)
+            getFallbackPrefs()
+        }
+    }
+
+    private fun getFallbackPrefs(): SharedPreferences {
+        return context.getSharedPreferences(PREFS_FILE_NAME + "_fallback", Context.MODE_PRIVATE)
+    }
+
+    private fun safeGetString(key: String): String? {
+        return try {
+            prefs.getString(key, null)
+        } catch (e: Throwable) {
+            Log.e("SecureTokenManager", "Error reading key $key from secure prefs, falling back", e)
+            try {
+                getFallbackPrefs().getString(key, null)
+            } catch (_: Throwable) {
+                null
+            }
+        }
+    }
+
+    private fun safePutString(key: String, value: String?) {
+        try {
+            prefs.edit().putString(key, value).apply()
+        } catch (e: Throwable) {
+            Log.e("SecureTokenManager", "Error writing key $key to secure prefs, writing to fallback", e)
+            try {
+                getFallbackPrefs().edit().putString(key, value).apply()
+            } catch (_: Throwable) {}
         }
     }
 
     var sessionToken: String?
-        get() = prefs.getString(KEY_SESSION_TOKEN, null)
-        set(value) = prefs.edit().putString(KEY_SESSION_TOKEN, value).apply()
+        get() = safeGetString(KEY_SESSION_TOKEN)
+        set(value) = safePutString(KEY_SESSION_TOKEN, value)
 
     var employeeId: String?
-        get() = prefs.getString(KEY_EMPLOYEE_ID, null)
-        set(value) = prefs.edit().putString(KEY_EMPLOYEE_ID, value).apply()
+        get() = safeGetString(KEY_EMPLOYEE_ID)
+        set(value) = safePutString(KEY_EMPLOYEE_ID, value)
 
     var employeeName: String?
-        get() = prefs.getString(KEY_EMPLOYEE_NAME, null)
-        set(value) = prefs.edit().putString(KEY_EMPLOYEE_NAME, value).apply()
+        get() = safeGetString(KEY_EMPLOYEE_NAME)
+        set(value) = safePutString(KEY_EMPLOYEE_NAME, value)
 
     var employeeDesignation: String?
-        get() = prefs.getString(KEY_EMPLOYEE_DESIGNATION, null)
-        set(value) = prefs.edit().putString(KEY_EMPLOYEE_DESIGNATION, value).apply()
+        get() = safeGetString(KEY_EMPLOYEE_DESIGNATION)
+        set(value) = safePutString(KEY_EMPLOYEE_DESIGNATION, value)
 
     var employeeEmail: String?
-        get() = prefs.getString(KEY_EMPLOYEE_EMAIL, null)
-        set(value) = prefs.edit().putString(KEY_EMPLOYEE_EMAIL, value).apply()
+        get() = safeGetString(KEY_EMPLOYEE_EMAIL)
+        set(value) = safePutString(KEY_EMPLOYEE_EMAIL, value)
 
     val isLoggedIn: Boolean
         get() = !sessionToken.isNullOrBlank()
 
     fun clear() {
-        prefs.edit().clear().apply()
+        try {
+            prefs.edit().clear().apply()
+        } catch (_: Throwable) {}
+        try {
+            getFallbackPrefs().edit().clear().apply()
+        } catch (_: Throwable) {}
     }
 
     companion object {

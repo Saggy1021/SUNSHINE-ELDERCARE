@@ -10,11 +10,11 @@ interface VisitDao {
     @Query("SELECT * FROM visits ORDER BY scheduledDate ASC, scheduledStartTime ASC")
     fun getAllVisits(): Flow<List<VisitEntity>>
 
-    @Query("SELECT * FROM visits WHERE scheduledDate = :todayDate ORDER BY scheduledStartTime ASC")
-    fun getTodayVisits(todayDate: String): Flow<List<VisitEntity>>
+    @Query("SELECT * FROM visits WHERE (scheduledDate = :todayFormatted OR scheduledDate = :todayIso) ORDER BY scheduledStartTime ASC")
+    fun getTodayVisits(todayFormatted: String, todayIso: String): Flow<List<VisitEntity>>
 
-    @Query("SELECT * FROM visits WHERE scheduledDate > :todayDate AND status != 'COMPLETED' AND status != 'CANCELLED' ORDER BY scheduledDate ASC, scheduledStartTime ASC")
-    fun getUpcomingVisits(todayDate: String): Flow<List<VisitEntity>>
+    @Query("SELECT * FROM visits WHERE (scheduledDate != :todayFormatted AND scheduledDate != :todayIso) AND status != 'COMPLETED' AND status != 'CANCELLED' ORDER BY scheduledDate ASC, scheduledStartTime ASC")
+    fun getUpcomingVisits(todayFormatted: String, todayIso: String): Flow<List<VisitEntity>>
 
     @Query("SELECT * FROM visits WHERE status = 'COMPLETED' ORDER BY scheduledDate DESC, scheduledStartTime DESC")
     fun getCompletedVisits(): Flow<List<VisitEntity>>

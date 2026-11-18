@@ -1,10 +1,12 @@
 package `in`.sunshineeldercare.employee.ui.screens.visits
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import `in`.sunshineeldercare.employee.SunshineEmployeeApp
 import `in`.sunshineeldercare.employee.data.local.entity.VisitEntity
 import `in`.sunshineeldercare.employee.data.repository.VisitsRepository
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -21,21 +23,36 @@ class UpcomingVisitsViewModel(
     private val _uiState = MutableStateFlow(UpcomingVisitsUiState())
     val uiState: StateFlow<UpcomingVisitsUiState> = _uiState.asStateFlow()
 
+    private val coroutineExceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        Log.e("UpcomingVisitsViewModel", "Uncaught coroutine exception handled", throwable)
+        _uiState.update {
+            it.copy(
+                isRefreshing = false,
+                errorMessage = throwable.message ?: "Failed to load upcoming visits"
+            )
+        }
+    }
+
     init {
         observeVisits()
         refresh()
     }
 
     private fun observeVisits() {
-        viewModelScope.launch {
-            visitsRepository.getUpcomingVisits().collect { list ->
-                _uiState.update { it.copy(visits = list) }
-            }
+        viewModelScope.launch(coroutineExceptionHandler) {
+            visitsRepository.getUpcomingVisits()
+                .catch { e ->
+                    Log.e("UpcomingVisitsViewModel", "Error collecting upcoming visits from database", e)
+                    emit(emptyList())
+                }
+                .collect { list ->
+                    _uiState.update { it.copy(visits = list) }
+                }
         }
     }
 
     fun refresh() {
-        viewModelScope.launch {
+        viewModelScope.launch(coroutineExceptionHandler) {
             _uiState.update { it.copy(isRefreshing = true, errorMessage = null) }
             val result = visitsRepository.syncVisits("upcoming")
             _uiState.update {

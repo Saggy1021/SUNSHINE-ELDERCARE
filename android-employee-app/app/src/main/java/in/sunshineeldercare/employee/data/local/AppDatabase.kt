@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import `in`.sunshineeldercare.employee.data.local.dao.VisitDao
 import `in`.sunshineeldercare.employee.data.local.entity.VisitEntity
 
-@Database(entities = [VisitEntity::class], version = 1, exportSchema = false)
+@Database(entities = [VisitEntity::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun visitDao(): VisitDao
@@ -27,6 +27,17 @@ abstract class AppDatabase : RoomDatabase() {
                     .build()
                 INSTANCE = instance
                 instance
+            }
+        }
+
+        fun clearDatabase(context: Context) {
+            try {
+                val db = getInstance(context)
+                db.clearAllTables()
+            } catch (_: Throwable) {
+                try {
+                    context.deleteDatabase("sunshine_employee_db")
+                } catch (_: Throwable) {}
             }
         }
     }

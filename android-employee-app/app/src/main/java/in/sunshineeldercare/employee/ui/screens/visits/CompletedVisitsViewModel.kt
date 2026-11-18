@@ -1,10 +1,12 @@
 package `in`.sunshineeldercare.employee.ui.screens.visits
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import `in`.sunshineeldercare.employee.SunshineEmployeeApp
 import `in`.sunshineeldercare.employee.data.local.entity.VisitEntity
 import `in`.sunshineeldercare.employee.data.repository.VisitsRepository
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -21,21 +23,36 @@ class CompletedVisitsViewModel(
     private val _uiState = MutableStateFlow(CompletedVisitsUiState())
     val uiState: StateFlow<CompletedVisitsUiState> = _uiState.asStateFlow()
 
+    private val coroutineExceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        Log.e("CompletedVisitsViewModel", "Uncaught coroutine exception handled", throwable)
+        _uiState.update {
+            it.copy(
+                isRefreshing = false,
+                errorMessage = throwable.message ?: "Failed to load completed visits"
+            )
+        }
+    }
+
     init {
         observeVisits()
         refresh()
     }
 
     private fun observeVisits() {
-        viewModelScope.launch {
-            visitsRepository.getCompletedVisits().collect { list ->
-                _uiState.update { it.copy(visits = list) }
-            }
+        viewModelScope.launch(coroutineExceptionHandler) {
+            visitsRepository.getCompletedVisits()
+                .catch { e ->
+                    Log.e("CompletedVisitsViewModel", "Error collecting completed visits from database", e)
+                    emit(emptyList())
+                }
+                .collect { list ->
+                    _uiState.update { it.copy(visits = list) }
+                }
         }
     }
 
     fun refresh() {
-        viewModelScope.launch {
+        viewModelScope.launch(coroutineExceptionHandler) {
             _uiState.update { it.copy(isRefreshing = true, errorMessage = null) }
             val result = visitsRepository.syncVisits("completed")
             _uiState.update {

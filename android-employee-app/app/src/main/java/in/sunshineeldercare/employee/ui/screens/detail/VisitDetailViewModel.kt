@@ -1,10 +1,12 @@
 package `in`.sunshineeldercare.employee.ui.screens.detail
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import `in`.sunshineeldercare.employee.SunshineEmployeeApp
 import `in`.sunshineeldercare.employee.data.local.entity.VisitEntity
 import `in`.sunshineeldercare.employee.data.repository.VisitsRepository
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalTime
@@ -46,30 +48,46 @@ class VisitDetailViewModel(
     private val _uiState = MutableStateFlow(VisitDetailUiState())
     val uiState: StateFlow<VisitDetailUiState> = _uiState.asStateFlow()
 
+    private val coroutineExceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        Log.e("VisitDetailViewModel", "Uncaught coroutine exception handled", throwable)
+        _uiState.update {
+            it.copy(
+                isSavingTime = false,
+                isSavingWorkDescription = false,
+                isCompleting = false,
+                errorMessage = throwable.message ?: "An unexpected error occurred"
+            )
+        }
+    }
+
     init {
         observeVisit()
         fetchFromNetwork()
     }
 
     private fun observeVisit() {
-        viewModelScope.launch {
-            visitsRepository.getVisitById(visitId).collect { entity ->
-                entity?.let { v ->
-                    _uiState.update { current ->
-                        current.copy(
-                            visit = v,
-                            arrivalInput = current.arrivalInput.ifBlank { v.actualArrivalDisplay.orEmpty() },
-                            departureInput = current.departureInput.ifBlank { v.actualDepartureDisplay.orEmpty() },
-                            workDescriptionInput = current.workDescriptionInput.ifBlank { v.workDescription.orEmpty() }
-                        )
+        viewModelScope.launch(coroutineExceptionHandler) {
+            visitsRepository.getVisitById(visitId)
+                .catch { e ->
+                    Log.e("VisitDetailViewModel", "Error collecting visit by id from database", e)
+                }
+                .collect { entity ->
+                    entity?.let { v ->
+                        _uiState.update { current ->
+                            current.copy(
+                                visit = v,
+                                arrivalInput = current.arrivalInput.ifBlank { v.actualArrivalDisplay.orEmpty() },
+                                departureInput = current.departureInput.ifBlank { v.actualDepartureDisplay.orEmpty() },
+                                workDescriptionInput = current.workDescriptionInput.ifBlank { v.workDescription.orEmpty() }
+                            )
+                        }
                     }
                 }
-            }
         }
     }
 
     private fun fetchFromNetwork() {
-        viewModelScope.launch {
+        viewModelScope.launch(coroutineExceptionHandler) {
             visitsRepository.fetchVisitDetails(visitId)
         }
     }
@@ -108,7 +126,7 @@ class VisitDetailViewModel(
     }
 
     private fun saveArrival(time: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(coroutineExceptionHandler) {
             _uiState.update { it.copy(isSavingTime = true, errorMessage = null) }
             val result = visitsRepository.updateTime(visitId, actualArrival = time)
             result.onSuccess {
@@ -130,7 +148,7 @@ class VisitDetailViewModel(
     }
 
     private fun saveDeparture(time: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(coroutineExceptionHandler) {
             _uiState.update { it.copy(isSavingTime = true, errorMessage = null) }
             val result = visitsRepository.updateTime(visitId, actualDeparture = time)
             result.onSuccess {
@@ -154,11 +172,11 @@ class VisitDetailViewModel(
     fun saveWorkDescription() {
         val desc = _uiState.value.workDescriptionInput.trim()
         if (desc.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "Please enter work description") }
+            _uiState.update { it.copy(errorMessage = "Please enter work description before saving") }
             return
         }
 
-        viewModelScope.launch {
+        viewModelScope.launch(coroutineExceptionHandler) {
             _uiState.update { it.copy(isSavingWorkDescription = true, errorMessage = null) }
             val result = visitsRepository.updateWorkDescription(visitId, desc)
             result.onSuccess {
@@ -188,12 +206,10 @@ class VisitDetailViewModel(
     }
 
     fun completeVisit() {
-        _uiState.update { it.copy(showCompleteConfirmation = false) }
         val state = _uiState.value
-
-        val arrival = state.arrivalInput.ifBlank { state.visit?.actualArrivalDisplay.orEmpty() }
-        val departure = state.departureInput.ifBlank { state.visit?.actualDepartureDisplay.orEmpty() }
-        val desc = state.workDescriptionInput.ifBlank { state.visit?.workDescription.orEmpty() }
+        val arrival = if (state.arrivalInput.isNotBlank()) state.arrivalInput else state.visit?.actualArrivalDisplay.orEmpty()
+        val departure = if (state.departureInput.isNotBlank()) state.departureInput else state.visit?.actualDepartureDisplay.orEmpty()
+        val desc = if (state.workDescriptionInput.isNotBlank()) state.workDescriptionInput else state.visit?.workDescription.orEmpty()
 
         if (arrival.isBlank()) {
             _uiState.update { it.copy(errorMessage = "Please record actual arrival time before completing") }
@@ -208,7 +224,7 @@ class VisitDetailViewModel(
             return
         }
 
-        viewModelScope.launch {
+        viewModelScope.launch(coroutineExceptionHandler) {
             _uiState.update { it.copy(isCompleting = true, errorMessage = null) }
             val result = visitsRepository.completeVisit(visitId, workDescription = desc)
             result.onSuccess {
@@ -230,8 +246,14 @@ class VisitDetailViewModel(
     }
 
     private fun getCurrentIstTime(): String {
-        val zdt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"))
-        return zdt.format(DateTimeFormatter.ofPattern("hh:mm a", Locale.US))
+        return try {
+            val zdt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"))
+            zdt.format(DateTimeFormatter.ofPattern("hh:mm a", Locale.US))
+        } catch (_: Throwable) {
+            val sdf = java.text.SimpleDateFormat("hh:mm a", Locale.US)
+            sdf.timeZone = java.util.TimeZone.getTimeZone("Asia/Kolkata")
+            sdf.format(java.util.Date())
+        }
     }
 
     private fun parseTimeToMinutes(timeStr: String): Int {

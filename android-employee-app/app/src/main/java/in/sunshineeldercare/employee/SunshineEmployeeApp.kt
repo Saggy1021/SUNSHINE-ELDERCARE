@@ -7,6 +7,7 @@ import `in`.sunshineeldercare.employee.data.remote.RetrofitClient
 import `in`.sunshineeldercare.employee.data.repository.AuthRepository
 import `in`.sunshineeldercare.employee.data.repository.VisitsRepository
 import `in`.sunshineeldercare.employee.data.storage.SecureTokenManager
+import `in`.sunshineeldercare.employee.util.CrashReporter
 
 class SunshineEmployeeApp : Application() {
 
@@ -28,6 +29,9 @@ class SunshineEmployeeApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+
+        // Install global uncaught exception crash reporter immediately
+        CrashReporter.install(this)
 
         tokenManager = SecureTokenManager(this)
         database = AppDatabase.getInstance(this)

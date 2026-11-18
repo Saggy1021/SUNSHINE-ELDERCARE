@@ -1,31 +1,53 @@
 package `in`.sunshineeldercare.employee.data.repository
 
+import android.util.Log
 import `in`.sunshineeldercare.employee.data.local.dao.VisitDao
 import `in`.sunshineeldercare.employee.data.local.entity.VisitEntity
 import `in`.sunshineeldercare.employee.data.remote.EmployeeApiService
 import `in`.sunshineeldercare.employee.data.remote.model.*
 import kotlinx.coroutines.flow.Flow
 import org.json.JSONObject
+import java.text.SimpleDateFormat
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 class VisitsRepository(
     private val apiService: EmployeeApiService,
     private val visitDao: VisitDao
 ) {
 
-    fun getTodayDate(): String {
-        val zdt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"))
-        return zdt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+    fun getTodayDateFormatted(): String {
+        return try {
+            val zdt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"))
+            zdt.format(DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH))
+        } catch (_: Throwable) {
+            val sdf = SimpleDateFormat("dd MMM yyyy", Locale.ENGLISH)
+            sdf.timeZone = TimeZone.getTimeZone("Asia/Kolkata")
+            sdf.format(Date())
+        }
+    }
+
+    fun getTodayDateIso(): String {
+        return try {
+            val zdt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"))
+            zdt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.ENGLISH))
+        } catch (_: Throwable) {
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH)
+            sdf.timeZone = TimeZone.getTimeZone("Asia/Kolkata")
+            sdf.format(Date())
+        }
     }
 
     fun getTodayVisits(): Flow<List<VisitEntity>> {
-        return visitDao.getTodayVisits(getTodayDate())
+        return visitDao.getTodayVisits(getTodayDateFormatted(), getTodayDateIso())
     }
 
     fun getUpcomingVisits(): Flow<List<VisitEntity>> {
-        return visitDao.getUpcomingVisits(getTodayDate())
+        return visitDao.getUpcomingVisits(getTodayDateFormatted(), getTodayDateIso())
     }
 
     fun getCompletedVisits(): Flow<List<VisitEntity>> {
@@ -52,8 +74,9 @@ class VisitsRepository(
                 val errorMsg = parseErrorMessage(response.errorBody()?.string())
                 Result.failure(Exception(errorMsg))
             }
-        } catch (e: Exception) {
-            Result.failure(e)
+        } catch (e: Throwable) {
+            Log.e("VisitsRepository", "Error syncing visits", e)
+            Result.failure(Exception(e.message ?: "Failed to sync visits with server", e))
         }
     }
 
@@ -68,8 +91,9 @@ class VisitsRepository(
                 val errorMsg = parseErrorMessage(response.errorBody()?.string())
                 Result.failure(Exception(errorMsg))
             }
-        } catch (e: Exception) {
-            Result.failure(e)
+        } catch (e: Throwable) {
+            Log.e("VisitsRepository", "Error fetching visit details for $visitId", e)
+            Result.failure(Exception(e.message ?: "Failed to fetch visit details", e))
         }
     }
 
@@ -98,8 +122,9 @@ class VisitsRepository(
                 val errorMsg = parseErrorMessage(response.errorBody()?.string())
                 Result.failure(Exception(errorMsg))
             }
-        } catch (e: Exception) {
-            Result.failure(e)
+        } catch (e: Throwable) {
+            Log.e("VisitsRepository", "Error updating visit time", e)
+            Result.failure(Exception(e.message ?: "Failed to update visit time", e))
         }
     }
 
@@ -124,8 +149,9 @@ class VisitsRepository(
                 val errorMsg = parseErrorMessage(response.errorBody()?.string())
                 Result.failure(Exception(errorMsg))
             }
-        } catch (e: Exception) {
-            Result.failure(e)
+        } catch (e: Throwable) {
+            Log.e("VisitsRepository", "Error updating work description", e)
+            Result.failure(Exception(e.message ?: "Failed to update work description", e))
         }
     }
 
@@ -150,22 +176,27 @@ class VisitsRepository(
                 val errorMsg = parseErrorMessage(response.errorBody()?.string())
                 Result.failure(Exception(errorMsg))
             }
-        } catch (e: Exception) {
-            Result.failure(e)
+        } catch (e: Throwable) {
+            Log.e("VisitsRepository", "Error completing visit", e)
+            Result.failure(Exception(e.message ?: "Failed to mark visit completed", e))
         }
     }
 
     suspend fun clearCache() {
-        visitDao.clearAll()
+        try {
+            visitDao.clearAll()
+        } catch (e: Throwable) {
+            Log.e("VisitsRepository", "Error clearing visits cache", e)
+        }
     }
 
     private fun parseErrorMessage(errorBody: String?): String {
-        if (errorBody.isNullOrBlank()) return "An unexpected error occurred. Please try again."
+        if (errorBody.isNullOrBlank()) return "An unexpected error occurred while communicating with the server."
         return try {
             val json = JSONObject(errorBody)
-            json.optString("message", json.optString("error", "Error communicating with server"))
-        } catch (_: Exception) {
-            "Network error. Please verify your connection."
+            json.optString("message", json.optString("error", "Error processing request"))
+        } catch (_: Throwable) {
+            "Error processing visit data. Please check your network connection."
         }
     }
 }
