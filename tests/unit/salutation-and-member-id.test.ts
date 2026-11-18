@@ -1,7 +1,7 @@
 import assert from 'node:assert';
 import { MemberIdentityService } from '../../lib/services/member-identity';
 import { executeAdminOnboardMember } from '../../lib/services/admin-onboarding';
-import { adminUpdateMemberCore } from '../../app/actions/admin';
+import { adminUpdateMemberCore, getMembersCore } from '../../app/actions/admin';
 import { memberRegistrationSchema } from '../../lib/validations/member';
 
 function createMockDependencies(customOverrides: {
@@ -634,8 +634,157 @@ async function runSalutationAndMemberIdTests() {
     console.log('  ✓ Verified optional spouse and sponsor details remain completely optional.');
   }
 
+  // ---------------------------------------------------------------------------
+  // TEST 12: Secondary Member Salutation Display in Members Table
+  // ---------------------------------------------------------------------------
+  console.log('\n--- TEST 12: Secondary Member Salutation Display in Members Table ---');
+  {
+    const mockMembersDb: any = {
+      user: {
+        findMany: async ({ where }: any) => {
+          if (where?.status === 'ARCHIVED') return [];
+          return [
+            {
+              id: 'usr_prabir_bose',
+              name: 'Mr PRABIR KUMAR BOSE',
+              email: 'prabir.bose@example.com',
+              role: 'MEMBER',
+              status: 'ACTIVE',
+              createdAt: new Date('2026-11-01'),
+              memberProfile: {
+                memberId: 'SECD1006PRSE',
+                salutation: 'Mr',
+                firstName: 'PRABIR KUMAR',
+                lastName: 'BOSE',
+                spouseSalutation: 'Mrs',
+                spouseFirstName: 'SWAPNA',
+                spouseLastName: 'BOSE',
+                spouseMobileNumber: '8420216101',
+                dateOfEnrollment: new Date('2026-11-01'),
+                serviceAddress: 'Salt Lake Sector 1',
+                mobileNumber: '9433445577',
+                bloodGroup: 'B+',
+                medicalConditions: null,
+                preferredVisitDay: null,
+                preferredVisitTime: null,
+                insuranceDetails: null,
+              },
+              subscriptions: [],
+              elders: [],
+            },
+            {
+              id: 'usr_ketaki',
+              name: 'Mrs KETAKI MUKHERJEE',
+              email: 'ketaki.mukherjee@example.com',
+              role: 'MEMBER',
+              status: 'ACTIVE',
+              createdAt: new Date('2026-11-02'),
+              memberProfile: {
+                memberId: 'SECD1005KEEE',
+                salutation: 'Mrs',
+                firstName: 'KETAKI',
+                lastName: 'MUKHERJEE',
+                spouseSalutation: 'Mr',
+                spouseFirstName: 'GOUTAM',
+                spouseLastName: 'MUKHERJI',
+                spouseMobileNumber: '8910984601',
+                dateOfEnrollment: new Date('2026-11-02'),
+                serviceAddress: 'Ballygunge Kolkata',
+                mobileNumber: '9433007357',
+                bloodGroup: 'O+',
+                medicalConditions: null,
+                preferredVisitDay: null,
+                preferredVisitTime: null,
+                insuranceDetails: null,
+              },
+              subscriptions: [],
+              elders: [],
+            },
+            {
+              id: 'usr_no_salutation',
+              name: 'Mr ARUN ROY',
+              email: 'arun.roy@example.com',
+              role: 'MEMBER',
+              status: 'ACTIVE',
+              createdAt: new Date('2026-11-03'),
+              memberProfile: {
+                memberId: 'SECD1007AROY',
+                salutation: 'Mr',
+                firstName: 'ARUN',
+                lastName: 'ROY',
+                spouseSalutation: null,
+                spouseFirstName: 'ANITA',
+                spouseLastName: 'ROY',
+                spouseMobileNumber: '9830012345',
+                dateOfEnrollment: new Date('2026-11-03'),
+                serviceAddress: 'Behala Kolkata',
+                mobileNumber: '9830054321',
+                bloodGroup: 'AB+',
+                medicalConditions: null,
+                preferredVisitDay: null,
+                preferredVisitTime: null,
+                insuranceDetails: null,
+              },
+              subscriptions: [],
+              elders: [],
+            },
+            {
+              id: 'usr_single_member',
+              name: 'Mrs INDRANI GUPTA',
+              email: 'indrani.gupta@example.com',
+              role: 'MEMBER',
+              status: 'ACTIVE',
+              createdAt: new Date('2026-11-04'),
+              memberProfile: {
+                memberId: 'SECS1003INTA',
+                salutation: 'Mrs',
+                firstName: 'INDRANI',
+                lastName: 'GUPTA',
+                spouseSalutation: null,
+                spouseFirstName: null,
+                spouseLastName: null,
+                spouseMobileNumber: null,
+                dateOfEnrollment: new Date('2026-11-04'),
+                serviceAddress: 'New Town Kolkata',
+                mobileNumber: '9007976741',
+                bloodGroup: 'A+',
+                medicalConditions: null,
+                preferredVisitDay: null,
+                preferredVisitTime: null,
+                insuranceDetails: null,
+              },
+              subscriptions: [],
+              elders: [],
+            },
+          ];
+        },
+        count: async () => 4,
+      },
+    };
+
+    const result = await getMembersCore(undefined, 1, 10, mockMembersDb, true);
+    assert.strictEqual(result.members.length, 4);
+
+    const swapnaMember = result.members.find((m: any) => m.id === 'usr_prabir_bose');
+    assert.strictEqual(swapnaMember.secondaryName, 'Mrs SWAPNA BOSE', 'Spouse recorded as Mrs SWAPNA BOSE must render Mrs SWAPNA BOSE');
+
+    const goutamMember = result.members.find((m: any) => m.id === 'usr_ketaki');
+    assert.strictEqual(goutamMember.secondaryName, 'Mr GOUTAM MUKHERJI', 'Spouse recorded as Mr GOUTAM MUKHERJI must render Mr GOUTAM MUKHERJI');
+
+    const noSalutationMember = result.members.find((m: any) => m.id === 'usr_no_salutation');
+    assert.strictEqual(noSalutationMember.secondaryName, 'ANITA ROY', 'Spouse without salutation must render ANITA ROY without inventing one');
+
+    const singleMember = result.members.find((m: any) => m.id === 'usr_single_member');
+    assert.strictEqual(singleMember.secondaryName, null, 'Single member without spouse must have null secondaryName (displaying —)');
+
+    console.log('  ✓ Verified Mrs SWAPNA BOSE appears as Mrs SWAPNA BOSE in Secondary Member column.');
+    console.log('  ✓ Verified Mr GOUTAM MUKHERJI appears as Mr GOUTAM MUKHERJI in Secondary Member column.');
+    console.log('  ✓ Verified spouse without salutation displays ANITA ROY without inventing one.');
+    console.log('  ✓ Verified single member displays null (rendering —).');
+  }
+
   console.log('\n================================================================');
-  console.log('ALL 11 SALUTATION & MEMBER ID TESTS PASSED SUCCESSFULLY (100%)');
+  console.log('ALL 12 SALUTATION & MEMBER ID TESTS PASSED SUCCESSFULLY (100%)');
   console.log('================================================================\n');
 }
 

@@ -471,8 +471,10 @@ export async function getMembersCore(
         memberProfile: {
           select: {
             memberId: true,
+            salutation: true,
             firstName: true,
             lastName: true,
+            spouseSalutation: true,
             spouseFirstName: true,
             spouseLastName: true,
             spouseMobileNumber: true,
@@ -584,11 +586,18 @@ export async function getMembersCore(
       service = `${sub.durationMonths} Month${sub.durationMonths > 1 ? 's' : ''}`;
     }
 
-    const spouseParts = [
-      m.memberProfile?.spouseSalutation,
-      m.memberProfile?.spouseFirstName,
-      m.memberProfile?.spouseLastName,
-    ].filter(Boolean).join(" ").trim();
+    const hasSpouse = Boolean(
+      m.memberProfile?.spouseFirstName?.trim() ||
+      m.memberProfile?.spouseLastName?.trim()
+    );
+
+    const spouseParts = hasSpouse
+      ? [
+          m.memberProfile?.spouseSalutation?.trim(),
+          m.memberProfile?.spouseFirstName?.trim(),
+          m.memberProfile?.spouseLastName?.trim(),
+        ].filter(Boolean).join(" ").trim()
+      : null;
     const secondaryName = spouseParts || null;
 
     // Sourced scheduled visit date

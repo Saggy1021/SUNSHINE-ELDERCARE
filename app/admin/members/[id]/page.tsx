@@ -134,7 +134,7 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
                 <div>
                   <p className="text-sm font-medium text-slate-500">Name</p>
                   <p className="font-semibold text-slate-900">
-                    {[profile.spouseSalutation || 'Mr', profile.spouseFirstName, profile.spouseLastName].filter(Boolean).join(' ')}
+                    {[profile.spouseSalutation?.trim() || null, profile.spouseFirstName?.trim(), profile.spouseLastName?.trim()].filter(Boolean).join(' ')}
                   </p>
                 </div>
                 {profile.spouseDateOfBirth && (
