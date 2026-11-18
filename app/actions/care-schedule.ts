@@ -12,6 +12,11 @@ import {
   formatPlanDisplay,
 } from "@/components/admin/schedule/schedule-date-utils";
 import { formatPreferredSchedule } from "@/lib/services/preferred-schedule";
+import {
+  BirthdayCalendarService,
+  BirthdayCalendarPayload,
+  BirthdayEntry,
+} from "@/lib/services/birthday-calendar";
 
 export interface ScheduleVisitDTO {
   id: string;
@@ -1562,3 +1567,15 @@ export async function cancelCareVisit(
     return { success: false, error: err?.message || "Failed to cancel visit." };
   }
 }
+
+/**
+ * Fetch dedicated, automatically populated Birthday Calendar data.
+ * Authoritative source: MemberProfile (Primary members and spouses with confirmed Member ID).
+ */
+export async function getBirthdayCalendarEntries(
+  referenceDate?: string
+): Promise<BirthdayCalendarPayload> {
+  await requireSchedulePermission(false);
+  return BirthdayCalendarService.getBirthdayCalendarData(referenceDate, db);
+}
+

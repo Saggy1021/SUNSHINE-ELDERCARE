@@ -2,7 +2,7 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { AuthorizationService } from "@/lib/services/authorization";
 import { PERMISSIONS } from "@/lib/auth/permissions";
-import { getScheduleVisits, getCareScheduleFormData } from "@/app/actions/care-schedule";
+import { getScheduleVisits, getCareScheduleFormData, getBirthdayCalendarEntries } from "@/app/actions/care-schedule";
 import { VisitScheduleCalendar } from "@/components/admin/schedule/VisitScheduleCalendar";
 import { getWeekDays } from "@/components/admin/schedule/schedule-date-utils";
 import { ShieldAlert, CalendarDays } from "lucide-react";
@@ -66,18 +66,20 @@ export default async function AdminVisitSchedulePage() {
   const endDate = new Date(weekDays[6]);
   endDate.setHours(23, 59, 59, 999);
 
-  const [initialVisits, initialFormData] = await Promise.all([
+  const [initialVisits, initialFormData, initialBirthdays] = await Promise.all([
     getScheduleVisits({
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),
     }),
     getCareScheduleFormData(),
+    getBirthdayCalendarEntries(),
   ]);
 
   return (
     <VisitScheduleCalendar
       initialVisits={initialVisits}
       initialFormData={initialFormData}
+      initialBirthdays={initialBirthdays}
       canManage={canManage}
     />
   );

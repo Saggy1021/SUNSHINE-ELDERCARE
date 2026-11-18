@@ -27,9 +27,16 @@ import {
   FileText,
   Phone,
   ShieldCheck,
+  Cake,
 } from "lucide-react";
 import { SearchableMemberSelect } from "./SearchableMemberSelect";
 import { SearchableEmployeeSelect } from "./SearchableEmployeeSelect";
+import { BirthdayCalendarView } from "./BirthdayCalendarView";
+import {
+  BirthdayCalendarPayload,
+  BirthdayEntry,
+  BirthdayCalendarService,
+} from "@/lib/services/birthday-calendar";
 import {
   ScheduleVisitDTO,
   CareScheduleFormData,
@@ -56,8 +63,11 @@ import {
 interface VisitScheduleCalendarProps {
   initialVisits: ScheduleVisitDTO[];
   initialFormData: CareScheduleFormData;
+  initialBirthdays?: BirthdayCalendarPayload;
   canManage: boolean;
 }
+
+type CalendarMode = "visits" | "birthdays";
 
 type CalendarView = "day" | "week" | "month";
 
@@ -71,8 +81,10 @@ interface EmployeeAvailabilityItem {
 export function VisitScheduleCalendar({
   initialVisits,
   initialFormData,
+  initialBirthdays,
   canManage,
 }: VisitScheduleCalendarProps) {
+  const [activeMode, setActiveMode] = useState<CalendarMode>("visits");
   const [view, setView] = useState<CalendarView>("week");
   const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
   const [visits, setVisits] = useState<ScheduleVisitDTO[]>(initialVisits);
@@ -347,6 +359,35 @@ export function VisitScheduleCalendar({
     return map;
   }, [visits]);
 
+  // Group birthdays by Month-Day key ("MM-DD") in IST for calendar badge display
+  const birthdaysByDateKey = useMemo(() => {
+    const map = new Map<string, BirthdayEntry[]>();
+    if (!initialBirthdays?.allBirthdays) return map;
+    for (const b of initialBirthdays.allBirthdays) {
+      const monthStr = String(b.birthMonth).padStart(2, "0");
+      const dayStr = String(b.birthDay).padStart(2, "0");
+      const mdKey = `${monthStr}-${dayStr}`;
+      if (!map.has(mdKey)) map.set(mdKey, []);
+      map.get(mdKey)!.push(b);
+    }
+    return map;
+  }, [initialBirthdays]);
+
+  // Helper to get birthdays falling on any given calendar Date
+  const getBirthdaysForDate = (date: Date): BirthdayEntry[] => {
+    const parts = getKolkataDateParts(date);
+    const mStr = String(parts.month).padStart(2, "0");
+    const dStr = String(parts.day).padStart(2, "0");
+    const entries = [...(birthdaysByDateKey.get(`${mStr}-${dStr}`) || [])];
+
+    // If non-leap year and date is Feb 28, include leap day (Feb 29) birthdays
+    if (!BirthdayCalendarService.isLeapYear(parts.year) && parts.month === 2 && parts.day === 28) {
+      const leapEntries = birthdaysByDateKey.get("02-29") || [];
+      entries.push(...leapEntries);
+    }
+    return entries;
+  };
+
   // Filter Active Indicators
   const activeFiltersCount = useMemo(() => {
     let count = 0;
@@ -452,35 +493,84 @@ export function VisitScheduleCalendar({
             <CalendarDays className="h-6 w-6 text-[#091329]" /> Visit Schedule
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Care visit scheduling, employee allocations, and multi-day dispatch calendar.
+            Care visit scheduling, employee allocations, and central member birthday calendar.
           </p>
         </div>
 
-        {/* Top Action Buttons */}
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={() => refreshVisits()}
-            disabled={loading}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-2xs"
-            title="Refresh Schedule"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </button>
-
-          {canManage && (
+        {/* Top Header Controls: Mode Switcher + Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Navigation Mode Switcher: Care Visits vs Birthday Calendar */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-2xs">
             <button
-              onClick={() => {
-                setScheduleModalDefaultDate(formatDateKey(new Date()));
-                setShowScheduleModal(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#091329] rounded-lg hover:bg-[#162850] transition-colors shadow-2xs"
+              onClick={() => setActiveMode("visits")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                activeMode === "visits"
+                  ? "bg-white text-[#091329] shadow-xs border border-slate-200/80 font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
             >
-              <Plus className="h-4 w-4" /> Schedule Visit
+              <CalendarDays className="h-3.5 w-3.5 text-slate-700" />
+              Care Visits
             </button>
+            <button
+              onClick={() => setActiveMode("birthdays")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                activeMode === "birthdays"
+                  ? "bg-white text-[#091329] shadow-xs border border-slate-200/80 font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Cake className="h-3.5 w-3.5 text-amber-600" />
+              Birthday Calendar
+              {initialBirthdays && initialBirthdays.stats.thisMonthCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-100 text-amber-800 font-bold border border-amber-200">
+                  {initialBirthdays.stats.thisMonthCount}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {activeMode === "visits" && (
+            <>
+              <button
+                onClick={() => refreshVisits()}
+                disabled={loading}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-2xs"
+                title="Refresh Schedule"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+                Refresh
+              </button>
+
+              {canManage && (
+                <button
+                  onClick={() => {
+                    setScheduleModalDefaultDate(formatDateKey(new Date()));
+                    setShowScheduleModal(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#091329] rounded-lg hover:bg-[#162850] transition-colors shadow-2xs"
+                >
+                  <Plus className="h-4 w-4" /> Schedule Visit
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
+
+      {activeMode === "birthdays" ? (
+        initialBirthdays ? (
+          <BirthdayCalendarView
+            initialData={initialBirthdays}
+            onSwitchToVisits={() => setActiveMode("visits")}
+          />
+        ) : (
+          <div className="bg-white p-8 rounded-xl border border-slate-200 text-center text-xs text-slate-500">
+            Loading Birthday Calendar...
+          </div>
+        )
+      ) : (
+        <>
 
       {/* Control Bar: Date Navigation + View Switcher */}
       <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -711,6 +801,7 @@ export function VisitScheduleCalendar({
               {weekDays.map((dayDate) => {
                 const dayKey = formatDateKey(dayDate);
                 const dayVisits = visitsByDate.get(dayKey) || [];
+                const dayBirthdays = getBirthdaysForDate(dayDate);
                 const isToday = dayKey === todayKey;
 
                 return (
@@ -719,6 +810,33 @@ export function VisitScheduleCalendar({
                     className={`p-3 space-y-3 flex flex-col ${isToday ? "bg-amber-50/15" : ""
                       }`}
                   >
+                    {/* Informational Birthday Banner in Day Column */}
+                    {dayBirthdays.map((b) => (
+                      <div
+                        key={`week-bday-${b.id}`}
+                        onClick={() => setActiveMode("birthdays")}
+                        className="p-2.5 rounded-xl bg-amber-50/90 border border-amber-200/90 text-amber-900 shadow-2xs hover:bg-amber-100 transition-colors cursor-pointer space-y-1 text-left"
+                        title={`🎂 Birthday: ${b.fullName} (${b.memberId})`}
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 flex items-center gap-1">
+                            <Cake className="h-3 w-3 text-amber-600" /> Birthday
+                          </span>
+                          <span className="text-[10px] font-mono font-semibold text-slate-600">
+                            {b.memberId}
+                          </span>
+                        </div>
+                        <div className="text-xs font-bold truncate">
+                          {b.fullName}
+                        </div>
+                        {b.turningAge && (
+                          <div className="text-[10px] text-amber-700 font-medium">
+                            Turns {b.turningAge} {b.personType === "SPOUSE" ? "• Spouse" : ""}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
                     {dayVisits.length === 0 ? (
                       <div className="flex-1 flex flex-col items-center justify-center p-4 border border-dashed border-slate-200 rounded-lg text-center text-slate-400">
                         <p className="text-xs">No visits</p>
@@ -951,6 +1069,7 @@ export function VisitScheduleCalendar({
                 const cellKey = formatDateKey(cellDate);
                 const isToday = cellKey === todayKey;
                 const cellVisits = visitsByDate.get(cellKey) || [];
+                const cellBirthdays = getBirthdaysForDate(cellDate);
 
                 cells.push(
                   <div
@@ -981,6 +1100,22 @@ export function VisitScheduleCalendar({
                     </div>
 
                     <div className="space-y-1 my-1 flex-1 overflow-hidden">
+                      {/* Informational Birthday Pill in Calendar Cell */}
+                      {cellBirthdays.map((b) => (
+                        <div
+                          key={`month-bday-${b.id}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveMode("birthdays");
+                          }}
+                          className="text-[10px] truncate px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-200/80 font-medium flex items-center gap-1 hover:bg-amber-200 transition-colors"
+                          title={`🎂 Birthday: ${b.fullName} (${b.memberId})`}
+                        >
+                          <Cake className="h-2.5 w-2.5 text-amber-700 shrink-0" />
+                          <span className="truncate">{b.fullName}</span>
+                        </div>
+                      ))}
+
                       {cellVisits.slice(0, 2).map((v) => (
                         <div
                           key={v.id}
@@ -1003,6 +1138,8 @@ export function VisitScheduleCalendar({
             })()}
           </div>
         </div>
+      )}
+      </>
       )}
 
       {/* ========================================================================= */}
