@@ -25,6 +25,9 @@ export interface ScheduleVisitDTO {
   scheduledEnd: string;
   actualStart?: string | null;
   actualEnd?: string | null;
+  workDescription?: string | null;
+  completedAt?: string | null;
+  actualDurationDisplay?: string | null;
   status: string;
   category: "Scheduled" | "Ad-hoc";
   operationalNotes?: string | null;
@@ -517,6 +520,21 @@ export async function getScheduleVisits(filters: {
         }
       : null;
 
+    let durationDisplay: string | null = null;
+    if (v.actualStart && v.actualEnd) {
+      const diffMs = v.actualEnd.getTime() - v.actualStart.getTime();
+      if (diffMs >= 0) {
+        const totalMinutes = Math.round(diffMs / (1000 * 60));
+        const hours = Math.floor(totalMinutes / 60);
+        const mins = totalMinutes % 60;
+        if (hours > 0) {
+          durationDisplay = `${hours} hr${hours > 1 ? "s" : ""}${mins > 0 ? ` ${mins} min${mins > 1 ? "s" : ""}` : ""}`;
+        } else {
+          durationDisplay = `${mins} min${mins !== 1 ? "s" : ""}`;
+        }
+      }
+    }
+
     dtoList.push({
       id: v.id,
       careCaseId: v.careCaseId,
@@ -524,6 +542,9 @@ export async function getScheduleVisits(filters: {
       scheduledEnd: v.scheduledEnd.toISOString(),
       actualStart: v.actualStart ? v.actualStart.toISOString() : null,
       actualEnd: v.actualEnd ? v.actualEnd.toISOString() : null,
+      workDescription: v.workDescription || null,
+      completedAt: v.completedAt ? v.completedAt.toISOString() : null,
+      actualDurationDisplay: durationDisplay,
       status: v.status,
       category: parsedCat.category,
       operationalNotes: parsedCat.cleanNotes || v.operationalNotes,

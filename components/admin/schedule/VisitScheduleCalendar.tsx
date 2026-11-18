@@ -1212,13 +1212,62 @@ export function VisitScheduleCalendar({
                     {formatTimeIST(selectedVisit.scheduledStart)} – {formatTimeIST(selectedVisit.scheduledEnd)}
                   </div>
                 </div>
-                {(selectedVisit.actualStart || selectedVisit.actualEnd) && (
-                  <div className="pt-2 border-t border-slate-100 text-xs text-slate-500 flex items-center justify-between">
-                    <span>Actual Start: {selectedVisit.actualStart ? formatTimeIST(selectedVisit.actualStart) : "—"}</span>
-                    <span>Actual End: {selectedVisit.actualEnd ? formatTimeIST(selectedVisit.actualEnd) : "—"}</span>
-                  </div>
-                )}
               </div>
+
+              {/* Actual Execution & Employee Report */}
+              {(selectedVisit.actualStart || selectedVisit.actualEnd || selectedVisit.workDescription || selectedVisit.status === "COMPLETED") && (
+                <div className="p-4 bg-emerald-50/70 border border-emerald-200/80 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-emerald-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Actual Execution & Employee Report
+                    </p>
+                    {selectedVisit.status === "COMPLETED" && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        Completed
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 border-t border-emerald-200/50 text-xs">
+                    <div>
+                      <span className="text-slate-500 block text-[11px]">Actual Arrival</span>
+                      <span className="font-semibold text-slate-900">
+                        {selectedVisit.actualStart ? formatTimeIST(selectedVisit.actualStart) : "—"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[11px]">Actual Departure</span>
+                      <span className="font-semibold text-slate-900">
+                        {selectedVisit.actualEnd ? formatTimeIST(selectedVisit.actualEnd) : "—"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[11px]">Actual Duration</span>
+                      <span className="font-semibold text-slate-900">
+                        {selectedVisit.actualDurationDisplay || (selectedVisit.actualStart && selectedVisit.actualEnd ? "Recorded" : "In Progress")}
+                      </span>
+                    </div>
+                  </div>
+
+                  {selectedVisit.workDescription && (
+                    <div className="pt-2 border-t border-emerald-200/50">
+                      <span className="text-slate-500 block text-[11px] font-semibold mb-1">Work Performed (Employee Report)</span>
+                      <div className="bg-white p-2.5 rounded-lg border border-emerald-100 text-xs text-slate-800 whitespace-pre-wrap font-sans leading-relaxed">
+                        {selectedVisit.workDescription}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedVisit.completedAt && (
+                    <div className="text-[11px] text-emerald-800/80 pt-1 flex items-center justify-between">
+                      <span>Completed at: {formatDateIST(selectedVisit.completedAt)} · {formatTimeIST(selectedVisit.completedAt)}</span>
+                      {selectedVisit.assignedEmployee && (
+                        <span>By: {selectedVisit.assignedEmployee.firstName} {selectedVisit.assignedEmployee.lastName} ({selectedVisit.assignedEmployee.employeeId})</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Assigned Employee */}
               {(() => {

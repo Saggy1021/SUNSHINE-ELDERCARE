@@ -670,6 +670,12 @@ model Employee {
   assignments CareAssignment[]
   visits      CareVisit[]
   tasks       CareTask[]
+  sessions    EmployeeSession[]
+
+  // Authentication Fields for Native Android Employee App
+  passwordHash String?
+  isActivated  Boolean   @default(false)
+  activatedAt  DateTime?
 
   // Public Profile Fields (CMS)
   isPublic        Boolean @default(false)
@@ -685,6 +691,18 @@ model Employee {
 model EmployeeSequence {
   id      String @id @default("EMP_SEQ")
   current Int    @default(100)
+}
+
+model EmployeeSession {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  employeeId   String
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  expires      DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([employeeId])
+  @@index([sessionToken])
 }
 
 model Permission {
@@ -877,6 +895,11 @@ model CareVisit {
   actualEnd        DateTime?
   status           String    @default("SCHEDULED") // SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED, MISSED
   operationalNotes String?   @db.Text
+
+  // Execution & Reporting for Android Employee App
+  workDescription  String?   @db.Text
+  completedAt      DateTime?
+  completedById    String?
 
   createdById String?
 

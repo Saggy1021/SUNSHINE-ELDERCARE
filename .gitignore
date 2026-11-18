@@ -29,3 +29,13 @@ playwright-report/
 test-results/
 .vercel
 .env*
+
+# Android build outputs and keystores — NEVER commit signing keys or local configs
+*.jks
+*.keystore
+*.apk
+*.aab
+local.properties
+.gradle/
+**/build/
+
