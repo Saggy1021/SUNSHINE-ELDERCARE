@@ -216,6 +216,9 @@ export async function getScheduleVisits(filters: {
           cv."scheduledEnd",
           cv."actualStart",
           cv."actualEnd",
+          cv."workDescription",
+          cv."completedAt",
+          cv."completedById",
           cv."careCaseId",
           cv."assignedEmpId",
           e.id AS "elderId",
@@ -364,6 +367,23 @@ export async function getScheduleVisits(filters: {
               lastName: a.lastName,
             }));
 
+        let durationDisplay: string | null = null;
+        if (v.actualStart && v.actualEnd) {
+          const start = v.actualStart instanceof Date ? v.actualStart : new Date(v.actualStart);
+          const end = v.actualEnd instanceof Date ? v.actualEnd : new Date(v.actualEnd);
+          const diffMs = end.getTime() - start.getTime();
+          if (diffMs >= 0) {
+            const totalMinutes = Math.round(diffMs / (1000 * 60));
+            const hours = Math.floor(totalMinutes / 60);
+            const mins = totalMinutes % 60;
+            if (hours > 0) {
+              durationDisplay = `${hours}h ${mins}m`;
+            } else {
+              durationDisplay = `${mins}m`;
+            }
+          }
+        }
+
         dtoList.push({
           id: v.id,
           careCaseId: v.careCaseId,
@@ -381,6 +401,13 @@ export async function getScheduleVisits(filters: {
               ? v.actualEnd.toISOString()
               : new Date(v.actualEnd).toISOString()
             : null,
+          workDescription: v.workDescription || null,
+          completedAt: v.completedAt
+            ? v.completedAt instanceof Date
+              ? v.completedAt.toISOString()
+              : new Date(v.completedAt).toISOString()
+            : null,
+          actualDurationDisplay: durationDisplay,
           status: v.status,
           category: parsedCat.category,
           operationalNotes: parsedCat.cleanNotes || v.operationalNotes,
