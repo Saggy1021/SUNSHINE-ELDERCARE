@@ -146,11 +146,13 @@ fun ProfileScreen(
                     HorizontalDivider(color = Slate100, thickness = 1.dp)
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    ProfileRow(label = "Employee ID", value = profile?.employeeId ?: "--")
+                    ProfileRow(label = "Employee ID", value = profile?.employeeId.orEmpty().ifBlank { "--" })
                     Spacer(modifier = Modifier.height(10.dp))
-                    ProfileRow(label = "Department", value = profile?.department ?: "Care Operations")
+                    ProfileRow(label = "Designation", value = profile?.designation.orEmpty().ifBlank { "--" })
                     Spacer(modifier = Modifier.height(10.dp))
-                    ProfileRow(label = "Official Email", value = profile?.email ?: "--")
+                    ProfileRow(label = "Official Email", value = profile?.email.orEmpty().ifBlank { "--" })
+                    Spacer(modifier = Modifier.height(10.dp))
+                    ProfileRow(label = "Phone Number", value = profile?.contactNumber.orEmpty().ifBlank { "Not provided" })
                 }
             }
 

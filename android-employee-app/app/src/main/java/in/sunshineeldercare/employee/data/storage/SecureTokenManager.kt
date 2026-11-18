@@ -79,6 +79,10 @@ class SecureTokenManager(private val context: Context) {
         get() = safeGetString(KEY_EMPLOYEE_EMAIL)
         set(value) = safePutString(KEY_EMPLOYEE_EMAIL, value)
 
+    var employeePhone: String?
+        get() = safeGetString(KEY_EMPLOYEE_PHONE)
+        set(value) = safePutString(KEY_EMPLOYEE_PHONE, value)
+
     val isLoggedIn: Boolean
         get() = !sessionToken.isNullOrBlank()
 
@@ -98,5 +102,6 @@ class SecureTokenManager(private val context: Context) {
         private const val KEY_EMPLOYEE_NAME = "employee_name"
         private const val KEY_EMPLOYEE_DESIGNATION = "employee_designation"
         private const val KEY_EMPLOYEE_EMAIL = "employee_email"
+        private const val KEY_EMPLOYEE_PHONE = "employee_phone"
     }
 }

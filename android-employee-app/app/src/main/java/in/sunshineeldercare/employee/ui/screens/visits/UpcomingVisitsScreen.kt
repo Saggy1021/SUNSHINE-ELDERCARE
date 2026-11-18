@@ -80,14 +80,14 @@ fun UpcomingVisitsScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "No upcoming visits assigned",
+                        text = "No upcoming visits scheduled",
                         style = MaterialTheme.typography.titleMedium.copy(
                             color = DeepNavy,
                             fontWeight = FontWeight.SemiBold
                         )
                     )
                     Text(
-                        text = "Future care visits assigned by the Admin will appear here.",
+                        text = "Future care visits will appear here.",
                         style = MaterialTheme.typography.bodySmall.copy(color = Slate600),
                         modifier = Modifier.padding(top = 4.dp)
                     )

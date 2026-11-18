@@ -78,7 +78,7 @@ fun VisitDetailScreen(
             },
             text = {
                 Text(
-                    text = "Are you sure you want to mark this visit as COMPLETED? Once completed, your arrival, departure and work report will be submitted to Admin.",
+                    text = "Dear Care Professional, are you sure you want to mark this visit as completed?",
                     style = MaterialTheme.typography.bodyMedium.copy(color = Slate700)
                 )
             },
@@ -598,7 +598,7 @@ fun VisitDetailScreen(
                                     )
                                 )
                                 Text(
-                                    text = "All records have been synchronized with Sunshine Eldercare Admin Portal.",
+                                    text = "All records have been synchronized with Sunshine Eldercare.",
                                     style = MaterialTheme.typography.bodySmall.copy(color = Slate700)
                                 )
                             }

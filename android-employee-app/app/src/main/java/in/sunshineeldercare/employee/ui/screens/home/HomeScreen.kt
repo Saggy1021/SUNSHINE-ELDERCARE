@@ -1,5 +1,6 @@
 package `in`.sunshineeldercare.employee.ui.screens.home
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -14,10 +15,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import `in`.sunshineeldercare.employee.R
 import `in`.sunshineeldercare.employee.ui.components.StatusBadge
 import `in`.sunshineeldercare.employee.ui.theme.*
 
@@ -36,37 +40,28 @@ fun HomeScreen(
             .background(Slate50)
             .verticalScroll(rememberScrollState())
     ) {
-        // Top Hero Header
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(DeepNavy)
-                .padding(horizontal = 20.dp, vertical = 24.dp)
+        // Official Company Branding Header
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = Color.White,
+            shadowElevation = 2.dp
         ) {
             Column {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text(
-                            text = "Sunshine Eldercare",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                color = GoldLight,
-                                fontWeight = FontWeight.SemiBold,
-                                letterSpacing = 1.sp
-                            )
-                        )
-                        Text(
-                            text = uiState.profile?.name ?: "Care Team Member",
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 22.sp
-                            )
-                        )
-                    }
+                    Image(
+                        painter = painterResource(id = R.drawable.sunshine_logo),
+                        contentDescription = "Sunshine Eldercare",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .height(52.dp)
+                            .weight(1f, fill = false)
+                    )
 
                     // Refresh Button
                     IconButton(
@@ -75,57 +70,20 @@ fun HomeScreen(
                     ) {
                         if (uiState.isRefreshing) {
                             CircularProgressIndicator(
-                                color = GoldLight,
+                                color = GoldPrimary,
                                 strokeWidth = 2.dp,
                                 modifier = Modifier.size(20.dp)
                             )
                         } else {
                             Icon(
                                 imageVector = Icons.Default.Refresh,
-                                contentDescription = "Refresh",
-                                tint = Color.White
+                                contentDescription = "Refresh Visits",
+                                tint = DeepNavy
                             )
                         }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Employee ID & Designation Badges
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Color.White.copy(alpha = 0.15f))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        Text(
-                            text = uiState.profile?.employeeId ?: "--",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold
-                            )
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(GoldPrimary.copy(alpha = 0.3f))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        Text(
-                            text = uiState.profile?.designation ?: "Staff",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                color = GoldLight,
-                                fontWeight = FontWeight.Medium
-                            )
-                        )
-                    }
-                }
+                HorizontalDivider(color = Slate100, thickness = 1.dp)
             }
         }
 
@@ -356,7 +314,7 @@ fun HomeScreen(
                             )
                         )
                         Text(
-                            text = "All visits assigned to you for today are completed or none scheduled.",
+                            text = "All your visits for today are completed or none are scheduled.",
                             style = MaterialTheme.typography.bodySmall.copy(color = Slate500),
                             modifier = Modifier.padding(top = 4.dp)
                         )

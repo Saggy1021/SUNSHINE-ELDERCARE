@@ -24,7 +24,8 @@ class AuthRepository(
                 name = tokenManager.employeeName.orEmpty(),
                 designation = tokenManager.employeeDesignation.orEmpty(),
                 department = "Care Operations",
-                email = tokenManager.employeeEmail.orEmpty()
+                email = tokenManager.employeeEmail.orEmpty(),
+                contactNumber = tokenManager.employeePhone
             )
         } else null
     )
@@ -126,6 +127,7 @@ class AuthRepository(
                 tokenManager.employeeName = emp.name
                 tokenManager.employeeDesignation = emp.designation
                 tokenManager.employeeEmail = emp.email
+                tokenManager.employeePhone = emp.contactNumber
                 Result.success(emp)
             } else {
                 if (response.code() == 401) {
@@ -159,6 +161,7 @@ class AuthRepository(
         tokenManager.employeeName = resolvedName
         tokenManager.employeeDesignation = employee.designation
         tokenManager.employeeEmail = employee.email
+        tokenManager.employeePhone = employee.contactNumber
 
         _isLoggedIn.value = true
         _profile.value = employee.copy(
