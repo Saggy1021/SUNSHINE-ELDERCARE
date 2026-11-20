@@ -1,7 +1,7 @@
 import { ReactNode } from "react"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
-import { Shield, Users, RefreshCw, MessageSquare, ClipboardList, Package, Activity, Receipt, CalendarDays } from "lucide-react"
+import { Shield, Users, RefreshCw, MessageSquare, ClipboardList, Package, Activity, Receipt, CalendarDays, Siren } from "lucide-react"
 import { AuthorizationService } from "@/lib/services/authorization"
 import { WorkspaceShell } from "@/components/workspace/workspace-shell"
 import { WorkspaceNavLink } from "@/components/workspace/workspace-nav-link"
@@ -33,6 +33,10 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       ]);
 
   if (!hasAdminAccess) {
+    const hasEmergency = await AuthorizationService.hasEmergencyAccess(session.user.id, session.user.email);
+    if (hasEmergency) {
+      redirect("/emergencyos");
+    }
     // If they don't have admin access, check if they are an employee (for the operational portal)
     if (
       session.user.role === 'EMPLOYEE' ||
@@ -76,6 +80,11 @@ export default async function AdminLayout({ children }: { children: ReactNode })
 
   if (hasRoleManage) {
     navItems.push({ name: "Roles", href: "/admin/roles", icon: <Shield className="h-4 w-4" /> });
+  }
+
+  const hasEmergency = isOwner || await AuthorizationService.hasEmergencyAccess(session.user.id, session.user.email);
+  if (hasEmergency) {
+    navItems.push({ name: "EmergencyOS", href: "/emergencyos", icon: <Siren className="h-4 w-4 text-red-500" /> });
   }
 
   return (

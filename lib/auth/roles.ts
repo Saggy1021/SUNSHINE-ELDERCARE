@@ -4,6 +4,10 @@ export const ROLES = {
   MEMBER: 'MEMBER',
   EMPLOYEE: 'EMPLOYEE',
   
+  // EmergencyOS
+  EMERGENCY_OPERATOR: 'EMERGENCY_OPERATOR',
+  EMERGENCY_SUPERVISOR: 'EMERGENCY_SUPERVISOR',
+
   // Legacy (Transition phase)
   USER: 'USER',
   ADMIN: 'ADMIN',

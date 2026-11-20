@@ -134,4 +134,39 @@ export class AuthorizationService {
     const permissions = await this.getUserPermissions(userId);
     return adminPerms.some(p => permissions.has(p));
   }
+
+  /**
+   * Checks if user has access to EmergencyOS subportal.
+   * Super Admins / Owners always have access.
+   * Users with EMERGENCY_INCIDENT_VIEW or EMERGENCY_INCIDENT_OPERATE or EMERGENCY_INCIDENT_SUPERVISE have access.
+   */
+  static async hasEmergencyAccess(userId: string, userEmail?: string | null): Promise<boolean> {
+    if (userEmail !== undefined && userEmail !== null) {
+      if (userEmail === 'info.sunshineeldercare@gmail.com') return true;
+    } else {
+      if (await this.isOwner(userId)) return true;
+    }
+
+    const permissions = await this.getUserPermissions(userId);
+    return (
+      permissions.has('EMERGENCY_INCIDENT_VIEW') ||
+      permissions.has('EMERGENCY_INCIDENT_OPERATE') ||
+      permissions.has('EMERGENCY_INCIDENT_SUPERVISE')
+    );
+  }
+
+  /**
+   * Checks if user has supervisor rights in EmergencyOS
+   * (e.g. approving Code Red downgrades, managing supervisory escalations).
+   */
+  static async isEmergencySupervisor(userId: string, userEmail?: string | null): Promise<boolean> {
+    if (userEmail !== undefined && userEmail !== null) {
+      if (userEmail === 'info.sunshineeldercare@gmail.com') return true;
+    } else {
+      if (await this.isOwner(userId)) return true;
+    }
+
+    const permissions = await this.getUserPermissions(userId);
+    return permissions.has('EMERGENCY_INCIDENT_SUPERVISE');
+  }
 }

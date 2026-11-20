@@ -247,6 +247,18 @@ async function main() {
     update: { isSystem: true },
     create: { name: 'Super Admin', description: 'Operational super administrator', isSystem: true }
   })
+
+  const emergencyOperatorRole = await prisma.role.upsert({
+    where: { name: 'Emergency Operator' },
+    update: { isSystem: true },
+    create: { name: 'Emergency Operator', description: 'EmergencyOS incident response and triage operator', isSystem: true }
+  })
+
+  const emergencySupervisorRole = await prisma.role.upsert({
+    where: { name: 'Emergency Supervisor' },
+    update: { isSystem: true },
+    create: { name: 'Emergency Supervisor', description: 'EmergencyOS incident escalation and supervisor authority', isSystem: true }
+  })
   
   const allPermissions = await prisma.permission.findMany()
   
@@ -260,11 +272,11 @@ async function main() {
   }
 
   // Ensure Super Admin does not have prohibited permissions (for existing databases)
-    await prisma.rolePermission.deleteMany({
-      where: { roleId: adminRole.id, permission: { code: { in: ['ROLE_MANAGE', 'AUDIT_VIEW'] } } }
-    })
+  await prisma.rolePermission.deleteMany({
+    where: { roleId: adminRole.id, permission: { code: { in: ['ROLE_MANAGE', 'AUDIT_VIEW'] } } }
+  })
 
-    // Super Admin gets all permissions EXCEPT ROLE_MANAGE and AUDIT_VIEW
+  // Super Admin gets all permissions EXCEPT ROLE_MANAGE and AUDIT_VIEW
   for (const perm of allPermissions) {
     if (perm.code === 'ROLE_MANAGE' || perm.code === 'AUDIT_VIEW') continue;
     await prisma.rolePermission.upsert({
@@ -273,7 +285,31 @@ async function main() {
       create: { roleId: adminRole.id, permissionId: perm.id }
     })
   }
-  console.log('  ✓ System roles seeded (Owner, Super Admin)')
+
+  // Emergency Operator gets emergency operational permissions
+  const operatorPermCodes = ['EMERGENCY_INCIDENT_VIEW', 'EMERGENCY_INCIDENT_OPERATE', 'EMERGENCY_AUDIT_VIEW']
+  for (const perm of allPermissions) {
+    if (operatorPermCodes.includes(perm.code)) {
+      await prisma.rolePermission.upsert({
+        where: { roleId_permissionId: { roleId: emergencyOperatorRole.id, permissionId: perm.id } },
+        update: {},
+        create: { roleId: emergencyOperatorRole.id, permissionId: perm.id }
+      })
+    }
+  }
+
+  // Emergency Supervisor gets all emergency permissions including supervise
+  const supervisorPermCodes = ['EMERGENCY_INCIDENT_VIEW', 'EMERGENCY_INCIDENT_OPERATE', 'EMERGENCY_INCIDENT_SUPERVISE', 'EMERGENCY_AUDIT_VIEW']
+  for (const perm of allPermissions) {
+    if (supervisorPermCodes.includes(perm.code)) {
+      await prisma.rolePermission.upsert({
+        where: { roleId_permissionId: { roleId: emergencySupervisorRole.id, permissionId: perm.id } },
+        update: {},
+        create: { roleId: emergencySupervisorRole.id, permissionId: perm.id }
+      })
+    }
+  }
+  console.log('  ✓ System roles seeded (Owner, Super Admin, Emergency Operator, Emergency Supervisor)')
 
   console.log('Seed completed successfully.')
 }

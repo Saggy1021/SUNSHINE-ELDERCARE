@@ -60,6 +60,11 @@ model User {
   ownedDocuments        MemberDocument[] @relation("UserDocuments")
   createdDocuments      MemberDocument[] @relation("DocumentCreatedBy")
 
+  // EmergencyOS relations
+  emergencyIncidents           EmergencyIncident[]    @relation("EmergencyIncidentCaller")
+  emergencyIncidentLogs        EmergencyIncidentLog[] @relation("EmergencyLogAuthor")
+  emergencyIncidentsSupervised EmergencyIncident[]    @relation("EmergencySupervisor")
+
   @@index([role, status])
 }
 
@@ -672,6 +677,7 @@ model Employee {
   visits      CareVisit[]
   tasks       CareTask[]
   sessions    EmployeeSession[]
+  emergencyIncidents EmergencyIncident[] @relation("EmergencyResponder")
 
   // Authentication Fields for Native Android Employee App
   passwordHash String?
@@ -1096,4 +1102,100 @@ model VisitAssignment {
 
   @@unique([visitId, employeeId])
   @@index([employeeId])
+}
+
+// --- EmergencyOS Models ---
+
+model EmergencyIncident {
+  id                     String   @id @default(cuid())
+  incidentNumber         String   @unique // e.g., EMG-20261120-001
+  status                 String   @default("TRIGGERED") // TRIGGERED, ACKNOWLEDGED, DISPATCHED, RESPONDER_ON_SCENE, RESOLVED, CANCELLED
+  classification         String   @default("CODE_RED") // CODE_RED, CODE_YELLOW, CODE_GREEN
+  previousClassification String?
+  
+  // Caller / Member context
+  userId          String?
+  user            User?    @relation("EmergencyIncidentCaller", fields: [userId], references: [id], onDelete: SetNull)
+  memberId        String?  // Member code SEC...
+  callerName      String?
+  callerPhone     String?
+  
+  // Incident details
+  triggerSource   String   @default("MEMBER_APP_SOS") // MEMBER_APP_SOS, WEB_SOS, HELPLINE_CALL, MANUAL_ENTRY
+  triggerNotes    String?  @db.Text
+  
+  // Location & Privacy Safeguards
+  currentLatitude   Float?
+  currentLongitude  Float?
+  locationAccuracy  Float?   // in meters
+  locationTimestamp DateTime?
+  trackingActive    Boolean  @default(true) // true while active, set to false on RESOLVED/CANCELLED
+  fallbackAddress   String?  @db.Text
+  
+  // Assigned Responder
+  assignedEmployeeId String?
+  assignedEmployee   Employee? @relation("EmergencyResponder", fields: [assignedEmployeeId], references: [id], onDelete: SetNull)
+  dispatchNotes      String?   @db.Text
+  dispatchedAt       DateTime?
+  responderArrivedAt DateTime?
+  
+  // Timestamps & SLA
+  triggeredAt      DateTime  @default(now())
+  acknowledgedAt   DateTime?
+  acknowledgedById String?
+  resolvedAt       DateTime?
+  resolvedById     String?
+  resolutionNotes  String?   @db.Text
+  
+  // Escalation & Downgrade tracking
+  isEscalated         Boolean   @default(false)
+  escalationReason    String?
+  downgradedById      String?
+  downgradedBy        User?     @relation("EmergencySupervisor", fields: [downgradedById], references: [id], onDelete: SetNull)
+  downgradeReason     String?   @db.Text
+  downgradeApprovedAt DateTime?
+  
+  // Safety confirmation
+  safetyConfirmedAt   DateTime?
+  safetyConfirmedBy   String?   // Name or role of confirmer
+  safetyNotes         String?   @db.Text
+  
+  // Relationships
+  logs            EmergencyIncidentLog[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
+  @@index([classification])
+  @@index([triggeredAt])
+  @@index([userId])
+}
+
+model EmergencyIncidentLog {
+  id          String   @id @default(cuid())
+  incidentId  String
+  incident    EmergencyIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  
+  authorId    String?
+  author      User?    @relation("EmergencyLogAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  authorName  String
+  
+  action      String   // TRIGGERED, ACKNOWLEDGED, CLASSIFIED, DOWNGRADED, DISPATCHED, ARRIVED, SAFETY_CONFIRMED, CALL_LOGGED, RESOLVED, ESCALATED, NOTE_ADDED
+  details     String   @db.Text
+  
+  // Optional call log metadata
+  callRecipient String?
+  callPhone     String?
+  callOutcome   String? // ANSWERED, BUSY, NO_ANSWER, VOICEMAIL, FAILED
+  
+  createdAt   DateTime @default(now())
+
+  @@index([incidentId])
+  @@index([action])
+}
+
+model EmergencySequence {
+  datePrefix String @id // YYYYMMDD
+  current    Int    @default(0)
 }
