@@ -6,14 +6,7 @@ import {
   Archive,
   Search,
   Filter,
-  Calendar,
   ChevronRight,
-  Flame,
-  AlertTriangle,
-  CheckCircle,
-  Clock,
-  User,
-  ShieldCheck,
 } from "lucide-react";
 import { getEmergencyHistoryAction } from "@/app/actions/emergency";
 
@@ -92,31 +85,31 @@ export function EmergencyHistoryClient({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-900 border border-slate-800 rounded-xl p-4 shadow">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white border border-slate-200/80 rounded-xl p-4 sm:p-5 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-lg bg-slate-800 text-slate-300">
-            <Archive className="w-5 h-5 text-amber-400" />
+          <div className="p-2.5 rounded-lg bg-slate-100 text-[#091329] border border-slate-200">
+            <Archive className="w-5 h-5 text-[#B08A4A]" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-white">
+            <h1 className="text-lg font-bold text-[#091329]">
               Emergency Incident Archive & Audit Records
             </h1>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500">
               Permanent immutable log of past emergency calls, triage actions & resolutions
             </p>
           </div>
         </div>
-        <div className="text-xs text-slate-400 font-mono">
-          Total Archived Incidents: <span className="font-bold text-white">{total}</span>
+        <div className="text-xs text-slate-500 font-mono">
+          Total Archived Incidents: <span className="font-bold text-[#091329]">{total}</span>
         </div>
       </div>
 
       {/* Filter and Search Panel */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow space-y-4">
+      <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-sm space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {/* Query input */}
           <div className="lg:col-span-2">
-            <label className="block text-[11px] text-slate-400 mb-1">Search</label>
+            <label className="block text-[11px] font-semibold text-slate-600 mb-1">Search</label>
             <div className="relative">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
               <input
@@ -125,20 +118,20 @@ export function EmergencyHistoryClient({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSearch(1)}
                 placeholder="Incident #, member name, phone..."
-                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-red-500"
+                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#B08A4A] focus:bg-white"
               />
             </div>
           </div>
 
           {/* Classification */}
           <div>
-            <label className="block text-[11px] text-slate-400 mb-1">
+            <label className="block text-[11px] font-semibold text-slate-600 mb-1">
               Classification
             </label>
             <select
               value={selectedClassification}
               onChange={(e) => setSelectedClassification(e.target.value)}
-              className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none"
+              className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:bg-white"
             >
               <option value="ALL">All Classifications</option>
               <option value="CODE_RED">Code Red</option>
@@ -149,11 +142,11 @@ export function EmergencyHistoryClient({
 
           {/* Status */}
           <div>
-            <label className="block text-[11px] text-slate-400 mb-1">Status</label>
+            <label className="block text-[11px] font-semibold text-slate-600 mb-1">Status</label>
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
-              className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none"
+              className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:bg-white"
             >
               <option value="ALL">All Statuses</option>
               <option value="RESOLVED">Resolved</option>
@@ -171,7 +164,7 @@ export function EmergencyHistoryClient({
               type="button"
               onClick={() => handleSearch(1)}
               disabled={isPending}
-              className="w-full py-2 text-xs font-bold rounded-lg bg-red-600 hover:bg-red-500 text-white shadow transition-colors flex items-center justify-center gap-1.5"
+              className="w-full py-2 text-xs font-bold rounded-lg bg-[#091329] hover:bg-[#162850] text-white shadow-sm transition-colors flex items-center justify-center gap-1.5"
             >
               <Filter className="w-3.5 h-3.5" />
               {isPending ? "Filtering..." : "Apply Filters"}
@@ -181,11 +174,11 @@ export function EmergencyHistoryClient({
       </div>
 
       {/* Incidents Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow">
+      <div className="bg-white border border-slate-200/80 rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="border-b border-slate-800 bg-slate-950/70 text-slate-400 font-semibold uppercase tracking-wider">
+              <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold uppercase tracking-wider">
                 <th className="py-3 px-4">Incident #</th>
                 <th className="py-3 px-4">Classification</th>
                 <th className="py-3 px-4">Member / Caller</th>
@@ -195,10 +188,10 @@ export function EmergencyHistoryClient({
                 <th className="py-3 px-4 text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-slate-100">
               {incidents.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-500">
+                  <td colSpan={7} className="py-8 text-center text-slate-400">
                     No matching archived incidents found.
                   </td>
                 </tr>
@@ -208,10 +201,10 @@ export function EmergencyHistoryClient({
                   return (
                     <tr
                       key={incident.id}
-                      className="hover:bg-slate-800/40 transition-colors"
+                      className="hover:bg-slate-50 transition-colors"
                     >
                       {/* Number */}
-                      <td className="py-3 px-4 font-mono font-bold text-slate-200">
+                      <td className="py-3 px-4 font-mono font-bold text-[#091329]">
                         {incident.incidentNumber}
                       </td>
 
@@ -232,23 +225,23 @@ export function EmergencyHistoryClient({
 
                       {/* Member */}
                       <td className="py-3 px-4">
-                        <div className="font-semibold text-white">
+                        <div className="font-semibold text-[#091329]">
                           {incident.callerName || "Unknown Member"}
                         </div>
                         {incident.memberId && (
-                          <div className="text-[10px] font-mono text-slate-400">
+                          <div className="text-[10px] font-mono text-slate-500">
                             {incident.memberId}
                           </div>
                         )}
                         {incident.callerPhone && (
-                          <div className="text-[10px] font-mono text-slate-400">
+                          <div className="text-[10px] font-mono text-[#B08A4A]">
                             {incident.callerPhone}
                           </div>
                         )}
                       </td>
 
                       {/* Triggered Time */}
-                      <td className="py-3 px-4 text-slate-300">
+                      <td className="py-3 px-4 text-slate-600">
                         {new Date(incident.triggeredAt).toLocaleString("en-IN", {
                           dateStyle: "short",
                           timeStyle: "short",
@@ -256,7 +249,7 @@ export function EmergencyHistoryClient({
                       </td>
 
                       {/* Responder */}
-                      <td className="py-3 px-4 text-slate-300">
+                      <td className="py-3 px-4 text-slate-600">
                         {incident.assignedEmployee ? (
                           <span>
                             {incident.assignedEmployee.firstName}{" "}
@@ -264,7 +257,7 @@ export function EmergencyHistoryClient({
                             {incident.assignedEmployee.employeeId})
                           </span>
                         ) : (
-                          <span className="text-slate-500">—</span>
+                          <span className="text-slate-400">—</span>
                         )}
                       </td>
 
@@ -273,10 +266,10 @@ export function EmergencyHistoryClient({
                         <span
                           className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
                             incident.status === "RESOLVED"
-                              ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
+                              ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
                               : incident.status === "TRIGGERED"
-                              ? "bg-red-950 text-red-400 border border-red-800"
-                              : "bg-slate-800 text-slate-300"
+                              ? "bg-red-100 text-red-700 border border-red-200"
+                              : "bg-slate-100 text-slate-700 border border-slate-200"
                           }`}
                         >
                           {incident.status.replace(/_/g, " ")}
@@ -287,10 +280,10 @@ export function EmergencyHistoryClient({
                       <td className="py-3 px-4 text-right">
                         <Link
                           href={`/emergencyos/incidents/${incident.id}`}
-                          className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
+                          className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded bg-[#091329] hover:bg-[#162850] text-white transition-colors shadow-xs"
                         >
-                          View Console
-                          <ChevronRight className="w-3.5 h-3.5" />
+                          <span>View Console</span>
+                          <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                         </Link>
                       </td>
                     </tr>
@@ -303,7 +296,7 @@ export function EmergencyHistoryClient({
 
         {/* Pagination controls */}
         {totalPages > 1 && (
-          <div className="p-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+          <div className="p-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
             <div>
               Page {page} of {totalPages} ({total} total)
             </div>
@@ -312,7 +305,7 @@ export function EmergencyHistoryClient({
                 type="button"
                 disabled={page <= 1 || isPending}
                 onClick={() => handleSearch(page - 1)}
-                className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-white"
+                className="px-3 py-1 rounded bg-slate-100 hover:bg-slate-200 border border-slate-200 disabled:opacity-40 text-slate-700"
               >
                 Previous
               </button>
@@ -320,7 +313,7 @@ export function EmergencyHistoryClient({
                 type="button"
                 disabled={page >= totalPages || isPending}
                 onClick={() => handleSearch(page + 1)}
-                className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-white"
+                className="px-3 py-1 rounded bg-slate-100 hover:bg-slate-200 border border-slate-200 disabled:opacity-40 text-slate-700"
               >
                 Next
               </button>

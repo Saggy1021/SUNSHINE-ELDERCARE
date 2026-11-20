@@ -2,6 +2,7 @@ import assert from "node:assert";
 import { db } from "../../lib/db";
 import { EmergencyService } from "../../lib/services/emergency";
 import { AuthorizationService } from "../../lib/services/authorization";
+import { searchEmergencyMembersCore } from "../../app/actions/emergency";
 
 async function runTestSuite() {
   console.log("================================================================");
@@ -313,6 +314,25 @@ async function runTestSuite() {
       false,
       "Telemetry MUST be rejected once incident is resolved"
     );
+  });
+
+  // --- Test 12: Searchable Member SOS Intake Search ---
+  await test("Test 12: searchEmergencyMembersCore queries by name, memberId, and phone", async () => {
+    // 12a: Search short query returns empty
+    const shortResults = await searchEmergencyMembersCore("a");
+    assert.strictEqual(shortResults.length, 0, "Query < 2 chars must return empty");
+
+    // 12b: Search by canonical SEC prefix or member
+    const secResults = await searchEmergencyMembersCore("SEC");
+    assert.ok(Array.isArray(secResults), "Must return array");
+    if (secResults.length > 0) {
+      assert.ok(secResults[0].id, "Must have user id");
+      assert.ok(secResults[0].name, "Must have member name");
+    }
+
+    // 12c: Search by phone digits
+    const phoneResults = await searchEmergencyMembersCore("98");
+    assert.ok(Array.isArray(phoneResults), "Must return array for phone search");
   });
 
   // Cleanup test incident

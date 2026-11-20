@@ -203,7 +203,7 @@ export function EmergencyIncidentConsoleClient({
   const handleAcknowledge = async () => {
     startTransition(async () => {
       try {
-        const res = await acknowledgeEmergencyIncidentAction(incident.id);
+        await acknowledgeEmergencyIncidentAction(incident.id);
         setIncident((prev) => ({
           ...prev,
           status: "ACKNOWLEDGED",
@@ -549,25 +549,34 @@ export function EmergencyIncidentConsoleClient({
     prof?.serviceAddress ||
     "Not available";
 
+  const contactPhone =
+    incident.callerPhone ||
+    prof?.mobileNumber ||
+    userContact?.phone ||
+    null;
+
   return (
     <div className="space-y-6">
-      {/* Top Header: Nav, Status Stepper & Triage Select */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-5 shadow-lg space-y-4">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+      {/* SECTION A: Incident Overview (Top Priority, Immediately Visible) */}
+      <div className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-sm space-y-4">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3">
             <Link
               href="/emergencyos"
-              className="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white border border-slate-700 transition-colors"
+              className="p-2 rounded-lg bg-slate-100 text-slate-600 hover:text-[#091329] hover:bg-slate-200 border border-slate-200 transition-colors mt-0.5 sm:mt-0"
+              title="Return to Dashboard"
             >
               <ArrowLeft className="w-4 h-4" />
             </Link>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-lg font-black text-white">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <span className="font-mono text-lg sm:text-xl font-black text-[#091329]">
                   {incident.incidentNumber}
                 </span>
+
+                {/* Classification Badge */}
                 <span
-                  className={`text-xs font-black uppercase px-2.5 py-0.5 rounded ${
+                  className={`text-xs font-black uppercase px-2.5 py-0.5 rounded-md flex items-center gap-1 ${
                     isCodeRed
                       ? "bg-red-600 text-white"
                       : incident.classification === "CODE_YELLOW"
@@ -575,55 +584,94 @@ export function EmergencyIncidentConsoleClient({
                       : "bg-emerald-600 text-white"
                   }`}
                 >
+                  {isCodeRed && <Flame className="w-3.5 h-3.5" />}
                   {incident.classification.replace("_", " ")}
                 </span>
+
+                {/* Status Badge */}
                 <span
-                  className={`text-xs font-bold px-2 py-0.5 rounded uppercase ${
+                  className={`text-xs font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wide ${
                     incident.status === "TRIGGERED"
-                      ? "bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse"
+                      ? "bg-red-100 text-red-700 border border-red-300 animate-pulse"
                       : incident.status === "ACKNOWLEDGED"
-                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                      ? "bg-amber-100 text-amber-800 border border-amber-300"
                       : incident.status === "DISPATCHED"
-                      ? "bg-blue-500/20 text-blue-300 border border-blue-500/40"
+                      ? "bg-blue-100 text-blue-800 border border-blue-300"
                       : incident.status === "RESPONDER_ON_SCENE"
-                      ? "bg-purple-500/20 text-purple-300 border border-purple-500/40"
-                      : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                      ? "bg-purple-100 text-purple-800 border border-purple-300"
+                      : "bg-emerald-100 text-emerald-800 border border-emerald-300"
                   }`}
                 >
                   {incident.status.replace(/_/g, " ")}
                 </span>
               </div>
-              <div className="text-xs text-slate-400 mt-1 flex items-center gap-3">
-                <span>Triggered: {new Date(incident.triggeredAt).toLocaleString("en-IN")}</span>
-                <span>Source: {incident.triggerSource.replace(/_/g, " ")}</span>
+
+              {/* Subtitle / Key Details Bar */}
+              <div className="text-xs text-slate-600 mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1">
+                <div className="flex items-center gap-1 font-semibold text-[#091329]">
+                  <User className="w-3.5 h-3.5 text-slate-400" />
+                  <span>{memberName}</span>
+                  {incident.memberId && (
+                    <span className="font-mono text-slate-500 font-normal">
+                      ({incident.memberId})
+                    </span>
+                  )}
+                </div>
+
+                {contactPhone && (
+                  <div className="flex items-center gap-1">
+                    <Phone className="w-3.5 h-3.5 text-slate-400" />
+                    <a
+                      href={`tel:${contactPhone}`}
+                      className="font-mono text-[#B08A4A] font-bold hover:underline"
+                    >
+                      {contactPhone}
+                    </a>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-1 text-slate-500">
+                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                  <span>
+                    Triggered: {new Date(incident.triggeredAt).toLocaleString("en-IN", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                  </span>
+                </div>
+
+                <div className="text-slate-500">
+                  Source: <span className="font-semibold text-slate-700">{incident.triggerSource.replace(/_/g, " ")}</span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Quick Actions Header: Acknowledge & Triage Classification Selector */}
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Quick Action Controls */}
+          <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
             {incident.status === "TRIGGERED" && (
               <button
                 type="button"
                 onClick={handleAcknowledge}
                 disabled={isPending}
-                className="px-4 py-2 text-xs font-black uppercase tracking-wider rounded-lg bg-red-600 hover:bg-red-500 text-white shadow transition-all animate-pulse"
+                className="px-4 py-2 text-xs font-black uppercase tracking-wider rounded-lg bg-red-600 hover:bg-red-700 text-white shadow-sm transition-all animate-pulse"
               >
                 {isPending ? "Acknowledging..." : "Acknowledge Incident"}
               </button>
             )}
 
-            {/* Classification Buttons */}
+            {/* Classification Quick Selectors */}
             {!isResolved && (
-              <div className="flex items-center gap-1 bg-slate-800 p-1 rounded-lg border border-slate-700">
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
                 <button
                   type="button"
                   onClick={() => handleClassificationClick("CODE_RED")}
                   className={`px-2.5 py-1 text-xs font-bold rounded transition-colors ${
                     isCodeRed
-                      ? "bg-red-600 text-white"
-                      : "text-red-400 hover:text-white"
+                      ? "bg-red-600 text-white shadow-xs"
+                      : "text-red-700 hover:bg-white"
                   }`}
+                  title="Critical emergency (Life-threatening)"
                 >
                   Red
                 </button>
@@ -632,9 +680,10 @@ export function EmergencyIncidentConsoleClient({
                   onClick={() => handleClassificationClick("CODE_YELLOW")}
                   className={`px-2.5 py-1 text-xs font-bold rounded transition-colors ${
                     incident.classification === "CODE_YELLOW"
-                      ? "bg-amber-600 text-white"
-                      : "text-amber-400 hover:text-white"
+                      ? "bg-amber-600 text-white shadow-xs"
+                      : "text-amber-700 hover:bg-white"
                   }`}
+                  title="Urgent assistance required"
                 >
                   Yellow
                 </button>
@@ -643,9 +692,10 @@ export function EmergencyIncidentConsoleClient({
                   onClick={() => handleClassificationClick("CODE_GREEN")}
                   className={`px-2.5 py-1 text-xs font-bold rounded transition-colors ${
                     incident.classification === "CODE_GREEN"
-                      ? "bg-emerald-600 text-white"
-                      : "text-emerald-400 hover:text-white"
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : "text-emerald-700 hover:bg-white"
                   }`}
+                  title="Routine assistance"
                 >
                   Green
                 </button>
@@ -660,36 +710,36 @@ export function EmergencyIncidentConsoleClient({
                   setResolveError(null);
                   setShowResolveModal(true);
                 }}
-                className="px-4 py-2 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow transition-colors flex items-center gap-1.5"
+                className="px-4 py-2 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-colors flex items-center gap-1.5"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                Resolve & Close
+                <span>Resolve & Close</span>
               </button>
             )}
           </div>
         </div>
 
         {/* Status Stepper Progression */}
-        <div className="grid grid-cols-5 gap-2 text-center pt-2 border-t border-slate-800/80">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-3 border-t border-slate-100">
           {[
             { key: "TRIGGERED", label: "1. Triggered", date: incident.triggeredAt },
             { key: "ACKNOWLEDGED", label: "2. Acknowledged", date: incident.acknowledgedAt },
             { key: "DISPATCHED", label: "3. Dispatched", date: incident.dispatchedAt },
             { key: "RESPONDER_ON_SCENE", label: "4. On Scene", date: incident.responderArrivedAt },
             { key: "RESOLVED", label: "5. Resolved", date: incident.resolvedAt },
-          ].map((step, idx) => {
+          ].map((step) => {
             const isCompleted = Boolean(step.date);
             const isCurrent = incident.status === step.key;
 
             return (
               <div
                 key={step.key}
-                className={`p-2 rounded-lg border text-left ${
+                className={`p-2.5 rounded-lg border text-left transition-colors ${
                   isCurrent
-                    ? "bg-slate-800 border-red-500 ring-1 ring-red-500/40 text-white"
+                    ? "bg-red-50 border-red-300 ring-1 ring-red-400 text-red-900"
                     : isCompleted
-                    ? "bg-slate-900 border-emerald-900/40 text-emerald-300"
-                    : "bg-slate-950/60 border-slate-800 text-slate-500"
+                    ? "bg-emerald-50/70 border-emerald-200 text-emerald-900"
+                    : "bg-slate-50 border-slate-200 text-slate-400"
                 }`}
               >
                 <div className="text-[11px] font-bold">{step.label}</div>
@@ -707,38 +757,38 @@ export function EmergencyIncidentConsoleClient({
         </div>
       </div>
 
-      {/* 3-Column Command Layout */}
+      {/* 2-Column Responsive Information Hierarchy */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* COLUMN 1: Member Profile, Medical Flags, Emergency Contacts (4 cols) */}
-        <div className="lg:col-span-4 space-y-5">
-          {/* Senior Profile Card */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h2 className="text-xs font-black uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                <User className="w-4 h-4 text-amber-400" />
-                Senior Member Profile
+        {/* LEFT COLUMN: Operations, Profile, GPS, Dispatch & Safety (7 cols) */}
+        <div className="lg:col-span-7 space-y-6">
+          {/* SECTION B: Member Information & Medical Profile */}
+          <div className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-sm space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-[#091329] flex items-center gap-1.5">
+                <User className="w-4 h-4 text-[#B08A4A]" />
+                Member & Clinical Information
               </h2>
               {incident.memberId && (
-                <span className="font-mono text-xs px-2 py-0.5 rounded bg-slate-800 text-amber-300 font-bold">
+                <span className="font-mono text-xs px-2.5 py-0.5 rounded-md bg-slate-100 text-[#091329] font-bold border border-slate-200">
                   {incident.memberId}
                 </span>
               )}
             </div>
 
             <div>
-              <div className="text-base font-bold text-white">{memberName}</div>
+              <div className="text-base font-bold text-[#091329]">{memberName}</div>
               {planDisplay && (
-                <div className="text-xs text-amber-400 font-medium mt-0.5">
-                  Plan: {planDisplay}
+                <div className="text-xs text-[#B08A4A] font-semibold mt-0.5">
+                  Subscription: {planDisplay}
                 </div>
               )}
             </div>
 
             {/* Contact Phones */}
             <div className="space-y-1.5 text-xs">
-              <div className="text-slate-400 font-semibold">Primary Contact Phone:</div>
-              <div className="flex items-center justify-between bg-slate-800/80 p-2 rounded-lg">
-                <span className="font-mono text-white font-bold">
+              <div className="text-slate-500 font-semibold">Primary Contact Phone:</div>
+              <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-lg border border-slate-200/60">
+                <span className="font-mono text-[#091329] font-bold">
                   {incident.callerPhone || prof?.mobileNumber || userContact?.phone || "Not provided"}
                 </span>
                 {(incident.callerPhone || prof?.mobileNumber || userContact?.phone) && (
@@ -748,16 +798,16 @@ export function EmergencyIncidentConsoleClient({
                       setCallRecipient("Member");
                       setCallPhone(incident.callerPhone || prof?.mobileNumber || userContact?.phone || "");
                     }}
-                    className="text-[11px] px-2 py-0.5 rounded bg-red-600/80 hover:bg-red-600 text-white font-bold"
+                    className="text-[11px] px-2.5 py-1 rounded bg-[#091329] hover:bg-[#162850] text-white font-bold transition-colors"
                   >
                     Dial / Log
                   </button>
                 )}
               </div>
               {(prof?.alternateNumber || userContact?.alternatePhone) && (
-                <div className="flex items-center justify-between bg-slate-800/80 p-2 rounded-lg">
-                  <span className="font-mono text-slate-300">
-                    Alt: {prof?.alternateNumber || userContact?.alternatePhone}
+                <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-lg border border-slate-200/60">
+                  <span className="font-mono text-slate-700">
+                    Alt Phone: {prof?.alternateNumber || userContact?.alternatePhone}
                   </span>
                   <button
                     type="button"
@@ -765,7 +815,7 @@ export function EmergencyIncidentConsoleClient({
                       setCallRecipient("Member (Alt)");
                       setCallPhone(prof?.alternateNumber || userContact?.alternatePhone || "");
                     }}
-                    className="text-[11px] px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-200"
+                    className="text-[11px] px-2.5 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold transition-colors"
                   >
                     Dial / Log
                   </button>
@@ -773,162 +823,148 @@ export function EmergencyIncidentConsoleClient({
               )}
             </div>
 
-            {/* Address */}
+            {/* Registered Address & Landmark */}
             <div className="space-y-1 text-xs">
-              <div className="text-slate-400 font-semibold flex items-center gap-1">
-                <MapPin className="w-3.5 h-3.5 text-red-400" />
-                Registered Address:
+              <div className="text-slate-500 font-semibold flex items-center gap-1">
+                <MapPin className="w-3.5 h-3.5 text-red-500" />
+                Registered Service Address:
               </div>
-              <div className="p-2.5 rounded-lg bg-slate-800/60 text-slate-200 leading-relaxed">
+              <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/60 text-slate-800 leading-relaxed">
                 {address}
               </div>
               {prof?.nearestLandmark && (
-                <div className="text-[11px] text-amber-300">
+                <div className="text-[11px] text-[#B08A4A] font-medium">
                   Landmark: {prof.nearestLandmark}
                 </div>
               )}
             </div>
-          </div>
 
-          {/* Designated Emergency Hospital & Physician */}
-          <div className="bg-slate-900 border border-red-950/80 rounded-xl p-5 shadow space-y-3">
-            <div className="flex items-center gap-1.5 pb-2 border-b border-slate-800 text-xs font-black uppercase tracking-wider text-red-400">
-              <Building className="w-4 h-4" />
-              Designated Emergency Hospital
-            </div>
-
-            <div>
-              <div className="text-xs text-slate-400">Preferred Hospital for SOS:</div>
-              <div className="text-sm font-bold text-white mt-0.5">
-                {prof?.medicalAuth?.hospitalForSos || "Nearest Tertiary Multi-specialty Hospital"}
+            {/* Designated Emergency Hospital */}
+            <div className="pt-2 border-t border-slate-100">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-red-700 uppercase tracking-wide mb-1.5">
+                <Building className="w-3.5 h-3.5" />
+                Designated Emergency Hospital
               </div>
-            </div>
-
-            {prof?.medicalAuth?.nomineeLocalContact && (
-              <div className="pt-2 border-t border-slate-800 text-xs">
-                <div className="text-slate-400">Nominee Local Contact:</div>
-                <div className="font-semibold text-slate-200">
-                  {prof.medicalAuth.nomineeLocalContact}
+              <div className="p-2.5 rounded-lg bg-red-50/60 border border-red-200 text-xs">
+                <div className="font-bold text-red-950">
+                  {prof?.medicalAuth?.hospitalForSos || "Nearest Tertiary Multi-specialty Hospital"}
                 </div>
-              </div>
-            )}
-          </div>
-
-          {/* Medical Alerts & Pre-existing Conditions */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow space-y-3">
-            <div className="flex items-center gap-1.5 pb-2 border-b border-slate-800 text-xs font-black uppercase tracking-wider text-amber-400">
-              <HeartPulse className="w-4 h-4" />
-              Medical Profile & Alerts
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="bg-slate-800/60 p-2 rounded">
-                <span className="text-slate-400 block text-[10px]">Blood Group</span>
-                <span className="font-bold text-white">
-                  {prof?.bloodGroup || "Not recorded"}
-                </span>
-              </div>
-              <div className="bg-slate-800/60 p-2 rounded">
-                <span className="text-slate-400 block text-[10px]">Medical Status</span>
-                <span className="font-semibold text-amber-400">
-                  {prof?.medicalConditions ? "Conditions Logged" : "Standard"}
-                </span>
+                {prof?.medicalAuth?.nomineeLocalContact && (
+                  <div className="text-[11px] text-red-800 mt-1">
+                    Nominee Local Contact: {prof.medicalAuth.nomineeLocalContact}
+                  </div>
+                )}
               </div>
             </div>
 
-            {prof?.medicalConditions && (
-              <div className="text-xs">
-                <div className="text-slate-400 font-semibold">Conditions & Notes:</div>
-                <div className="p-2 rounded bg-slate-800/60 text-slate-200 mt-1">
-                  {prof.medicalConditions}
-                </div>
+            {/* Medical Alerts & Conditions */}
+            <div className="pt-2 border-t border-slate-100 space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-[#091329] uppercase tracking-wide">
+                <HeartPulse className="w-3.5 h-3.5 text-amber-600" />
+                Medical Profile & Clinical Flags
               </div>
-            )}
-          </div>
-
-          {/* Emergency Family Contacts */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow space-y-3">
-            <div className="flex items-center gap-1.5 pb-2 border-b border-slate-800 text-xs font-black uppercase tracking-wider text-slate-300">
-              <PhoneCall className="w-4 h-4 text-emerald-400" />
-              Emergency Family Contacts
-            </div>
-
-            {/* Primary Emergency Contact */}
-            <div className="p-3 rounded-lg bg-slate-800/80 border border-slate-700/60 space-y-1 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-white">
-                  {userContact?.fullName || prof?.sponsor?.fullName || "Primary Contact Not Recorded"}
-                </span>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-300">
-                  {userContact?.relationship || prof?.sponsor?.relationship || "Primary"}
-                </span>
-              </div>
-              {(userContact?.phone || prof?.sponsor?.mobileNumber) && (
-                <div className="flex items-center justify-between pt-1">
-                  <span className="font-mono text-emerald-400 font-bold">
-                    {userContact?.phone || prof?.sponsor?.mobileNumber}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/60">
+                  <span className="text-slate-500 block text-[10px]">Blood Group</span>
+                  <span className="font-bold text-[#091329]">
+                    {prof?.bloodGroup || "Not recorded"}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const name = userContact?.fullName || prof?.sponsor?.fullName || "Contact";
-                      const phone = userContact?.phone || prof?.sponsor?.mobileNumber || "";
-                      setCallRecipient(name);
-                      setCallPhone(phone);
-                    }}
-                    className="text-[10px] px-2 py-0.5 rounded bg-emerald-600 text-white font-bold"
-                  >
-                    Log Call
-                  </button>
+                </div>
+                <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/60">
+                  <span className="text-slate-500 block text-[10px]">Pre-existing Conditions</span>
+                  <span className="font-semibold text-amber-700">
+                    {prof?.medicalConditions ? "Conditions Logged" : "Standard"}
+                  </span>
+                </div>
+              </div>
+              {prof?.medicalConditions && (
+                <div className="p-2.5 rounded-lg bg-amber-50/70 border border-amber-200 text-xs text-amber-950">
+                  {prof.medicalConditions}
                 </div>
               )}
             </div>
 
-            {/* Secondary Emergency Contact */}
-            {prof?.sponsor?.alternateNumber && (
-              <div className="p-3 rounded-lg bg-slate-800/80 border border-slate-700/60 space-y-1 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-white">
-                    {prof.sponsor.fullName}
-                  </span>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-300">
-                    Alt Contact
-                  </span>
-                </div>
-                <div className="flex items-center justify-between pt-1">
-                  <span className="font-mono text-emerald-400 font-bold">
-                    {prof.sponsor.alternateNumber}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCallRecipient(`${prof?.sponsor?.fullName} (Alt)`);
-                      setCallPhone(prof?.sponsor?.alternateNumber || "");
-                    }}
-                    className="text-[10px] px-2 py-0.5 rounded bg-emerald-600 text-white font-bold"
-                  >
-                    Log Call
-                  </button>
-                </div>
+            {/* Emergency Contacts */}
+            <div className="pt-2 border-t border-slate-100 space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-[#091329] uppercase tracking-wide">
+                <PhoneCall className="w-3.5 h-3.5 text-emerald-600" />
+                Emergency Family Contacts
               </div>
-            )}
-          </div>
-        </div>
 
-        {/* COLUMN 2: Telemetry, Field Dispatch, Safety & Resolution (4 cols) */}
-        <div className="lg:col-span-4 space-y-5">
-          {/* Live GPS Telemetry Widget */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-              <h3 className="text-xs font-black uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                <Navigation className="w-4 h-4 text-red-500 animate-pulse" />
-                Live GPS Telemetry
+              {/* Primary Contact */}
+              <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/70 space-y-1 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[#091329]">
+                    {userContact?.fullName || prof?.sponsor?.fullName || "Primary Contact Not Recorded"}
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-semibold">
+                    {userContact?.relationship || prof?.sponsor?.relationship || "Primary"}
+                  </span>
+                </div>
+                {(userContact?.phone || prof?.sponsor?.mobileNumber) && (
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="font-mono text-emerald-700 font-bold">
+                      {userContact?.phone || prof?.sponsor?.mobileNumber}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const name = userContact?.fullName || prof?.sponsor?.fullName || "Contact";
+                        const phone = userContact?.phone || prof?.sponsor?.mobileNumber || "";
+                        setCallRecipient(name);
+                        setCallPhone(phone);
+                      }}
+                      className="text-[10px] px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition-colors"
+                    >
+                      Log Call
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Secondary Contact */}
+              {prof?.sponsor?.alternateNumber && (
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/70 space-y-1 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-[#091329]">
+                      {prof.sponsor.fullName}
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-semibold">
+                      Alt Contact
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="font-mono text-emerald-700 font-bold">
+                      {prof.sponsor.alternateNumber}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCallRecipient(`${prof?.sponsor?.fullName} (Alt)`);
+                        setCallPhone(prof?.sponsor?.alternateNumber || "");
+                      }}
+                      className="text-[10px] px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition-colors"
+                    >
+                      Log Call
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* SECTION C: Emergency Location & Live GPS Telemetry */}
+          <div className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-sm space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[#091329] flex items-center gap-1.5">
+                <Navigation className="w-4 h-4 text-red-600 animate-pulse" />
+                Emergency Location & Live GPS
               </h3>
               <span
-                className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold ${
+                className={`text-[10px] px-2.5 py-0.5 rounded font-mono font-bold uppercase tracking-wide ${
                   incident.trackingActive
-                    ? "bg-red-950 text-red-400 border border-red-800"
-                    : "bg-slate-800 text-slate-400"
+                    ? "bg-red-100 text-red-700 border border-red-300"
+                    : "bg-slate-100 text-slate-600 border border-slate-200"
                 }`}
               >
                 {incident.trackingActive ? "TRACKING ACTIVE" : "TRACKING TERMINATED"}
@@ -937,79 +973,85 @@ export function EmergencyIncidentConsoleClient({
 
             {incident.currentLatitude && incident.currentLongitude ? (
               <div className="space-y-3">
-                <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 font-mono text-xs space-y-1">
-                  <div className="text-slate-400 flex justify-between">
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 font-mono text-xs space-y-1.5">
+                  <div className="text-slate-600 flex justify-between">
                     <span>Latitude:</span>
-                    <span className="text-white font-bold">
+                    <span className="text-[#091329] font-bold">
                       {incident.currentLatitude.toFixed(6)}
                     </span>
                   </div>
-                  <div className="text-slate-400 flex justify-between">
+                  <div className="text-slate-600 flex justify-between">
                     <span>Longitude:</span>
-                    <span className="text-white font-bold">
+                    <span className="text-[#091329] font-bold">
                       {incident.currentLongitude.toFixed(6)}
                     </span>
                   </div>
-                  <div className="text-slate-400 flex justify-between">
+                  <div className="text-slate-600 flex justify-between">
                     <span>Accuracy:</span>
-                    <span className="text-emerald-400 font-bold">
+                    <span className="text-emerald-700 font-bold">
                       ±{Math.round(incident.locationAccuracy || 10)} meters
                     </span>
                   </div>
+                  {incident.locationTimestamp && (
+                    <div className="text-slate-500 text-[10px] flex justify-between pt-1 border-t border-slate-200">
+                      <span>Last Timestamp:</span>
+                      <span>{new Date(incident.locationTimestamp).toLocaleTimeString("en-IN")}</span>
+                    </div>
+                  )}
                 </div>
 
                 <a
                   href={`https://www.google.com/maps?q=${incident.currentLatitude},${incident.currentLongitude}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="w-full py-2 px-3 text-xs font-bold rounded-lg bg-red-600 hover:bg-red-500 text-white flex items-center justify-center gap-1.5 shadow transition-colors"
+                  className="w-full py-2.5 px-3 text-xs font-bold rounded-lg bg-red-600 hover:bg-red-700 text-white flex items-center justify-center gap-1.5 shadow-sm transition-colors"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                   Open Live Coordinates in Google Maps
                 </a>
               </div>
             ) : (
-              <div className="p-3 rounded-lg bg-amber-950/30 border border-amber-900/50 text-xs text-amber-200 space-y-1">
-                <div className="font-bold flex items-center gap-1">
-                  <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
-                  GPS Signal Pending / Fallback to Address
+              <div className="p-3.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-950 space-y-1">
+                <div className="font-bold flex items-center gap-1.5 text-amber-900">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  GPS Signal Pending / Fallback to Registered Address
                 </div>
-                <p className="text-[11px] text-amber-300/80">
-                  Target responder to registered primary address: {address}
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  Direct field responder to registered primary address: {address}
                 </p>
               </div>
             )}
 
-            <div className="p-2.5 rounded bg-slate-950/70 text-[10px] text-slate-500 border border-slate-800 leading-tight">
-              Privacy Safeguard: Location is streamed only during active SOS. Resolving the incident immediately revokes GPS ingestion with HTTP 410.
+            <div className="p-2.5 rounded bg-slate-50 text-[10px] text-slate-500 border border-slate-200 leading-tight">
+              Privacy Safeguard: Location streaming is enabled only during active SOS triage. Resolving the incident immediately revokes GPS telemetry with HTTP 410.
             </div>
           </div>
 
-          {/* Field Responder Dispatch Box */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow space-y-4">
-            <div className="flex items-center gap-1.5 pb-2 border-b border-slate-800 text-xs font-black uppercase tracking-wider text-blue-400">
+          {/* SECTION D: Field Employee Dispatch */}
+          <div className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-sm space-y-4">
+            <div className="flex items-center gap-1.5 pb-2 border-b border-slate-100 text-xs font-bold uppercase tracking-wider text-blue-700">
               <ShieldCheck className="w-4 h-4" />
               Field Employee Dispatch
             </div>
 
             {incident.assignedEmployee ? (
               <div className="space-y-3">
-                <div className="p-3 rounded-lg bg-blue-950/30 border border-blue-800/60 text-xs space-y-2">
+                <div className="p-3.5 rounded-lg bg-blue-50/70 border border-blue-200 text-xs space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-white text-sm">
+                    <span className="font-bold text-[#091329] text-sm">
                       {incident.assignedEmployee.firstName}{" "}
                       {incident.assignedEmployee.lastName}
                     </span>
-                    <span className="font-mono text-blue-300 font-bold">
+                    <span className="font-mono text-blue-800 font-bold">
                       {incident.assignedEmployee.employeeId}
                     </span>
                   </div>
-                  <div className="text-slate-300">
+                  <div className="text-slate-600">
                     Designation: {incident.assignedEmployee.designation}
                   </div>
                   {incident.assignedEmployee.contactNumber && (
-                    <div className="flex items-center justify-between pt-1 border-t border-blue-900/40">
-                      <span className="font-mono text-amber-400 font-bold">
+                    <div className="flex items-center justify-between pt-1.5 border-t border-blue-200/60">
+                      <span className="font-mono text-[#091329] font-bold">
                         {incident.assignedEmployee.contactNumber}
                       </span>
                       <button
@@ -1022,27 +1064,27 @@ export function EmergencyIncidentConsoleClient({
                             incident.assignedEmployee?.contactNumber || ""
                           );
                         }}
-                        className="text-[10px] px-2 py-0.5 rounded bg-blue-700 text-white font-bold"
+                        className="text-[10px] px-2.5 py-1 rounded bg-blue-700 hover:bg-blue-800 text-white font-bold transition-colors"
                       >
                         Dial / Log Call
                       </button>
                     </div>
                   )}
                   {incident.dispatchedAt && (
-                    <div className="text-[10px] text-slate-400">
+                    <div className="text-[10px] text-slate-500">
                       Dispatched at:{" "}
                       {new Date(incident.dispatchedAt).toLocaleTimeString("en-IN")}
                     </div>
                   )}
                 </div>
 
-                {/* Record Arrival on scene */}
+                {/* Record Arrival on Scene */}
                 {incident.status === "DISPATCHED" && (
                   <button
                     type="button"
                     onClick={handleRecordArrival}
                     disabled={isPending}
-                    className="w-full py-2.5 text-xs font-bold rounded-lg bg-purple-600 hover:bg-purple-500 text-white shadow transition-colors flex items-center justify-center gap-2"
+                    className="w-full py-2.5 text-xs font-bold rounded-lg bg-purple-600 hover:bg-purple-700 text-white shadow-sm transition-colors flex items-center justify-center gap-2"
                   >
                     <MapPin className="w-4 h-4" />
                     Record Responder Arrival On Scene
@@ -1050,10 +1092,10 @@ export function EmergencyIncidentConsoleClient({
                 )}
 
                 {incident.responderArrivedAt && (
-                  <div className="p-2.5 rounded bg-purple-950/40 border border-purple-800/60 text-xs text-purple-200 flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-purple-400" />
+                  <div className="p-3 rounded-lg bg-purple-50 border border-purple-200 text-xs text-purple-900 flex items-center gap-2 font-medium">
+                    <CheckCircle className="w-4 h-4 text-purple-600 shrink-0" />
                     <span>
-                      Responder on scene since{" "}
+                      Responder arrived on scene at{" "}
                       {new Date(incident.responderArrivedAt).toLocaleTimeString("en-IN")}
                     </span>
                   </div>
@@ -1062,14 +1104,14 @@ export function EmergencyIncidentConsoleClient({
             ) : !isResolved ? (
               <form onSubmit={handleDispatch} className="space-y-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Select Active Field Responder
                   </label>
                   <select
                     required
                     value={selectedResponderId}
                     onChange={(e) => setSelectedResponderId(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none focus:border-blue-500"
+                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
                   >
                     <option value="">-- Choose Field Responder --</option>
                     {responders.map((r) => (
@@ -1081,7 +1123,7 @@ export function EmergencyIncidentConsoleClient({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Dispatch Instructions / Route Notes
                   </label>
                   <textarea
@@ -1089,14 +1131,14 @@ export function EmergencyIncidentConsoleClient({
                     value={dispatchNotes}
                     onChange={(e) => setDispatchNotes(e.target.value)}
                     placeholder="e.g. Proceed with portable oxygen kit and vitals monitor"
-                    className="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none focus:border-blue-500 resize-none"
+                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white resize-none"
                   />
                 </div>
 
                 <button
                   type="submit"
                   disabled={isPending || !selectedResponderId}
-                  className="w-full py-2.5 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white shadow transition-colors flex items-center justify-center gap-2"
+                  className="w-full py-2.5 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white shadow-sm transition-colors flex items-center justify-center gap-2"
                 >
                   <Send className="w-4 h-4" />
                   Dispatch Responder
@@ -1104,28 +1146,28 @@ export function EmergencyIncidentConsoleClient({
               </form>
             ) : (
               <div className="text-xs text-slate-500">
-                No responder dispatched before incident resolution.
+                No responder dispatched prior to incident resolution.
               </div>
             )}
           </div>
 
-          {/* Member Safety Confirmation */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow space-y-3">
-            <div className="flex items-center gap-1.5 pb-2 border-b border-slate-800 text-xs font-black uppercase tracking-wider text-emerald-400">
+          {/* SECTION F: Member Safety Confirmation */}
+          <div className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-sm space-y-3">
+            <div className="flex items-center gap-1.5 pb-2 border-b border-slate-100 text-xs font-bold uppercase tracking-wider text-emerald-700">
               <FileCheck className="w-4 h-4" />
               Member Safety Confirmation
             </div>
 
             {incident.safetyConfirmedAt ? (
-              <div className="p-3 rounded-lg bg-emerald-950/30 border border-emerald-800/60 text-xs space-y-1.5">
-                <div className="flex items-center gap-1.5 font-bold text-emerald-300">
-                  <CheckCircle className="w-4 h-4 text-emerald-400" />
+              <div className="p-3.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs space-y-1.5">
+                <div className="flex items-center gap-1.5 font-bold text-emerald-900">
+                  <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
                   Safety Confirmed by {incident.safetyConfirmedBy}
                 </div>
-                <div className="text-slate-300 leading-relaxed">
+                <div className="text-emerald-950 leading-relaxed">
                   {incident.safetyNotes}
                 </div>
-                <div className="text-[10px] text-slate-500">
+                <div className="text-[10px] text-slate-500 pt-1">
                   Confirmed at:{" "}
                   {new Date(incident.safetyConfirmedAt).toLocaleTimeString("en-IN")}
                 </div>
@@ -1133,21 +1175,21 @@ export function EmergencyIncidentConsoleClient({
             ) : !isResolved ? (
               <form onSubmit={handleConfirmSafety} className="space-y-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    Confirmed By (Responder / Doctor / Relative)
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Confirmed By (Responder / Doctor / Family Member)
                   </label>
                   <input
                     type="text"
                     required
                     value={safetyConfirmer}
                     onChange={(e) => setSafetyConfirmer(e.target.value)}
-                    placeholder="e.g. Sagnik Kar (Field Caregiver)"
-                    className="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none focus:border-emerald-500"
+                    placeholder="e.g. Sagnik Kar (Field Caregiver) / Dr. Sen"
+                    className="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-emerald-500 focus:bg-white"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Safety Notes & Elder Condition
                   </label>
                   <textarea
@@ -1156,14 +1198,14 @@ export function EmergencyIncidentConsoleClient({
                     value={safetyNotesInput}
                     onChange={(e) => setSafetyNotesInput(e.target.value)}
                     placeholder="e.g. Vitals normal (BP 125/80, Pulse 74). Elder resting comfortably under family supervision."
-                    className="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none focus:border-emerald-500 resize-none"
+                    className="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-emerald-500 focus:bg-white resize-none"
                   />
                 </div>
 
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="w-full py-2 text-xs font-bold rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white shadow transition-colors"
+                  className="w-full py-2.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-colors"
                 >
                   Confirm Member Safety
                 </button>
@@ -1176,26 +1218,27 @@ export function EmergencyIncidentConsoleClient({
           </div>
         </div>
 
-        {/* COLUMN 3: Communication Logger & Activity Timeline (4 cols) */}
-        <div className="lg:col-span-4 space-y-5">
-          {/* Outbound Call Logger */}
-          {!isResolved && (
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow space-y-3">
-              <div className="flex items-center gap-1.5 pb-2 border-b border-slate-800 text-xs font-black uppercase tracking-wider text-slate-300">
-                <Phone className="w-4 h-4 text-amber-400" />
-                Log Emergency Outbound Call
-              </div>
+        {/* RIGHT COLUMN: Emergency Communications & Activity Timeline (5 cols) */}
+        <div className="lg:col-span-5 space-y-6">
+          {/* SECTION E: Emergency Communications (Call Logger + Quick Notes Grouped) */}
+          <div className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-sm space-y-5">
+            <div className="flex items-center gap-1.5 pb-2 border-b border-slate-100 text-xs font-bold uppercase tracking-wider text-[#091329]">
+              <Phone className="w-4 h-4 text-amber-500" />
+              Emergency Communications
+            </div>
 
+            {/* Outbound Call Logger */}
+            {!isResolved ? (
               <form onSubmit={handleLogCall} className="space-y-3">
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
                       Recipient
                     </label>
                     <select
                       value={callRecipient}
                       onChange={(e) => setCallRecipient(e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs rounded bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none"
+                      className="w-full px-2 py-1.5 text-xs rounded-lg bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:bg-white"
                     >
                       <option value="Member">Elder / Member</option>
                       <option value="Primary Contact">Primary Contact</option>
@@ -1207,7 +1250,7 @@ export function EmergencyIncidentConsoleClient({
                   </div>
 
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
                       Phone Number
                     </label>
                     <input
@@ -1216,19 +1259,19 @@ export function EmergencyIncidentConsoleClient({
                       value={callPhone}
                       onChange={(e) => setCallPhone(e.target.value)}
                       placeholder="e.g. 9830012345"
-                      className="w-full px-2 py-1.5 text-xs rounded bg-slate-800 border border-slate-700 text-slate-100 font-mono focus:outline-none"
+                      className="w-full px-2 py-1.5 text-xs rounded-lg bg-slate-50 border border-slate-200 text-slate-900 font-mono focus:outline-none focus:bg-white"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
                     Call Outcome
                   </label>
                   <select
                     value={callOutcome}
                     onChange={(e) => setCallOutcome(e.target.value as any)}
-                    className="w-full px-2 py-1.5 text-xs rounded bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none"
+                    className="w-full px-2 py-1.5 text-xs rounded-lg bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:bg-white"
                   >
                     <option value="ANSWERED">Answered (Spoke with recipient)</option>
                     <option value="NO_ANSWER">No Answer</option>
@@ -1239,7 +1282,7 @@ export function EmergencyIncidentConsoleClient({
                 </div>
 
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
                     Call Notes & Summary
                   </label>
                   <textarea
@@ -1247,56 +1290,63 @@ export function EmergencyIncidentConsoleClient({
                     value={callDetails}
                     onChange={(e) => setCallDetails(e.target.value)}
                     placeholder="e.g. Inquired about breathing difficulty. Family stated ambulance is en route."
-                    className="w-full px-2.5 py-1.5 text-xs rounded bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none resize-none"
+                    className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:bg-white resize-none"
                   />
                 </div>
 
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="w-full py-2 text-xs font-bold rounded-lg bg-amber-600 hover:bg-amber-500 text-white shadow transition-colors"
+                  className="w-full py-2 text-xs font-bold rounded-lg bg-amber-600 hover:bg-amber-700 text-white shadow-sm transition-colors"
                 >
                   Save Call Record
                 </button>
               </form>
-            </div>
-          )}
+            ) : (
+              <div className="text-xs text-slate-500">
+                Call logging closed upon incident resolution.
+              </div>
+            )}
 
-          {/* Quick Operational Note */}
-          {!isResolved && (
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow space-y-2">
-              <form onSubmit={handleAddQuickNote} className="flex gap-2">
-                <input
-                  type="text"
-                  value={quickNote}
-                  onChange={(e) => setQuickNote(e.target.value)}
-                  placeholder="Add quick operational note..."
-                  className="flex-1 px-3 py-1.5 text-xs rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none"
-                />
-                <button
-                  type="submit"
-                  disabled={isPending || !quickNote.trim()}
-                  className="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-700 hover:bg-slate-600 text-white"
-                >
-                  Post Note
-                </button>
-              </form>
-            </div>
-          )}
+            {/* Quick Operational Note Entry */}
+            {!isResolved && (
+              <div className="pt-3 border-t border-slate-100 space-y-2">
+                <label className="block text-[11px] font-semibold text-slate-600">
+                  Quick Operational Note
+                </label>
+                <form onSubmit={handleAddQuickNote} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={quickNote}
+                    onChange={(e) => setQuickNote(e.target.value)}
+                    placeholder="e.g. Police notified, PCR dispatched..."
+                    className="flex-1 px-3 py-1.5 text-xs rounded-lg bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isPending || !quickNote.trim()}
+                    className="px-3 py-1.5 text-xs font-bold rounded-lg bg-[#091329] hover:bg-[#162850] text-white shadow-sm transition-colors"
+                  >
+                    Post Note
+                  </button>
+                </form>
+              </div>
+            )}
+          </div>
 
-          {/* Immutable Audit Trail & Timeline */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-              <h3 className="text-xs font-black uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                <History className="w-4 h-4 text-slate-400" />
+          {/* SECTION G: Immutable Activity Timeline (Audit Trail) */}
+          <div className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-sm space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[#091329] flex items-center gap-1.5">
+                <History className="w-4 h-4 text-slate-500" />
                 Immutable Activity Timeline
               </h3>
-              <span className="text-[10px] text-slate-500">
-                {incident.logs.length} events
+              <span className="text-[10px] text-slate-500 font-medium">
+                {incident.logs.length} logged events
               </span>
             </div>
 
-            <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
+            <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
               {incident.logs.map((log) => {
                 const isDown = log.action === "DOWNGRADED";
                 const isTrigger = log.action === "TRIGGERED";
@@ -1308,21 +1358,21 @@ export function EmergencyIncidentConsoleClient({
                     key={log.id}
                     className={`p-3 rounded-lg border text-xs space-y-1 ${
                       isTrigger
-                        ? "bg-red-950/30 border-red-900/60 text-red-200"
+                        ? "bg-red-50/70 border-red-200 text-red-950"
                         : isDown
-                        ? "bg-amber-950/30 border-amber-900/60 text-amber-200"
+                        ? "bg-amber-50/70 border-amber-200 text-amber-950"
                         : isResolvedAction
-                        ? "bg-emerald-950/30 border-emerald-900/60 text-emerald-200"
+                        ? "bg-emerald-50/70 border-emerald-200 text-emerald-950"
                         : isCall
-                        ? "bg-blue-950/20 border-blue-900/40 text-blue-200"
-                        : "bg-slate-800/50 border-slate-700/60 text-slate-300"
+                        ? "bg-blue-50/70 border-blue-200 text-blue-950"
+                        : "bg-slate-50 border-slate-200 text-slate-800"
                     }`}
                   >
                     <div className="flex items-center justify-between text-[11px] font-bold">
                       <span className="uppercase tracking-wider">
                         {log.action.replace(/_/g, " ")}
                       </span>
-                      <span className="font-mono text-[10px] text-slate-400">
+                      <span className="font-mono text-[10px] text-slate-500">
                         {new Date(log.createdAt).toLocaleTimeString("en-IN", {
                           hour: "2-digit",
                           minute: "2-digit",
@@ -1331,9 +1381,9 @@ export function EmergencyIncidentConsoleClient({
                       </span>
                     </div>
 
-                    <div className="text-slate-200 leading-relaxed">{log.details}</div>
+                    <div className="leading-relaxed">{log.details}</div>
 
-                    <div className="text-[10px] text-slate-400 pt-0.5">
+                    <div className="text-[10px] text-slate-500 pt-0.5">
                       By: {log.authorName}
                     </div>
                   </div>
@@ -1346,48 +1396,48 @@ export function EmergencyIncidentConsoleClient({
 
       {/* MODAL 1: Supervisor Downgrade Approval Modal */}
       {showDowngradeModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border-2 border-red-600 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border-2 border-red-500 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center gap-3">
               <div className="p-3 bg-red-600 rounded-xl text-white">
                 <Lock className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-base font-black text-white uppercase tracking-wider">
+                <h3 className="text-base font-black text-red-950 uppercase tracking-wider">
                   Supervisor Authorization Required
                 </h3>
-                <p className="text-xs text-red-300">
-                  Strict Rule: Downgrading a CODE RED incident requires supervisor approval
+                <p className="text-xs text-red-700">
+                  Strict Governance: Downgrading a CODE RED incident requires supervisor approval
                 </p>
               </div>
             </div>
 
-            <div className="p-3 rounded-lg bg-red-950/50 border border-red-800 text-xs text-red-200 leading-relaxed">
+            <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-950 leading-relaxed">
               You are proposing to downgrade incident{" "}
-              <strong className="text-white">{incident.incidentNumber}</strong> to{" "}
-              <strong className="text-white">
+              <strong className="text-red-900">{incident.incidentNumber}</strong> to{" "}
+              <strong className="text-red-900">
                 {targetDowngradeClassification.replace("_", " ")}
               </strong>
-              . This action is permanently stamped in the supervisor audit log.
+              . This override is permanently stamped in the supervisor audit trail.
             </div>
 
             {downgradeError && (
-              <div className="p-3 text-xs rounded-lg bg-red-950 border border-red-700 text-red-200 font-medium">
+              <div className="p-3 text-xs rounded-lg bg-red-100 border border-red-300 text-red-800 font-medium">
                 {downgradeError}
               </div>
             )}
 
             {!isSupervisor ? (
               <div className="space-y-3">
-                <p className="text-xs text-slate-300">
-                  Your current account does not have supervisor credentials (
-                  <code className="text-red-400">EMERGENCY_INCIDENT_SUPERVISE</code>).
-                  Please contact the on-duty Emergency Supervisor to authorize this change.
+                <p className="text-xs text-slate-600">
+                  Your current account does not hold supervisory credentials (
+                  <code className="text-red-700 font-semibold">EMERGENCY_INCIDENT_SUPERVISE</code>).
+                  Please contact the on-duty Emergency Supervisor to authorize this classification change.
                 </p>
                 <button
                   type="button"
                   onClick={() => setShowDowngradeModal(false)}
-                  className="w-full py-2.5 text-xs font-bold rounded-lg bg-slate-800 hover:bg-slate-700 text-white"
+                  className="w-full py-2.5 text-xs font-bold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700"
                 >
                   Close
                 </button>
@@ -1395,7 +1445,7 @@ export function EmergencyIncidentConsoleClient({
             ) : (
               <form onSubmit={handleConfirmDowngrade} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Supervisor Justification / Clinical Assessment *
                   </label>
                   <textarea
@@ -1404,7 +1454,7 @@ export function EmergencyIncidentConsoleClient({
                     value={downgradeReason}
                     onChange={(e) => setDowngradeReason(e.target.value)}
                     placeholder="State reason: e.g. Contacted family; elder had accidental SOS press; verified fully conscious and vitals steady."
-                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-red-500 resize-none"
+                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-red-500 resize-none"
                   />
                 </div>
 
@@ -1412,14 +1462,14 @@ export function EmergencyIncidentConsoleClient({
                   <button
                     type="button"
                     onClick={() => setShowDowngradeModal(false)}
-                    className="flex-1 py-2.5 text-xs font-bold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                    className="flex-1 py-2.5 text-xs font-bold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isPending}
-                    className="flex-1 py-2.5 text-xs font-black uppercase tracking-wider rounded-lg bg-red-600 hover:bg-red-500 text-white shadow"
+                    className="flex-1 py-2.5 text-xs font-black uppercase tracking-wider rounded-lg bg-red-600 hover:bg-red-700 text-white shadow-sm"
                   >
                     {isPending ? "Authorizing..." : "Authorize Downgrade"}
                   </button>
@@ -1432,36 +1482,36 @@ export function EmergencyIncidentConsoleClient({
 
       {/* MODAL 2: Resolve & Close Incident Modal */}
       {showResolveModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center gap-3">
               <div className="p-3 bg-emerald-600 rounded-xl text-white">
                 <CheckCircle2 className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">
+                <h3 className="text-base font-bold text-[#091329]">
                   Resolve Emergency Incident
                 </h3>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-500">
                   Complete incident closure & terminate location telemetry
                 </p>
               </div>
             </div>
 
-            <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-300 leading-relaxed">
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700 leading-relaxed">
               Closing this incident will set status to <strong>RESOLVED</strong> and immediately
-              cut off GPS streaming (HTTP 410 Gone).
+              cut off GPS streaming (HTTP 410 Gone) in compliance with privacy protocols.
             </div>
 
             {resolveError && (
-              <div className="p-3 text-xs rounded-lg bg-red-950 border border-red-700 text-red-200 font-medium">
+              <div className="p-3 text-xs rounded-lg bg-red-100 border border-red-300 text-red-800 font-medium">
                 {resolveError}
               </div>
             )}
 
             <form onSubmit={handleConfirmResolve} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Resolution Summary *
                 </label>
                 <textarea
@@ -1470,7 +1520,7 @@ export function EmergencyIncidentConsoleClient({
                   value={resolutionNotes}
                   onChange={(e) => setResolutionNotes(e.target.value)}
                   placeholder="e.g. Field responder attended scene. Attending doctor stabilized elder. Member safe in family care. Incident closed."
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 resize-none"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 resize-none"
                 />
               </div>
 
@@ -1478,14 +1528,14 @@ export function EmergencyIncidentConsoleClient({
                 <button
                   type="button"
                   onClick={() => setShowResolveModal(false)}
-                  className="flex-1 py-2.5 text-xs font-bold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                  className="flex-1 py-2.5 text-xs font-bold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="flex-1 py-2.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow"
+                  className="flex-1 py-2.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
                 >
                   {isPending ? "Closing..." : "Close & Resolve Incident"}
                 </button>

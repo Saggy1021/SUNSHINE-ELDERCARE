@@ -68,9 +68,7 @@ export function EmergencyAudioAlert({
 
   useEffect(() => {
     if (unacknowledgedCodeRedCount > 0 && !muted) {
-      // Play immediately
       playChime();
-      // Repeat alert pulse every 4 seconds until acknowledged
       intervalRef.current = setInterval(() => {
         playChime();
       }, 4000);
@@ -94,19 +92,19 @@ export function EmergencyAudioAlert({
       {unacknowledgedCodeRedCount > 0 && (
         <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-full bg-red-600 text-white animate-pulse shadow-sm">
           <BellRing className="w-3.5 h-3.5 animate-bounce" />
-          {unacknowledgedCodeRedCount} CODE RED ALERT
+          {unacknowledgedCodeRedCount} CODE RED
         </span>
       )}
       <button
         type="button"
         onClick={toggleMute}
         title={muted ? "Unmute Emergency Alerts" : "Mute Emergency Alerts"}
-        className={`p-1.5 rounded-lg border transition-colors ${
+        className={`p-1.5 rounded-lg border transition-colors shadow-sm ${
           muted
-            ? "bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200"
+            ? "bg-white text-slate-400 border-slate-200 hover:text-slate-600 hover:bg-slate-50"
             : unacknowledgedCodeRedCount > 0
-            ? "bg-red-500/20 text-red-300 border-red-500/40 hover:bg-red-500/30"
-            : "bg-slate-800 text-emerald-400 border-slate-700 hover:text-emerald-300"
+            ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100"
+            : "bg-white text-emerald-600 border-slate-200 hover:bg-slate-50"
         }`}
       >
         {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}

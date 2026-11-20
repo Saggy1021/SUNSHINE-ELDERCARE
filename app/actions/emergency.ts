@@ -1,6 +1,7 @@
 "use server";
 
 import { auth } from "@/auth";
+import { db } from "@/lib/db";
 import { AuthorizationService } from "@/lib/services/authorization";
 import {
   EmergencyService,
@@ -204,3 +205,72 @@ export async function getEmergencyHistoryAction(params: {
     limit: params.limit,
   });
 }
+
+export interface EmergencyMemberSearchResult {
+  id: string; // userId
+  memberId: string | null;
+  name: string;
+  phone: string | null;
+  alternatePhone: string | null;
+  address: string | null;
+  landmark: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+}
+
+export async function searchEmergencyMembersCore(
+  query: string
+): Promise<EmergencyMemberSearchResult[]> {
+  const q = query?.trim();
+  if (!q || q.length < 2) {
+    return [];
+  }
+
+  const profiles = await db.memberProfile.findMany({
+    where: {
+      OR: [
+        { firstName: { contains: q, mode: "insensitive" } },
+        { lastName: { contains: q, mode: "insensitive" } },
+        { memberId: { contains: q, mode: "insensitive" } },
+        { mobileNumber: { contains: q, mode: "insensitive" } },
+        { alternateNumber: { contains: q, mode: "insensitive" } },
+      ],
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          emergencyContact: true,
+        },
+      },
+      sponsor: true,
+    },
+    take: 12,
+  });
+
+  return profiles.map((p) => {
+    const fullName = `${p.salutation || ""} ${p.firstName} ${p.lastName}`.trim();
+    return {
+      id: p.userId,
+      memberId: p.memberId || null,
+      name: fullName,
+      phone: p.mobileNumber || null,
+      alternatePhone: p.alternateNumber || null,
+      address: p.serviceAddress || null,
+      landmark: p.nearestLandmark || null,
+      emergencyContactName:
+        p.user?.emergencyContact?.fullName || p.sponsor?.fullName || null,
+      emergencyContactPhone:
+        p.user?.emergencyContact?.phone || p.sponsor?.mobileNumber || null,
+    };
+  });
+}
+
+export async function searchEmergencyMembersAction(
+  query: string
+): Promise<EmergencyMemberSearchResult[]> {
+  await requireEmergencyUser();
+  return searchEmergencyMembersCore(query);
+}
+
