@@ -119,26 +119,40 @@ export async function GET(req: NextRequest) {
       },
     ];
 
-    const events = [
-      {
-        id: "event-1",
-        date: "24",
-        month: "NOV",
-        title: "Senior Wellness & Health Checkup",
-        description: "Comprehensive geriatric health & vitals assessment session",
-        location: "Kolkata Centre / Home Visit",
-        time: "10:00 AM - 1:00 PM",
+    // Query active published community events for all active members
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dbEvents = await db.communityEvent.findMany({
+      where: {
+        status: "PUBLISHED",
+        visibleToAll: true,
+        eventDate: { gte: todayStart },
       },
-      {
-        id: "event-2",
-        date: "05",
-        month: "DEC",
-        title: "Sunshine Elders Morning Tea & Social",
-        description: "Community engagement, gentle yoga and wellness conversation",
-        location: "Salt Lake Community Centre",
-        time: "11:00 AM - 1:00 PM",
-      },
+      orderBy: { eventDate: "asc" },
+      take: 10,
+    });
+
+    const monthNames = [
+      "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+      "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"
     ];
+
+    const events = dbEvents.map((e) => {
+      const d = new Date(e.eventDate);
+      const day = d.getDate().toString().padStart(2, "0");
+      const month = monthNames[d.getMonth()] || "EVENT";
+      const timeStr = e.endTime ? `${e.startTime} - ${e.endTime}` : e.startTime;
+
+      return {
+        id: e.id,
+        date: day,
+        month: month,
+        title: e.title,
+        description: e.description,
+        location: e.venue,
+        time: timeStr,
+      };
+    });
 
     return NextResponse.json({
       success: true,

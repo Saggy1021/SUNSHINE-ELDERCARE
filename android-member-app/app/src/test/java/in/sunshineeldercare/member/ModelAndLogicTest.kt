@@ -266,4 +266,62 @@ class ModelAndLogicTest {
         assertEquals(22.5726, decoded.latitude ?: 0.0, 0.0001)
         assertEquals(88.3639, decoded.longitude ?: 0.0, 0.0001)
     }
+
+    @Test
+    fun testComplaintSerializationAndStatusMapping() {
+        val testJson = Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+            encodeDefaults = true
+        }
+        val req = `in`.sunshineeldercare.member.data.model.SubmitComplaintRequest(
+            category = "Service-related Complaints",
+            subject = "Delayed Caretaker Visit",
+            description = "The scheduled morning visit arrived 45 minutes late today."
+        )
+        val jsonStr = testJson.encodeToString(`in`.sunshineeldercare.member.data.model.SubmitComplaintRequest.serializer(), req)
+        assertTrue(jsonStr.contains("Delayed Caretaker Visit"))
+
+        val dto = `in`.sunshineeldercare.member.data.model.MemberComplaintDto(
+            id = "cmp_123",
+            complaintNumber = "CMP-1001",
+            category = "Service-related Complaints",
+            subject = "Delayed Caretaker Visit",
+            description = "The scheduled morning visit arrived 45 minutes late today.",
+            status = "RESOLVED",
+            adminResponse = "Care coordinator has spoken to the family and rescheduled future visits."
+        )
+        val dtoJson = testJson.encodeToString(`in`.sunshineeldercare.member.data.model.MemberComplaintDto.serializer(), dto)
+        assertTrue(dtoJson.contains("CMP-1001"))
+        assertTrue(dtoJson.contains("RESOLVED"))
+
+        val decodedDto = testJson.decodeFromString(`in`.sunshineeldercare.member.data.model.MemberComplaintDto.serializer(), dtoJson)
+        assertEquals("CMP-1001", decodedDto.complaintNumber)
+        assertEquals("RESOLVED", decodedDto.status)
+        assertEquals("Care coordinator has spoken to the family and rescheduled future visits.", decodedDto.adminResponse)
+    }
+
+    @Test
+    fun testUpcomingEventDto() {
+        val testJson = Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+            encodeDefaults = true
+        }
+        val event = `in`.sunshineeldercare.member.data.model.CalendarEventDto(
+            id = "ev_1",
+            date = "25",
+            month = "NOV",
+            title = "Elderly Health & Vitals Camp",
+            description = "Routine geriatric wellness check",
+            location = "Salt Lake Community Centre",
+            time = "10:00 AM - 01:00 PM"
+        )
+        val jsonStr = testJson.encodeToString(`in`.sunshineeldercare.member.data.model.CalendarEventDto.serializer(), event)
+        assertTrue(jsonStr.contains("Elderly Health & Vitals Camp"))
+        val decoded = testJson.decodeFromString(`in`.sunshineeldercare.member.data.model.CalendarEventDto.serializer(), jsonStr)
+        assertEquals("25", decoded.date)
+        assertEquals("NOV", decoded.month)
+        assertEquals("Salt Lake Community Centre", decoded.location)
+    }
 }

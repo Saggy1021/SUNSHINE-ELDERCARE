@@ -13,6 +13,9 @@ import `in`.sunshineeldercare.member.data.model.SetPasswordRequest
 import `in`.sunshineeldercare.member.data.model.SetPasswordResponse
 import `in`.sunshineeldercare.member.data.model.SosTriggerRequest
 import `in`.sunshineeldercare.member.data.model.SosTriggerResponse
+import `in`.sunshineeldercare.member.data.model.SubmitComplaintRequest
+import `in`.sunshineeldercare.member.data.model.SubmitComplaintResponse
+import `in`.sunshineeldercare.member.data.model.MemberComplaintsResponse
 import `in`.sunshineeldercare.member.data.model.TelemetryRequest
 import `in`.sunshineeldercare.member.data.model.TelemetryResponse
 import `in`.sunshineeldercare.member.data.model.VerifyActivationRequest
@@ -62,4 +65,10 @@ interface MobileApiService {
 
     @GET("api/receipts/{id}/download")
     suspend fun downloadReceipt(@Path("id") receiptId: String): Response<ResponseBody>
+
+    @GET("api/member/complaints")
+    suspend fun getComplaints(): Response<MemberComplaintsResponse>
+
+    @POST("api/member/complaints")
+    suspend fun submitComplaint(@Body request: SubmitComplaintRequest): Response<SubmitComplaintResponse>
 }

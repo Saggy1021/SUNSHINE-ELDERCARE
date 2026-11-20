@@ -52,6 +52,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   const navItems = [
     { name: "Dashboard", href: "/admin", icon: <Activity className="h-4 w-4" /> },
     { name: "Members", href: "/admin/members", icon: <Users className="h-4 w-4" /> },
+    { name: "Events", href: "/admin/events", icon: <CalendarDays className="h-4 w-4 text-[#B08A4A]" /> },
     { name: "Renewals", href: "/admin/renewals", icon: <RefreshCw className="h-4 w-4" /> },
     { name: "Payments", href: "/admin/payments", icon: <Receipt className="h-4 w-4" /> },
     { name: "Inquiries", href: "/admin/inquiries", icon: <ClipboardList className="h-4 w-4" /> },
@@ -84,7 +85,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
 
   const hasEmergency = isOwner || await AuthorizationService.hasEmergencyAccess(session.user.id, session.user.email);
   if (hasEmergency) {
-    navItems.push({ name: "EmergencyOS", href: "/emergencyos", icon: <Siren className="h-4 w-4 text-red-500" /> });
+    navItems.push({ name: "EmergencyOS", href: "/admin/emergencyos", icon: <Siren className="h-4 w-4 text-red-500" /> });
   }
 
   return (

@@ -4,8 +4,10 @@ import `in`.sunshineeldercare.member.data.api.ApiClient
 import `in`.sunshineeldercare.member.data.api.ApiErrorParser
 import `in`.sunshineeldercare.member.data.model.DashboardResponse
 import `in`.sunshineeldercare.member.data.model.DocumentsResponse
+import `in`.sunshineeldercare.member.data.model.MemberComplaintDto
 import `in`.sunshineeldercare.member.data.model.ProfileResponse
 import `in`.sunshineeldercare.member.data.model.ProfileUpdateRequest
+import `in`.sunshineeldercare.member.data.model.SubmitComplaintRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -85,6 +87,44 @@ class MemberRepository {
             }
         } catch (e: Exception) {
             val msg = ApiErrorParser.mapThrowable(e, "Failed to load documents.")
+            Result.failure(Exception(msg))
+        }
+    }
+
+    suspend fun getComplaints(): Result<List<MemberComplaintDto>> = withContext(Dispatchers.IO) {
+        try {
+            val res = api.getComplaints()
+            if (res.isSuccessful && res.body()?.success == true) {
+                Result.success(res.body()?.complaints ?: emptyList())
+            } else {
+                val errorMsg = if (res.isSuccessful) {
+                    res.body()?.error ?: "Failed to load complaints"
+                } else {
+                    ApiErrorParser.parse(res, "Failed to load complaints")
+                }
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            val msg = ApiErrorParser.mapThrowable(e, "Failed to load complaints.")
+            Result.failure(Exception(msg))
+        }
+    }
+
+    suspend fun submitComplaint(category: String, subject: String, description: String): Result<MemberComplaintDto> = withContext(Dispatchers.IO) {
+        try {
+            val res = api.submitComplaint(SubmitComplaintRequest(category, subject, description))
+            if (res.isSuccessful && res.body()?.success == true && res.body()?.complaint != null) {
+                Result.success(res.body()!!.complaint!!)
+            } else {
+                val errorMsg = if (res.isSuccessful) {
+                    res.body()?.error ?: "Failed to submit complaint"
+                } else {
+                    ApiErrorParser.parse(res, "Failed to submit complaint")
+                }
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            val msg = ApiErrorParser.mapThrowable(e, "Failed to submit complaint.")
             Result.failure(Exception(msg))
         }
     }
