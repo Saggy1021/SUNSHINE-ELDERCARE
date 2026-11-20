@@ -37,26 +37,37 @@ export async function GET(req: NextRequest) {
       where.status = status;
     }
 
-    const [complaints, totalCount, newCount, inProgressCount, resolvedCount] =
-      await Promise.all([
-        db.memberComplaint.findMany({
-          where,
-          orderBy: { createdAt: "desc" },
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
+    const [complaints, statusCounts] = await Promise.all([
+      db.memberComplaint.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
             },
           },
-        }),
-        db.memberComplaint.count(),
-        db.memberComplaint.count({ where: { status: "NEW" } }),
-        db.memberComplaint.count({ where: { status: "IN_PROGRESS" } }),
-        db.memberComplaint.count({ where: { status: "RESOLVED" } }),
-      ]);
+        },
+      }),
+      db.$queryRaw<Array<{ status: string; count: number }>>`
+        SELECT status, count(*)::int as count FROM "MemberComplaint" GROUP BY status;
+      `,
+    ]);
+
+    let totalCount = 0;
+    let newCount = 0;
+    let inProgressCount = 0;
+    let resolvedCount = 0;
+
+    for (const row of statusCounts) {
+      const c = Number(row.count) || 0;
+      totalCount += c;
+      if (row.status === "NEW") newCount = c;
+      else if (row.status === "IN_PROGRESS") inProgressCount = c;
+      else if (row.status === "RESOLVED") resolvedCount = c;
+    }
 
     return NextResponse.json({
       success: true,

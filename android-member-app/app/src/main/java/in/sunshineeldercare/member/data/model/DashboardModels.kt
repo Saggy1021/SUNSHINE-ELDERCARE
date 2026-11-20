@@ -10,7 +10,41 @@ data class DashboardResponse(
     val membership: DashboardMembershipDto? = null,
     val recentReceipts: List<ReceiptSummaryDto> = emptyList(),
     val systemNotifications: List<NotificationDto> = emptyList(),
-    val events: List<CalendarEventDto> = emptyList()
+    val events: List<CalendarEventDto> = emptyList(),
+    val assignedVisits: List<AssignedVisitDto> = emptyList(),
+    val activeIncident: EmergencyIncidentSummaryDto? = null,
+    val recentComplaints: List<MemberComplaintDto> = emptyList()
+)
+
+@Serializable
+data class AssignedVisitDto(
+    val id: String = "",
+    val status: String = "SCHEDULED", // SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED
+    val scheduledStart: String = "",
+    val scheduledEnd: String = "",
+    val displayDate: String = "",
+    val displayTime: String = "",
+    val category: String = "Scheduled Care Visit",
+    val operationalNotes: String? = null,
+    val employee: AssignedEmployeeDto? = null
+)
+
+@Serializable
+data class AssignedEmployeeDto(
+    val id: String = "",
+    val employeeId: String = "",
+    val name: String = "",
+    val designation: String = "",
+    val contactNumber: String? = null
+)
+
+@Serializable
+data class EmergencyIncidentSummaryDto(
+    val id: String = "",
+    val incidentNumber: String = "",
+    val status: String = "",
+    val classification: String = "",
+    val triggeredAt: String = ""
 )
 
 @Serializable

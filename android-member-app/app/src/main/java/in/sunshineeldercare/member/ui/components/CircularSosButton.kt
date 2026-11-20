@@ -126,6 +126,7 @@ fun CircularSosButton(
                     activeIncidentId = body.incidentId
                     activeIncidentNumber = body.incidentNumber
                     showActiveEmergencyDialog = true
+                    `in`.sunshineeldercare.member.data.repository.LiveRefreshManager.isSosActive = true
 
                     // Start background GPS streaming foreground service if incident ID returned
                     if (!body.incidentId.isNullOrBlank()) {
@@ -520,6 +521,7 @@ fun CircularSosButton(
                         onClick = {
                             // Stop emergency streaming service
                             EmergencyLocationService.stop(context)
+                            `in`.sunshineeldercare.member.data.repository.LiveRefreshManager.isSosActive = false
                             showActiveEmergencyDialog = false
                         },
                         shape = RoundedCornerShape(12.dp),

@@ -324,4 +324,134 @@ class ModelAndLogicTest {
         assertEquals("NOV", decoded.month)
         assertEquals("Salt Lake Community Centre", decoded.location)
     }
+
+    @Test
+    fun testAssignedVisitDtoSerialization() {
+        val testJson = Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+            encodeDefaults = true
+        }
+
+        val visit = `in`.sunshineeldercare.member.data.model.AssignedVisitDto(
+            id = "visit_101",
+            status = "SCHEDULED",
+            scheduledStart = "2026-11-22T05:00:00.000Z",
+            scheduledEnd = "2026-11-22T06:00:00.000Z",
+            displayDate = "22 Nov 2026",
+            displayTime = "10:30 am - 11:30 am",
+            category = "Physician Checkup",
+            employee = `in`.sunshineeldercare.member.data.model.AssignedEmployeeDto(
+                id = "emp_201",
+                employeeId = "SEC184SAAR",
+                name = "Maxi Kumar",
+                designation = "Senior Care Associate",
+                contactNumber = "7980718556"
+            )
+        )
+
+        val jsonStr = testJson.encodeToString(`in`.sunshineeldercare.member.data.model.AssignedVisitDto.serializer(), visit)
+        assertTrue(jsonStr.contains("visit_101"))
+        assertTrue(jsonStr.contains("Maxi Kumar"))
+        assertTrue(jsonStr.contains("Senior Care Associate"))
+        assertTrue(jsonStr.contains("7980718556"))
+
+        val decoded = testJson.decodeFromString(`in`.sunshineeldercare.member.data.model.AssignedVisitDto.serializer(), jsonStr)
+        assertEquals("visit_101", decoded.id)
+        assertEquals("SCHEDULED", decoded.status)
+        assertEquals("Maxi Kumar", decoded.employee?.name)
+        assertEquals("7980718556", decoded.employee?.contactNumber)
+    }
+
+    @Test
+    fun testDashboardResponseWithAssignedVisitsAndLiveRefresh() {
+        val rawJson = """
+            {
+                "success": true,
+                "member": {
+                    "id": "cmv5j9l6d00014uplaumg7m8l",
+                    "memberId": "SECD1000TAAM",
+                    "name": "Tanish Alam",
+                    "email": "tanishalam61@gmail.com",
+                    "gender": "Male",
+                    "phone": "7980721244"
+                },
+                "membership": {
+                    "id": "sub_1",
+                    "planName": "Shield Shine",
+                    "category": "Single",
+                    "status": "ACTIVE",
+                    "daysRemaining": 300
+                },
+                "assignedVisits": [
+                    {
+                        "id": "cv_1",
+                        "status": "SCHEDULED",
+                        "scheduledStart": "2026-11-25T05:00:00.000Z",
+                        "scheduledEnd": "2026-11-25T06:00:00.000Z",
+                        "displayDate": "25 Nov 2026",
+                        "displayTime": "10:30 am - 11:30 am",
+                        "category": "Scheduled Care Visit",
+                        "employee": {
+                            "id": "emp_1",
+                            "employeeId": "SEC101SAAR",
+                            "name": "Sagnik Kar",
+                            "designation": "Care Lead",
+                            "contactNumber": "9830012345"
+                        }
+                    },
+                    {
+                        "id": "cv_2",
+                        "status": "SCHEDULED",
+                        "scheduledStart": "2026-11-28T05:00:00.000Z",
+                        "scheduledEnd": "2026-11-28T06:00:00.000Z",
+                        "displayDate": "28 Nov 2026",
+                        "displayTime": "10:30 am - 11:30 am",
+                        "category": "Physiotherapy Visit",
+                        "employee": null
+                    }
+                ],
+                "activeIncident": {
+                    "id": "inc_99",
+                    "incidentNumber": "EMG-20261121-001",
+                    "status": "DISPATCHED",
+                    "classification": "CODE_RED",
+                    "triggeredAt": "2026-11-21T00:00:00.000Z"
+                },
+                "recentComplaints": [
+                    {
+                        "id": "cmp_1",
+                        "complaintNumber": "CMP-1002",
+                        "category": "Service-related Complaints",
+                        "subject": "Follow up on schedule",
+                        "description": "Please confirm next week visit",
+                        "status": "RESOLVED",
+                        "adminResponse": "Confirmed with care lead.",
+                        "createdAt": "2026-11-20T18:00:00.000Z"
+                    }
+                ]
+            }
+        """.trimIndent()
+
+        val parsed = json.decodeFromString(DashboardResponse.serializer(), rawJson)
+        assertTrue(parsed.success)
+        assertEquals("SECD1000TAAM", parsed.member?.memberId)
+        assertEquals(2, parsed.assignedVisits.size)
+
+        // First visit has assigned caregiver
+        val v1 = parsed.assignedVisits[0]
+        assertEquals("Sagnik Kar", v1.employee?.name)
+        assertEquals("Care Lead", v1.employee?.designation)
+        assertEquals("9830012345", v1.employee?.contactNumber)
+
+        // Second visit has no assigned caregiver
+        val v2 = parsed.assignedVisits[1]
+        org.junit.Assert.assertNull(v2.employee)
+
+        // Active incident & complaints check
+        assertNotNull(parsed.activeIncident)
+        assertEquals("EMG-20261121-001", parsed.activeIncident?.incidentNumber)
+        assertEquals(1, parsed.recentComplaints.size)
+        assertEquals("CMP-1002", parsed.recentComplaints[0].complaintNumber)
+    }
 }

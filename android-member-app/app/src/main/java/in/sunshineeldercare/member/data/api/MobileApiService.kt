@@ -52,7 +52,9 @@ interface MobileApiService {
     suspend fun sendTelemetry(@Body request: TelemetryRequest): Response<TelemetryResponse>
 
     @GET("api/member/dashboard")
-    suspend fun getDashboard(): Response<DashboardResponse>
+    suspend fun getDashboard(
+        @retrofit2.http.Header("If-None-Match") ifNoneMatch: String? = null
+    ): Response<DashboardResponse>
 
     @GET("api/member/profile")
     suspend fun getProfile(): Response<ProfileResponse>

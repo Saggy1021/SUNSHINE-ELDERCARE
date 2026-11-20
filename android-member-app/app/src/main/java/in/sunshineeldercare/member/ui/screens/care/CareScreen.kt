@@ -7,8 +7,10 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,9 +26,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonOutline
 import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -34,7 +36,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -49,7 +50,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import `in`.sunshineeldercare.member.ui.theme.BorderGold
 import `in`.sunshineeldercare.member.ui.theme.CardBackground
 import `in`.sunshineeldercare.member.ui.theme.EmeraldActive
 import `in`.sunshineeldercare.member.ui.theme.EmeraldBg
@@ -58,8 +58,8 @@ import `in`.sunshineeldercare.member.ui.theme.IvoryBackground
 import `in`.sunshineeldercare.member.ui.theme.NavyDark
 import `in`.sunshineeldercare.member.ui.theme.TextSecondary
 
-private const val CARE_DESK_PHONE = "+919088882222"
-private const val CARE_DESK_DISPLAY = "+91 90888 82222"
+private const val HELPLINE_PHONE = "03340585515"
+private const val HELPLINE_DISPLAY = "033-40585515"
 
 @Composable
 fun CareScreen(
@@ -97,7 +97,7 @@ fun CareScreen(
             )
 
             Text(
-                text = "Review your enrolled healthcare benefits, care management team, and scheduled visit logs.",
+                text = "Review your enrolled healthcare benefits, assigned care staff, and scheduled visit logs.",
                 fontSize = 12.sp,
                 color = TextSecondary,
                 lineHeight = 16.sp
@@ -105,86 +105,243 @@ fun CareScreen(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // Dedicated Care Coordination Desk Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = CardBackground),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+            // --- Section 1: Assigned Care Staff ---
+            Text(
+                text = "ASSIGNED CARE STAFF",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = GoldPrimary,
+                letterSpacing = 1.sp
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            val upcomingVisits = state.data?.assignedVisits?.filter {
+                it.status == "SCHEDULED" || it.status == "IN_PROGRESS"
+            } ?: emptyList()
+
+            if (upcomingVisits.isNotEmpty()) {
+                upcomingVisits.forEach { visit ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = CardBackground),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                     ) {
-                        Text(
-                            text = "DEDICATED CARE DESK",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = NavyDark,
-                            letterSpacing = 0.5.sp,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(50))
-                                .background(EmeraldBg)
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text("Active", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = EmeraldActive)
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            // Top Row: Scheduled Date/Time & Visit Status Badge
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CalendarMonth,
+                                        contentDescription = null,
+                                        tint = GoldPrimary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "${visit.displayDate} · ${visit.displayTime}",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = NavyDark
+                                    )
+                                }
+
+                                val isOngoing = visit.status == "IN_PROGRESS"
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (isOngoing) EmeraldBg else Color(0xFFF1F5F9))
+                                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                                ) {
+                                    Text(
+                                        text = if (isOngoing) "IN PROGRESS" else "SCHEDULED",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isOngoing) EmeraldActive else Color(0xFF475569)
+                                    )
+                                }
+                            }
+
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 12.dp),
+                                color = Color(0xFFF1F5F9)
+                            )
+
+                            val emp = visit.employee
+                            if (emp != null && emp.name.isNotBlank()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Employee Initials Badge
+                                    val initials = emp.name.split(" ")
+                                        .mapNotNull { it.firstOrNull()?.toString() }
+                                        .take(2)
+                                        .joinToString("")
+
+                                    Box(
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clip(CircleShape)
+                                            .background(NavyDark),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = initials.ifBlank { "SE" },
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = GoldPrimary
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.width(12.dp))
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = emp.name,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = NavyDark
+                                        )
+                                        Text(
+                                            text = emp.designation.ifBlank { "Care Professional" },
+                                            fontSize = 11.sp,
+                                            color = TextSecondary
+                                        )
+                                        if (!emp.contactNumber.isNullOrBlank()) {
+                                            Text(
+                                                text = emp.contactNumber,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = GoldPrimary,
+                                                fontFamily = FontFamily.Monospace
+                                            )
+                                        }
+                                    }
+
+                                    if (!emp.contactNumber.isNullOrBlank()) {
+                                        Button(
+                                            onClick = {
+                                                val intent = Intent(
+                                                    Intent.ACTION_DIAL,
+                                                    Uri.parse("tel:${emp.contactNumber}")
+                                                )
+                                                context.startActivity(intent)
+                                            },
+                                            colors = navyButtonColors(),
+                                            shape = RoundedCornerShape(10.dp),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Phone,
+                                                contentDescription = "Call",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "Call",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                // No caregiver assigned yet to this scheduled visit
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFFF1F5F9)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.PersonOutline,
+                                            contentDescription = null,
+                                            tint = Color(0xFF64748B),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.width(12.dp))
+
+                                    Column {
+                                        Text(
+                                            text = "Care professional not yet assigned.",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = NavyDark
+                                        )
+                                        Text(
+                                            text = "Care coordination team will allocate your dedicated professional prior to the visit.",
+                                            fontSize = 10.sp,
+                                            color = TextSecondary,
+                                            lineHeight = 14.sp
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
+                }
+            } else {
+                // No upcoming visits currently scheduled
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = CardBackground),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(48.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(NavyDark),
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFF1F5F9)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("SC", color = GoldPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Icon(
+                                imageVector = Icons.Default.PersonOutline,
+                                contentDescription = null,
+                                tint = Color(0xFF64748B),
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
 
                         Spacer(modifier = Modifier.width(12.dp))
 
-                        Column(modifier = Modifier.weight(1f)) {
+                        Column {
                             Text(
-                                text = "Sunshine Care Coordination Desk",
-                                fontSize = 14.sp,
+                                text = "Care professional not yet assigned.",
+                                fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = NavyDark
                             )
                             Text(
-                                text = "Supervised by Senior Clinical Lead",
+                                text = "No active care visits are currently scheduled on your membership profile.",
                                 fontSize = 11.sp,
-                                color = TextSecondary
+                                color = TextSecondary,
+                                lineHeight = 15.sp
                             )
-                            Text(
-                                text = CARE_DESK_DISPLAY,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace,
-                                color = GoldPrimary
-                            )
-                        }
-
-                        IconButton(
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$CARE_DESK_PHONE"))
-                                context.startActivity(intent)
-                            },
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(EmeraldActive)
-                        ) {
-                            Icon(imageVector = Icons.Default.Phone, contentDescription = "Call", tint = Color.White)
                         }
                     }
                 }
@@ -192,7 +349,7 @@ fun CareScreen(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // Enrolled Plan Services Card
+            // --- Enrolled Plan Services Card (Preserved) ---
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
@@ -252,7 +409,7 @@ fun CareScreen(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // Schedule Physician / Attendant Visit Card
+            // --- Schedule Physician / Attendant Visit Card ---
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
@@ -273,7 +430,7 @@ fun CareScreen(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = "Need to reschedule a routine checkup or request an extra medical escort? Contact your care manager at $CARE_DESK_DISPLAY.",
+                        text = "Need to reschedule a routine checkup or request an extra medical escort? Contact the care coordination desk at $HELPLINE_DISPLAY.",
                         fontSize = 11.sp,
                         color = TextSecondary,
                         lineHeight = 16.sp
@@ -283,7 +440,7 @@ fun CareScreen(
 
                     Button(
                         onClick = {
-                            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$CARE_DESK_PHONE"))
+                            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$HELPLINE_PHONE"))
                             context.startActivity(intent)
                         },
                         colors = navyButtonColors(),

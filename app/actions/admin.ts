@@ -1,5 +1,6 @@
 "use server"
 
+import { cache } from "react"
 import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { Prisma } from "@prisma/client"
@@ -392,10 +393,10 @@ export async function getNeedsAttentionQueueCore(database: any = db) {
   return { pendingRenewals, newInquiries, unresolvedFeedback, pendingPayments }
 }
 
-export async function getNeedsAttentionQueue() {
+export const getNeedsAttentionQueue = cache(async () => {
   await requirePermission("MEMBER_VIEW")
   return getNeedsAttentionQueueCore(db)
-}
+})
 
 // --- Members Core Query ---
 export async function getMembersCore(
@@ -457,6 +458,231 @@ export async function getMembersCore(
         }
       ]
     };
+  }
+
+  // Fast optimized SQL path
+  if (typeof database.$queryRaw === "function") {
+    try {
+      const offset = (page - 1) * limit;
+      const statusCondition = onlyArchived
+        ? Prisma.sql`AND u.status = 'ARCHIVED'`
+        : Prisma.sql`AND u.status != 'ARCHIVED'`;
+
+      let searchCondition = Prisma.empty;
+      if (query && query.trim()) {
+        const qTrim = query.trim();
+        const unslashed = qTrim.replace(/[\/\s-]/g, "");
+        const pattern = `%${qTrim}%`;
+        const unslashedPattern = `%${unslashed}%`;
+
+        searchCondition = Prisma.sql`
+          AND (
+            u.name ILIKE ${pattern} OR
+            u.email ILIKE ${pattern} OR
+            mp."memberId" ILIKE ${pattern} OR
+            mp."memberId" ILIKE ${unslashedPattern} OR
+            mp."mobileNumber" ILIKE ${pattern} OR
+            mp."spouseMobileNumber" ILIKE ${pattern}
+          )
+        `;
+      }
+
+      const [rawRows, total, archivedCount] = await Promise.all([
+        database.$queryRaw(Prisma.sql`
+          WITH genuine_users AS (
+            SELECT 
+              u.id,
+              ROW_NUMBER() OVER (ORDER BY u."createdAt" ASC)::int AS "serialNumber"
+            FROM "User" u
+            LEFT JOIN "MemberProfile" mp ON mp."userId" = u.id
+            WHERE u.email NOT IN (${Prisma.join(EXCLUDED_MEMBER_EMAILS)})
+              AND u.status != 'ARCHIVED'
+              AND (u.role = 'MEMBER' OR mp."memberId" IS NOT NULL OR EXISTS (SELECT 1 FROM "Subscription" s WHERE s."userId" = u.id))
+          )
+          SELECT 
+            u.id,
+            u.name,
+            u.email,
+            u.role,
+            u.status,
+            u."createdAt",
+            gu."serialNumber",
+            mp.id AS "profileId",
+            mp."memberId",
+            mp.salutation,
+            mp."firstName",
+            mp."lastName",
+            mp."spouseSalutation",
+            mp."spouseFirstName",
+            mp."spouseLastName",
+            mp."spouseMobileNumber",
+            mp."dateOfEnrollment",
+            mp."serviceAddress",
+            mp."mobileNumber",
+            mp."bloodGroup",
+            mp."medicalConditions",
+            mp."preferredVisitDay",
+            mp."preferredVisitTime",
+            sub.id AS "subId",
+            sub.status AS "subStatus",
+            sub."startDate" AS "subStartDate",
+            sub."endDate" AS "subEndDate",
+            sub."durationMonths" AS "subDurationMonths",
+            sub."variantType" AS "subVariantType",
+            cp.name AS "carePlanName",
+            ins."providerName" AS "insuranceProvider",
+            v."scheduledStart" AS "scheduledVisitDate"
+          FROM "User" u
+          LEFT JOIN genuine_users gu ON gu.id = u.id
+          LEFT JOIN "MemberProfile" mp ON mp."userId" = u.id
+          LEFT JOIN LATERAL (
+            SELECT s.id, s.status, s."startDate", s."endDate", s."durationMonths", s."variantType", s."carePlanId"
+            FROM "Subscription" s
+            WHERE s."userId" = u.id
+            ORDER BY s."createdAt" DESC
+            LIMIT 1
+          ) sub ON true
+          LEFT JOIN "CarePlan" cp ON sub."carePlanId" = cp.id
+          LEFT JOIN "InsuranceDetails" ins ON ins."memberProfileId" = mp.id
+          LEFT JOIN LATERAL (
+            SELECT cv."scheduledStart"
+            FROM "CareVisit" cv
+            JOIN "CareCase" cc ON cv."careCaseId" = cc.id
+            WHERE cc."subscriptionId" = sub.id
+              AND cv.status IN ('SCHEDULED', 'IN_PROGRESS')
+            ORDER BY cv."scheduledStart" ASC
+            LIMIT 1
+          ) v ON true
+          WHERE u.email NOT IN (${Prisma.join(EXCLUDED_MEMBER_EMAILS)})
+            ${statusCondition}
+            ${searchCondition}
+          ORDER BY u."createdAt" DESC
+          LIMIT ${limit} OFFSET ${offset};
+        `),
+        database.user.count({ where }),
+        database.user.count({
+          where: {
+            email: { notIn: EXCLUDED_MEMBER_EMAILS },
+            status: "ARCHIVED",
+          },
+        }),
+      ]);
+
+      let enrichedMembers = (rawRows as any[]).map((r) => {
+        const planName = r.carePlanName;
+        const service = formatFullMembershipName(planName, r.subVariantType, r.subDurationMonths);
+
+        const hasSpouse = Boolean(
+          r.spouseFirstName?.trim() || r.spouseLastName?.trim()
+        );
+
+        const spouseParts = hasSpouse
+          ? [
+              r.spouseSalutation?.trim(),
+              r.spouseFirstName?.trim(),
+              r.spouseLastName?.trim(),
+            ].filter(Boolean).join(" ").trim()
+          : null;
+        const secondaryName = spouseParts || null;
+
+        const scheduledDate = r.scheduledVisitDate ? new Date(r.scheduledVisitDate) : null;
+        const medical = hasSensitiveView ? (r.medicalConditions || null) : null;
+
+        return {
+          id: r.id,
+          name: r.name,
+          email: r.email,
+          role: r.role,
+          status: r.status,
+          createdAt: r.createdAt,
+          serialNumber: r.serialNumber ?? null,
+          service,
+          secondaryName: secondaryName || null,
+          primaryMobile: r.mobileNumber || null,
+          secondaryMobile: r.spouseMobileNumber || null,
+          scheduledVisitDate: scheduledDate,
+          preferredVisitDay: r.preferredVisitDay || null,
+          preferredVisitTime: r.preferredVisitTime || null,
+          preferredScheduleDisplay: formatPreferredSchedule(
+            r.preferredVisitDay,
+            r.preferredVisitTime
+          ),
+          maskedMedicalConditions: medical,
+          insuranceProvider: r.insuranceProvider || null,
+          memberProfile: r.profileId
+            ? {
+                memberId: r.memberId,
+                salutation: r.salutation,
+                firstName: r.firstName,
+                lastName: r.lastName,
+                spouseSalutation: r.spouseSalutation,
+                spouseFirstName: r.spouseFirstName,
+                spouseLastName: r.spouseLastName,
+                spouseMobileNumber: r.spouseMobileNumber,
+                dateOfEnrollment: r.dateOfEnrollment,
+                serviceAddress: r.serviceAddress,
+                mobileNumber: r.mobileNumber,
+                bloodGroup: r.bloodGroup,
+                medicalConditions: r.medicalConditions,
+                preferredVisitDay: r.preferredVisitDay,
+                preferredVisitTime: r.preferredVisitTime,
+                insuranceDetails: r.insuranceProvider ? { providerName: r.insuranceProvider } : null,
+              }
+            : null,
+          subscriptions: r.subId
+            ? [
+                {
+                  id: r.subId,
+                  status: r.subStatus,
+                  startDate: r.subStartDate,
+                  endDate: r.subEndDate,
+                  durationMonths: r.subDurationMonths,
+                  variantType: r.subVariantType,
+                  carePlan: r.carePlanName ? { name: r.carePlanName } : null,
+                  plan: null,
+                  customPlan: null,
+                },
+              ]
+            : [],
+        };
+      });
+
+      if (sortField) {
+        const dir = sortDirection === "desc" ? -1 : 1;
+        enrichedMembers.sort((a: any, b: any) => {
+          let valA: any = "";
+          let valB: any = "";
+          switch (sortField) {
+            case "serNo":
+              valA = a.serialNumber ?? 999999;
+              valB = b.serialNumber ?? 999999;
+              return (valA - valB) * dir;
+            case "mid":
+              valA = a.memberProfile?.memberId || "ZZZ";
+              valB = b.memberProfile?.memberId || "ZZZ";
+              return valA.localeCompare(valB) * dir;
+            case "primaryMember":
+              valA = a.name || "";
+              valB = b.name || "";
+              return valA.localeCompare(valB) * dir;
+            case "from":
+              valA = a.subscriptions?.[0]?.startDate ? new Date(a.subscriptions[0].startDate).getTime() : 0;
+              valB = b.subscriptions?.[0]?.startDate ? new Date(b.subscriptions[0].startDate).getTime() : 0;
+              return (valA - valB) * dir;
+            case "to":
+              valA = a.subscriptions?.[0]?.endDate ? new Date(a.subscriptions[0].endDate).getTime() : 0;
+              valB = b.subscriptions?.[0]?.endDate ? new Date(b.subscriptions[0].endDate).getTime() : 0;
+              return (valA - valB) * dir;
+            default:
+              return 0;
+          }
+        });
+      }
+
+      return { members: enrichedMembers, total, pages: Math.ceil(total / limit), archivedCount };
+    } catch (sqlErr) {
+      console.warn("[getMembersCore] Fast SQL query fallback to Prisma:", sqlErr);
+    }
   }
 
   const [members, total, genuineMembers, archivedCount] = await Promise.all([

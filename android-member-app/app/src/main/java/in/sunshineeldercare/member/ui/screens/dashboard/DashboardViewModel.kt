@@ -5,7 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import `in`.sunshineeldercare.member.data.model.DashboardResponse
 import `in`.sunshineeldercare.member.data.repository.AuthRepository
-import `in`.sunshineeldercare.member.data.repository.MemberRepository
+import `in`.sunshineeldercare.member.data.repository.LiveRefreshManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,13 +22,15 @@ data class DashboardUiState(
 )
 
 class DashboardViewModel(
-    private val memberRepository: MemberRepository = MemberRepository(),
-    private val authRepository: AuthRepository = AuthRepository()
+    private val authRepository: AuthRepository = AuthRepository(),
+    private val liveRefreshManager: LiveRefreshManager = LiveRefreshManager
 ) : ViewModel() {
 
     private val TAG = "DashboardViewModel"
     private val _uiState = MutableStateFlow(
         DashboardUiState(
+            isLoading = liveRefreshManager.dashboardFlow.value == null,
+            data = liveRefreshManager.dashboardFlow.value,
             cachedName = authRepository.getCachedMemberName(),
             cachedMemberId = authRepository.getCachedMemberId(),
             cachedGender = authRepository.getCachedMemberGender()
@@ -37,45 +39,32 @@ class DashboardViewModel(
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
 
     init {
+        // Collect live refresh updates seamlessly
+        viewModelScope.launch {
+            liveRefreshManager.dashboardFlow.collect { freshData ->
+                if (freshData != null) {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            data = freshData,
+                            cachedName = freshData.member?.name ?: it.cachedName,
+                            cachedMemberId = freshData.member?.memberId ?: it.cachedMemberId,
+                            cachedGender = freshData.member?.gender ?: it.cachedGender,
+                            error = null
+                        )
+                    }
+                }
+            }
+        }
+
         loadDashboard()
     }
 
     fun loadDashboard() {
-        _uiState.update { it.copy(isLoading = true, error = null) }
-        viewModelScope.launch {
-            try {
-                Log.d(TAG, "Requesting dashboard data for cached ID: ${_uiState.value.cachedMemberId}")
-                val result = memberRepository.getDashboard()
-                result.onSuccess { response ->
-                    Log.d(TAG, "Dashboard data loaded successfully. Plan: ${response.membership?.planName}")
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            data = response,
-                            cachedName = response.member?.name ?: it.cachedName,
-                            cachedMemberId = response.member?.memberId ?: it.cachedMemberId,
-                            cachedGender = response.member?.gender ?: it.cachedGender
-                        )
-                    }
-                }.onFailure { err ->
-                    Log.w(TAG, "Dashboard fetch failed: ${err.message}")
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            error = err.message ?: "Unable to fetch latest member data."
-                        )
-                    }
-                }
-            } catch (t: Throwable) {
-                Log.e(TAG, "Unexpected error in loadDashboard", t)
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        error = "Failed to load dashboard data."
-                    )
-                }
-            }
+        if (_uiState.value.data == null) {
+            _uiState.update { it.copy(isLoading = true, error = null) }
         }
+        liveRefreshManager.refreshNow(isSilent = _uiState.value.data != null)
     }
 
     fun getPersonalizedGreeting(): String {

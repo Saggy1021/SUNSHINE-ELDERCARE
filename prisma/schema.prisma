@@ -69,6 +69,7 @@ model User {
   complaints                   MemberComplaint[]
 
   @@index([role, status])
+  @@index([createdAt])
 }
 
 model Account {
@@ -442,6 +443,8 @@ model Feedback {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
 }
 
 model Order {
@@ -467,6 +470,8 @@ model Inquiry {
   status   String  @default("NEW") // NEW, IN_PROGRESS, RESOLVED
 
   createdAt DateTime @default(now())
+
+  @@index([status, createdAt])
 }
 
 model AuditLog {
@@ -609,6 +614,8 @@ model MemberProfile {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([mobileNumber])
 }
 
 model Sponsor {
@@ -845,6 +852,8 @@ model Receipt {
   invoice  Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
   payment  Payment         @relation(fields: [paymentId], references: [id], onDelete: Restrict)
   document MemberDocument?
+
+  @@index([userId, createdAt])
 }
 
 // --- Phase 17: Operational Care Management ---
