@@ -607,6 +607,7 @@ model MemberProfile {
 
   // Enrollment Date
   dateOfEnrollment        DateTime?
+  enrollmentDate          DateTime?
 
   // Preferred Care Visit Schedule
   preferredVisitDay       String?
@@ -616,6 +617,7 @@ model MemberProfile {
   updatedAt DateTime @updatedAt
 
   @@index([mobileNumber])
+  @@index([enrollmentDate])
 }
 
 model Sponsor {

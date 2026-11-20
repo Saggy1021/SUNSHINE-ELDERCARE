@@ -129,10 +129,16 @@ export class MemberIdentityService {
 
     if (isPrabir) {
       const prabirId = "SECD1001PRTY";
+      const now = new Date();
       if (profile) {
+        const updateData: any = { memberId: prabirId };
+        if (!profile.enrollmentDate && !profile.dateOfEnrollment) {
+          updateData.enrollmentDate = now;
+          updateData.dateOfEnrollment = now;
+        }
         await client.memberProfile.update({
           where: { userId },
-          data: { memberId: prabirId },
+          data: updateData,
         });
       } else {
         await client.memberProfile.create({
@@ -141,6 +147,8 @@ export class MemberIdentityService {
             memberId: prabirId,
             firstName: profile?.firstName || "Wg Cdr PRABIR",
             lastName: profile?.lastName || "CHAKRAVERTY",
+            enrollmentDate: now,
+            dateOfEnrollment: now,
           },
         });
       }
@@ -170,11 +178,19 @@ export class MemberIdentityService {
     // 4. Generate unique Member ID in canonical format (SECS... or SECD...)
     const memberId = await this.generateMemberId(firstName, lastName, type, client);
 
-    // 5. Permanently assign to MemberProfile
+    const now = new Date();
+
+    // 5. Permanently assign to MemberProfile and record original enrollment date only once
     if (profile) {
+      const updateData: any = { memberId };
+      // Save original enrollment date only once upon canonical Member ID generation. Never overwrite.
+      if (!profile.enrollmentDate && !profile.dateOfEnrollment) {
+        updateData.enrollmentDate = now;
+        updateData.dateOfEnrollment = now;
+      }
       await client.memberProfile.update({
         where: { userId },
-        data: { memberId },
+        data: updateData,
       });
     } else {
       await client.memberProfile.create({
@@ -183,6 +199,8 @@ export class MemberIdentityService {
           memberId,
           firstName: firstName || "Member",
           lastName: lastName || "",
+          enrollmentDate: now,
+          dateOfEnrollment: now,
         },
       });
     }

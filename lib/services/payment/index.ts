@@ -289,6 +289,21 @@ export async function adminVerifyPayment(
       tx
     );
 
+    // If new registration (non-renewal), ensure permanent original enrollmentDate is recorded once
+    if (!renewalRequest && tx.memberProfile?.findUnique) {
+      const existingProfile = await tx.memberProfile.findUnique({
+        where: { userId: payment.userId },
+        select: { enrollmentDate: true, dateOfEnrollment: true },
+      });
+      if (existingProfile && !existingProfile.enrollmentDate && !existingProfile.dateOfEnrollment && tx.memberProfile?.update) {
+        const enrollmentTimestamp = new Date();
+        await tx.memberProfile.update({
+          where: { userId: payment.userId },
+          data: { enrollmentDate: enrollmentTimestamp, dateOfEnrollment: enrollmentTimestamp },
+        });
+      }
+    }
+
     // B. Mark Payment Verified (Atomic concurrency check on Payment row)
     const updateResult = await tx.payment.updateMany({
       where: { id: paymentId, status: "VERIFICATION_PENDING" },

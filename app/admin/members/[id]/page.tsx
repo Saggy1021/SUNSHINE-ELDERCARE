@@ -4,6 +4,7 @@ import Link from "next/link"
 import { ArrowLeft, UserSquare2, Shield, ShieldAlert, CheckCircle2, Clock, CalendarDays, Receipt, FileText, ClipboardList, Activity, Edit, Calendar, Info } from "lucide-react"
 import { MembershipDateEditor } from "@/components/admin/membership-date-editor"
 import { formatFullMembershipName } from "@/lib/utils/format-membership"
+import { formatMembershipDate } from "../page"
 import { auth } from "@/auth"
 import { AuthorizationService } from "@/lib/services/authorization"
 import { MemberLifecycleActions } from "@/components/admin/member-lifecycle-actions"
@@ -84,6 +85,14 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
               <div>
                 <p className="text-sm font-medium text-slate-500">Member ID</p>
                 <p className="font-mono font-bold text-slate-900">{profile?.memberId || "UNASSIGNED"}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-500">Date of Enrolment (DOE)</p>
+                <p className="font-semibold text-slate-900">
+                  {profile?.enrollmentDate || profile?.dateOfEnrollment
+                    ? formatMembershipDate(profile.enrollmentDate || profile.dateOfEnrollment)
+                    : <span className="text-slate-400 font-normal italic">Missing / Not established</span>}
+                </p>
               </div>
               <div>
                 <p className="text-sm font-medium text-slate-500">Role</p>

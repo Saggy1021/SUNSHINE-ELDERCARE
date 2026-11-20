@@ -517,6 +517,7 @@ export async function getMembersCore(
             mp."spouseLastName",
             mp."spouseMobileNumber",
             mp."dateOfEnrollment",
+            mp."enrollmentDate",
             mp."serviceAddress",
             mp."mobileNumber",
             mp."bloodGroup",
@@ -619,7 +620,8 @@ export async function getMembersCore(
                 spouseFirstName: r.spouseFirstName,
                 spouseLastName: r.spouseLastName,
                 spouseMobileNumber: r.spouseMobileNumber,
-                dateOfEnrollment: r.dateOfEnrollment,
+                dateOfEnrollment: r.enrollmentDate || r.dateOfEnrollment,
+                enrollmentDate: r.enrollmentDate || r.dateOfEnrollment,
                 serviceAddress: r.serviceAddress,
                 mobileNumber: r.mobileNumber,
                 bloodGroup: r.bloodGroup,
@@ -706,6 +708,7 @@ export async function getMembersCore(
             spouseLastName: true,
             spouseMobileNumber: true,
             dateOfEnrollment: true,
+            enrollmentDate: true,
             serviceAddress: true,
             mobileNumber: true,
             bloodGroup: true,
@@ -1056,6 +1059,7 @@ export interface AdminUpdateMemberInput {
 
   // Membership & Dates
   dateOfEnrollment?: string | Date | null;
+  enrollmentDate?: string | Date | null;
   carePlanId?: string | null;
   startDate?: string | Date | null;
   endDate?: string | Date | null;
@@ -1212,9 +1216,15 @@ export async function adminUpdateMemberCore(
         profileData.idProofNumber = input.idProofNumber.trim() || null;
       }
 
-      if (input.dateOfEnrollment) {
-        profileData.dateOfEnrollment = new Date(input.dateOfEnrollment);
-      } else if (input.dateOfEnrollment === null || input.dateOfEnrollment === "") {
+      const enrollmentInput = input.enrollmentDate !== undefined ? input.enrollmentDate : input.dateOfEnrollment;
+      if (enrollmentInput) {
+        const parsedEnrollment = new Date(enrollmentInput);
+        if (!isNaN(parsedEnrollment.getTime())) {
+          profileData.enrollmentDate = parsedEnrollment;
+          profileData.dateOfEnrollment = parsedEnrollment;
+        }
+      } else if (enrollmentInput === null || enrollmentInput === "") {
+        profileData.enrollmentDate = null;
         profileData.dateOfEnrollment = null;
       }
 
@@ -1463,6 +1473,7 @@ export async function adminUpdateMember(formData: FormData) {
   const spouseIdProofNumber = formData.get("spouseIdProofNumber") as string;
 
   const dateOfEnrollment = formData.get("dateOfEnrollment") as string;
+  const enrollmentDate = (formData.get("enrollmentDate") as string) || dateOfEnrollment;
   const carePlanId = formData.get("carePlanId") as string;
   const startDate = formData.get("startDate") as string;
   const endDate = formData.get("endDate") as string;
@@ -1522,6 +1533,7 @@ export async function adminUpdateMember(formData: FormData) {
     spouseIdProofNumber: spouseIdProofNumber || null,
 
     dateOfEnrollment: dateOfEnrollment || null,
+    enrollmentDate: enrollmentDate || null,
     carePlanId: carePlanId || null,
     startDate: startDate || null,
     endDate: endDate || null,

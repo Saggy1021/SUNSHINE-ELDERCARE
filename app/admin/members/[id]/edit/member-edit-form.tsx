@@ -12,7 +12,7 @@ function formatDateForInput(date: Date | string | null | undefined): string {
   if (!date) return '';
   const d = new Date(date);
   if (isNaN(d.getTime())) return '';
-  return d.toISOString().split('T')[0];
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 }
 
 function calculateClientEndDate(startDateStr: string, durationMonths: number): string {
@@ -497,7 +497,7 @@ export function MemberEditForm({ member, catalog }: { member: any; catalog?: any
             <input
               type="date"
               name="dateOfEnrollment"
-              defaultValue={formatDateForInput(profile?.dateOfEnrollment)}
+              defaultValue={formatDateForInput(profile?.enrollmentDate || profile?.dateOfEnrollment)}
               className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:bg-white focus:border-[#091329] focus:ring-1 focus:ring-[#091329] outline-none"
             />
             <p className="text-[11px] text-slate-400 mt-0.5">Official enrollment record</p>

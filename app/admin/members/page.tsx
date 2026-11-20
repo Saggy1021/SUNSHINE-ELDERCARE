@@ -11,6 +11,7 @@ export function formatMembershipDate(date: Date | string | null | undefined): st
     day: "2-digit",
     month: "short",
     year: "numeric",
+    timeZone: "Asia/Kolkata",
   });
 }
 
@@ -241,9 +242,11 @@ export default async function AdminMembersPage({
                       {member.secondaryName || "—"}
                     </td>
 
-                    {/* 5. DOE: Actual date of enrollment. Never substitute account creation date for DOE. */}
+                    {/* 5. DOE: Permanent original date of enrollment. Never substitute account creation or renewal dates. */}
                     <td className="px-3.5 py-3 text-slate-600 text-xs whitespace-nowrap font-medium">
-                      {member.memberProfile?.dateOfEnrollment ? formatMembershipDate(member.memberProfile.dateOfEnrollment) : "—"}
+                      {member.memberProfile?.enrollmentDate || member.memberProfile?.dateOfEnrollment
+                        ? formatMembershipDate(member.memberProfile.enrollmentDate || member.memberProfile.dateOfEnrollment)
+                        : "—"}
                     </td>
 
                     {/* 6. Service */}

@@ -363,6 +363,20 @@ export async function settleSuccessfulPayment(
       tx
     );
 
+    // If new registration (non-renewal), ensure permanent original enrollmentDate is recorded once
+    if (!payment.renewalRequest && tx.memberProfile?.findUnique) {
+      const existingProfile = await tx.memberProfile.findUnique({
+        where: { userId: payment.userId },
+        select: { enrollmentDate: true, dateOfEnrollment: true },
+      });
+      if (existingProfile && !existingProfile.enrollmentDate && !existingProfile.dateOfEnrollment && tx.memberProfile?.update) {
+        await tx.memberProfile.update({
+          where: { userId: payment.userId },
+          data: { enrollmentDate: now, dateOfEnrollment: now },
+        });
+      }
+    }
+
     // 2. Generate Single Immutable Receipt Snapshot
     const receiptNumber = await DocumentSequenceService.generateReceiptNumber(now, tx);
     const createdReceipt = await tx.receipt.create({
