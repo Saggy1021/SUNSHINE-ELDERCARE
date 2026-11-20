@@ -32,7 +32,7 @@ class ProfileViewModel(
     private val _uiState = MutableStateFlow(
         ProfileUiState(
             isLoading = true,
-            profile = FullProfileDto(
+            profile = SecureSessionManager.getCachedProfile() ?: FullProfileDto(
                 memberId = SecureSessionManager.getMemberId() ?: "",
                 name = SecureSessionManager.getMemberName() ?: "Sunshine Member",
                 email = SecureSessionManager.getMemberEmail() ?: ""
@@ -53,20 +53,34 @@ class ProfileViewModel(
                 val result = memberRepository.getProfile()
                 result.onSuccess { res ->
                     val serverProfile = res.profile
+                    if (serverProfile != null) {
+                        SecureSessionManager.saveCachedProfile(serverProfile)
+                    }
                     Log.d(TAG, "Profile loaded successfully for: ${serverProfile?.name}")
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            profile = serverProfile ?: it.profile
+                            profile = serverProfile ?: it.profile,
+                            error = null
                         )
                     }
                 }.onFailure { err ->
                     Log.w(TAG, "Profile fetch failed: ${err.message}")
-                    _uiState.update { it.copy(isLoading = false, error = err.message ?: "Failed to load profile") }
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = err.message ?: "Connection timed out. Please check your internet connection and tap Retry."
+                        )
+                    }
                 }
             } catch (t: Throwable) {
                 Log.e(TAG, "Unexpected error in loadProfile", t)
-                _uiState.update { it.copy(isLoading = false, error = "Failed to load profile data.") }
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        error = "Unable to connect to server. Please check your internet connection and tap Retry."
+                    )
+                }
             }
         }
     }

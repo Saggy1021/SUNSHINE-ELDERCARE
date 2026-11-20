@@ -41,7 +41,8 @@ class AuthInterceptor : Interceptor {
                             val memberId = SecureSessionManager.getMemberId() ?: ""
                             val name = SecureSessionManager.getMemberName() ?: ""
                             val gender = SecureSessionManager.getMemberGender()
-                            SecureSessionManager.saveSession(rawValue, memberId, name, gender)
+                            val email = SecureSessionManager.getMemberEmail()
+                            SecureSessionManager.saveSession(rawValue, memberId, name, gender, email)
                             Log.d(TAG, "Session token captured from Set-Cookie (sunshine_member_session)")
                             break
                         }
@@ -51,7 +52,8 @@ class AuthInterceptor : Interceptor {
                             val memberId = SecureSessionManager.getMemberId() ?: ""
                             val name = SecureSessionManager.getMemberName() ?: ""
                             val gender = SecureSessionManager.getMemberGender()
-                            SecureSessionManager.saveSession(rawValue, memberId, name, gender)
+                            val email = SecureSessionManager.getMemberEmail()
+                            SecureSessionManager.saveSession(rawValue, memberId, name, gender, email)
                             Log.d(TAG, "Session token captured from Set-Cookie (sunshine_member_token)")
                             break
                         }

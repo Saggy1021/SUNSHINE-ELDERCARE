@@ -32,6 +32,7 @@ object SecureSessionManager {
     private const val KEY_MEMBER_NAME = "member_name"
     private const val KEY_MEMBER_GENDER = "member_gender"
     private const val KEY_MEMBER_EMAIL = "member_email"
+    private const val KEY_CACHED_PROFILE_JSON = "cached_profile_json"
 
     private lateinit var prefs: SharedPreferences
 
@@ -133,16 +134,44 @@ object SecureSessionManager {
     fun saveSession(token: String, memberId: String, name: String, gender: String?, email: String? = null) {
         try {
             val encryptedToken = encrypt(token)
+            val resolvedEmail = if (!email.isNullOrBlank()) email else (prefs.getString(KEY_MEMBER_EMAIL, "") ?: "")
             prefs.edit()
                 .putString(KEY_ENCRYPTED_TOKEN, encryptedToken)
                 .putString(KEY_MEMBER_ID, memberId)
                 .putString(KEY_MEMBER_NAME, name)
                 .putString(KEY_MEMBER_GENDER, gender ?: "")
-                .putString(KEY_MEMBER_EMAIL, email ?: "")
+                .putString(KEY_MEMBER_EMAIL, resolvedEmail)
                 .apply()
             Log.d(TAG, "Session persisted successfully for member ID: $memberId")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to persist session to preferences", e)
+        }
+    }
+
+    fun saveCachedProfile(profile: `in`.sunshineeldercare.member.data.model.FullProfileDto) {
+        try {
+            val jsonStr = kotlinx.serialization.json.Json {
+                encodeDefaults = true
+                ignoreUnknownKeys = true
+            }.encodeToString(`in`.sunshineeldercare.member.data.model.FullProfileDto.serializer(), profile)
+            prefs.edit().putString(KEY_CACHED_PROFILE_JSON, jsonStr).apply()
+            Log.d(TAG, "Full member profile cached locally in secure store")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to cache member profile", e)
+        }
+    }
+
+    fun getCachedProfile(): `in`.sunshineeldercare.member.data.model.FullProfileDto? {
+        return try {
+            val raw = prefs.getString(KEY_CACHED_PROFILE_JSON, null) ?: return null
+            if (raw.isBlank()) return null
+            kotlinx.serialization.json.Json {
+                ignoreUnknownKeys = true
+                isLenient = true
+            }.decodeFromString(`in`.sunshineeldercare.member.data.model.FullProfileDto.serializer(), raw)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to decode cached member profile", e)
+            null
         }
     }
 

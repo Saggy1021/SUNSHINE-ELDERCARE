@@ -88,8 +88,12 @@ object ApiErrorParser {
             e is java.net.ConnectException -> {
                 "Unable to connect to Sunshine Eldercare network. Please check your internet connection."
             }
-            e is java.net.SocketTimeoutException -> {
-                "Connection timed out. Please verify your connection and try again."
+            e is java.net.SocketTimeoutException ||
+            e is java.io.InterruptedIOException ||
+            msg.equals("timeout", ignoreCase = true) ||
+            msg.contains("timed out", ignoreCase = true) ||
+            msg.contains("timeout", ignoreCase = true) -> {
+                "Connection timed out. Please check your internet connection and tap Retry."
             }
             msg.isNotBlank() -> msg
             else -> defaultMessage
