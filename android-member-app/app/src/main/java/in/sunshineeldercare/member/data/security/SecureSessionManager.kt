@@ -31,6 +31,7 @@ object SecureSessionManager {
     private const val KEY_MEMBER_ID = "member_id"
     private const val KEY_MEMBER_NAME = "member_name"
     private const val KEY_MEMBER_GENDER = "member_gender"
+    private const val KEY_MEMBER_EMAIL = "member_email"
 
     private lateinit var prefs: SharedPreferences
 
@@ -129,7 +130,7 @@ object SecureSessionManager {
         }
     }
 
-    fun saveSession(token: String, memberId: String, name: String, gender: String?) {
+    fun saveSession(token: String, memberId: String, name: String, gender: String?, email: String? = null) {
         try {
             val encryptedToken = encrypt(token)
             prefs.edit()
@@ -137,6 +138,7 @@ object SecureSessionManager {
                 .putString(KEY_MEMBER_ID, memberId)
                 .putString(KEY_MEMBER_NAME, name)
                 .putString(KEY_MEMBER_GENDER, gender ?: "")
+                .putString(KEY_MEMBER_EMAIL, email ?: "")
                 .apply()
             Log.d(TAG, "Session persisted successfully for member ID: $memberId")
         } catch (e: Exception) {
@@ -159,6 +161,8 @@ object SecureSessionManager {
     fun getMemberName(): String? = try { prefs.getString(KEY_MEMBER_NAME, null) } catch (_: Exception) { null }
 
     fun getMemberGender(): String? = try { prefs.getString(KEY_MEMBER_GENDER, null) } catch (_: Exception) { null }
+
+    fun getMemberEmail(): String? = try { prefs.getString(KEY_MEMBER_EMAIL, null) } catch (_: Exception) { null }
 
     fun isAuthenticated(): Boolean = !getAuthToken().isNullOrBlank()
 

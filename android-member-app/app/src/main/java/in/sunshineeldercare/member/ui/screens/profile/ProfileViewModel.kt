@@ -7,6 +7,7 @@ import `in`.sunshineeldercare.member.data.model.FullProfileDto
 import `in`.sunshineeldercare.member.data.model.ProfileUpdateRequest
 import `in`.sunshineeldercare.member.data.repository.AuthRepository
 import `in`.sunshineeldercare.member.data.repository.MemberRepository
+import `in`.sunshineeldercare.member.data.security.SecureSessionManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,7 +29,16 @@ class ProfileViewModel(
 ) : ViewModel() {
 
     private val TAG = "ProfileViewModel"
-    private val _uiState = MutableStateFlow(ProfileUiState())
+    private val _uiState = MutableStateFlow(
+        ProfileUiState(
+            isLoading = true,
+            profile = FullProfileDto(
+                memberId = SecureSessionManager.getMemberId() ?: "",
+                name = SecureSessionManager.getMemberName() ?: "Sunshine Member",
+                email = SecureSessionManager.getMemberEmail() ?: ""
+            )
+        )
+    )
     val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
 
     init {
@@ -42,8 +52,14 @@ class ProfileViewModel(
                 Log.d(TAG, "Fetching member profile from server...")
                 val result = memberRepository.getProfile()
                 result.onSuccess { res ->
-                    Log.d(TAG, "Profile loaded successfully for: ${res.profile?.name}")
-                    _uiState.update { it.copy(isLoading = false, profile = res.profile) }
+                    val serverProfile = res.profile
+                    Log.d(TAG, "Profile loaded successfully for: ${serverProfile?.name}")
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            profile = serverProfile ?: it.profile
+                        )
+                    }
                 }.onFailure { err ->
                     Log.w(TAG, "Profile fetch failed: ${err.message}")
                     _uiState.update { it.copy(isLoading = false, error = err.message ?: "Failed to load profile") }
@@ -55,14 +71,22 @@ class ProfileViewModel(
         }
     }
 
-    fun saveContactDetails(phone: String, address: String, city: String) {
+    fun saveContactDetails(
+        phone: String,
+        alternatePhone: String,
+        address: String,
+        landmark: String,
+        city: String
+    ) {
         _uiState.update { it.copy(isSaving = true, error = null, saveMessage = null) }
         viewModelScope.launch {
             try {
                 Log.d(TAG, "Submitting Contact Details update to backend...")
                 val request = ProfileUpdateRequest(
                     phone = phone.trim(),
+                    alternatePhone = alternatePhone.trim(),
                     addressLine1 = address.trim(),
+                    nearestLandmark = landmark.trim(),
                     city = city.trim()
                 )
                 val result = memberRepository.updateProfile(request)
@@ -98,6 +122,7 @@ class ProfileViewModel(
 
     fun saveCareDetails(
         bloodGroup: String,
+        medicalConditions: String,
         hospital: String,
         emergencyName: String,
         emergencyPhone: String,
@@ -109,6 +134,7 @@ class ProfileViewModel(
                 Log.d(TAG, "Submitting Care Details update to backend...")
                 val request = ProfileUpdateRequest(
                     bloodGroup = bloodGroup.trim(),
+                    medicalConditions = medicalConditions.trim(),
                     hospitalPreference = hospital.trim(),
                     emergencyContactName = emergencyName.trim(),
                     emergencyContactPhone = emergencyPhone.trim(),

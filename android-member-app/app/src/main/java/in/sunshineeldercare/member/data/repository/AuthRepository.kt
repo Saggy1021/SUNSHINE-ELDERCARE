@@ -39,7 +39,8 @@ class AuthRepository {
                         token = sessionToken,
                         memberId = member?.memberId ?: cleanId,
                         name = member?.name ?: "Sunshine Member",
-                        gender = member?.gender
+                        gender = member?.gender,
+                        email = member?.email
                     )
                     Log.d(TAG, "Login successful for member: ${member?.name}")
                     Result.success(body)
@@ -125,7 +126,8 @@ class AuthRepository {
                         token = sessionToken,
                         memberId = member?.memberId ?: cleanId,
                         name = member?.name ?: "Sunshine Member",
-                        gender = member?.gender
+                        gender = member?.gender,
+                        email = member?.email
                     )
                     Result.success(body)
                 } else {

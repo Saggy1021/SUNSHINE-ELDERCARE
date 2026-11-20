@@ -167,7 +167,7 @@ fun LocationOnboardingScreen(
                     permissionLauncher.launch(permissionsToRequest.toTypedArray())
                 },
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = NavyDark),
+                colors = navyButtonColors(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp)
@@ -177,7 +177,8 @@ fun LocationOnboardingScreen(
                 Text(
                     text = if (isPermissionGranted) "Location Enabled — Continue" else "Allow Emergency Location",
                     fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
                 )
             }
 

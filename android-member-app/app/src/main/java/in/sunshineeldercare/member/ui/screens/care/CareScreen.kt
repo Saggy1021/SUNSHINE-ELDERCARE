@@ -1,5 +1,7 @@
 package `in`.sunshineeldercare.member.ui.screens.care
 
+import `in`.sunshineeldercare.member.ui.theme.*
+
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -284,12 +286,12 @@ fun CareScreen(
                             val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$CARE_DESK_PHONE"))
                             context.startActivity(intent)
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = NavyDark),
+                        colors = navyButtonColors(),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.Phone, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Icon(imageVector = Icons.Default.Phone, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Call Care Coordinator", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("Call Care Coordinator", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
             }

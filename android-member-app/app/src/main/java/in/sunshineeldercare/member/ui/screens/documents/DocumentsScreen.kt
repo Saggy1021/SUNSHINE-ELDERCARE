@@ -1,5 +1,7 @@
 package `in`.sunshineeldercare.member.ui.screens.documents
 
+import `in`.sunshineeldercare.member.ui.theme.*
+
 import android.content.Context
 import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
@@ -279,7 +281,7 @@ private fun DocumentCard(
                 Button(
                     onClick = onDownload,
                     shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = NavyDark)
+                    colors = navyButtonColors()
                 ) {
                     Icon(imageVector = Icons.Default.Download, contentDescription = null, tint = GoldLight, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(6.dp))

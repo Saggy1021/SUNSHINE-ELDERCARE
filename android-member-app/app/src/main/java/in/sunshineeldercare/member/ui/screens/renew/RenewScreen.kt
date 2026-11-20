@@ -1,5 +1,7 @@
 package `in`.sunshineeldercare.member.ui.screens.renew
 
+import `in`.sunshineeldercare.member.ui.theme.*
+
 import android.content.Context
 import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
@@ -98,7 +100,7 @@ fun RenewScreen() {
             Button(
                 onClick = { launchRenewal(context) },
                 shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary),
+                colors = goldButtonColors(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(54.dp)

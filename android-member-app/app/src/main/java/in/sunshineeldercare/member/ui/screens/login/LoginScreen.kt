@@ -224,10 +224,10 @@ fun LoginScreen(
                                     Button(
                                         onClick = onNavigateToActivation,
                                         shape = RoundedCornerShape(8.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary),
+                                        colors = goldButtonColors(),
                                         modifier = Modifier.fillMaxWidth().height(36.dp)
                                     ) {
-                                        Text("Activate Account Now", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Text("Activate Account Now", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                     }
                                 }
                             }
@@ -241,7 +241,7 @@ fun LoginScreen(
                         onClick = { viewModel.login() },
                         enabled = !state.isLoading,
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = NavyDark),
+                        colors = navyButtonColors(),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp)
@@ -329,9 +329,9 @@ fun LoginScreen(
             confirmButton = {
                 Button(
                     onClick = { showHelpDialog = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = NavyDark)
+                    colors = navyButtonColors()
                 ) {
-                    Text("Understood")
+                    Text("Understood", color = Color.White, fontWeight = FontWeight.Bold)
                 }
             }
         )

@@ -3,6 +3,7 @@ package `in`.sunshineeldercare.member.ui.components
 import android.content.Context
 import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
+import `in`.sunshineeldercare.member.ui.theme.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -260,7 +261,7 @@ fun ActiveMembershipCard(
                         .fillMaxWidth()
                         .height(50.dp),
                     shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary)
+                    colors = goldButtonColors()
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(

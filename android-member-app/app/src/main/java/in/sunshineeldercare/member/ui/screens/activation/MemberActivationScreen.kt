@@ -204,7 +204,7 @@ fun MemberActivationScreen(
                                 onClick = { viewModel.requestOtp() },
                                 enabled = !uiState.isLoading && uiState.memberId.isNotBlank(),
                                 shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = NavyDark),
+                                colors = navyButtonColors(),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(48.dp)
@@ -212,7 +212,7 @@ fun MemberActivationScreen(
                                 if (uiState.isLoading) {
                                     CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
                                 } else {
-                                    Text("Send Verification OTP", fontWeight = FontWeight.Bold)
+                                    Text("Send Verification OTP", fontWeight = FontWeight.Bold, color = Color.White)
                                 }
                             }
                         }
@@ -264,7 +264,7 @@ fun MemberActivationScreen(
                                 onClick = { viewModel.verifyOtp() },
                                 enabled = !uiState.isLoading && uiState.otp.length == 6,
                                 shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = NavyDark),
+                                colors = navyButtonColors(),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(48.dp)
@@ -272,7 +272,7 @@ fun MemberActivationScreen(
                                 if (uiState.isLoading) {
                                     CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
                                 } else {
-                                    Text("Verify & Continue", fontWeight = FontWeight.Bold)
+                                    Text("Verify & Continue", fontWeight = FontWeight.Bold, color = Color.White)
                                 }
                             }
 
@@ -373,7 +373,7 @@ fun MemberActivationScreen(
                                 onClick = { viewModel.setPassword(onActivationComplete) },
                                 enabled = !uiState.isLoading && uiState.newPassword.length >= 8 && uiState.newPassword == uiState.confirmPassword,
                                 shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = NavyDark),
+                                colors = navyButtonColors(),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(48.dp)
@@ -381,7 +381,7 @@ fun MemberActivationScreen(
                                 if (uiState.isLoading) {
                                     CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
                                 } else {
-                                    Text("Activate Account & Sign In", fontWeight = FontWeight.Bold)
+                                    Text("Activate Account & Sign In", fontWeight = FontWeight.Bold, color = Color.White)
                                 }
                             }
                         }

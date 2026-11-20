@@ -1,5 +1,7 @@
 package `in`.sunshineeldercare.member.ui.components
 
+import `in`.sunshineeldercare.member.ui.theme.*
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -237,7 +239,7 @@ fun RaiseIssueSection(
                         .fillMaxWidth()
                         .height(50.dp),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = NavyDark),
+                    colors = navyButtonColors(),
                     enabled = subject.isNotBlank() && description.isNotBlank()
                 ) {
                     Icon(imageVector = Icons.Default.Send, contentDescription = null, tint = GoldLight)

@@ -1,5 +1,7 @@
 package `in`.sunshineeldercare.member.ui.screens.dashboard
 
+import `in`.sunshineeldercare.member.ui.theme.*
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -91,13 +93,13 @@ fun DashboardScreen(
                         )
                         Button(
                             onClick = { viewModel.loadDashboard() },
-                            colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary),
+                            colors = goldButtonColors(),
                             shape = RoundedCornerShape(8.dp),
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(12.dp))
+                            Icon(imageVector = Icons.Default.Refresh, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Retry", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("Retry", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         }
                     }
                 }

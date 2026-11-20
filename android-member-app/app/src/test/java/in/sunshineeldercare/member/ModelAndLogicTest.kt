@@ -8,6 +8,7 @@ import `in`.sunshineeldercare.member.data.model.MemberAuthDto
 import `in`.sunshineeldercare.member.data.model.ProfileResponse
 import `in`.sunshineeldercare.member.data.model.ProfileUpdateRequest
 import `in`.sunshineeldercare.member.data.model.SubscriptionSummaryDto
+import `in`.sunshineeldercare.member.data.model.SosTriggerRequest
 import `in`.sunshineeldercare.member.ui.components.COMPLAINT_CATEGORIES
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
@@ -178,7 +179,9 @@ class ModelAndLogicTest {
     fun testProfileUpdateSerialization() {
         val req = ProfileUpdateRequest(
             phone = "+91 98300 12345",
+            alternatePhone = "+91 98300 54321",
             addressLine1 = "123 Park Street, Kolkata",
+            nearestLandmark = "Near Park Circus",
             emergencyContactName = "Subhashish Roy",
             emergencyContactPhone = "+91 98300 99999",
             hospitalPreference = "AMRI Hospital Dhakuria"
@@ -186,5 +189,81 @@ class ModelAndLogicTest {
         val jsonStr = json.encodeToString(ProfileUpdateRequest.serializer(), req)
         assertTrue(jsonStr.contains("Subhashish Roy"))
         assertTrue(jsonStr.contains("AMRI Hospital Dhakuria"))
+        assertTrue(jsonStr.contains("+91 98300 54321"))
+        assertTrue(jsonStr.contains("Near Park Circus"))
+    }
+
+    @Test
+    fun testFullProfileDtoWithAllFields() {
+        val rawJson = """
+            {
+                "success": true,
+                "profile": {
+                    "id": "cmv5j9l6d00014uplaumg7m8l",
+                    "memberId": "SECD1000TAAM",
+                    "salutation": "Mr",
+                    "firstName": "Tanish",
+                    "lastName": "Alam",
+                    "name": "Mr Tanish Alam",
+                    "email": "tanishalam61@gmail.com",
+                    "phone": "7980721244",
+                    "alternatePhone": "7980718556",
+                    "addressLine1": "Rabindra Nagar Kolkata",
+                    "nearestLandmark": "Rabindra Nagar Bus Stand",
+                    "status": "ACTIVE",
+                    "membershipName": "Shield Shine — Single (12 Months)",
+                    "membershipType": "Single",
+                    "membershipStatus": "ACTIVE",
+                    "membershipStartDate": "2026-11-20T00:00:00.000Z",
+                    "membershipEndDate": "2027-11-19T23:59:59.999Z",
+                    "bloodGroup": "",
+                    "medicalConditions": "",
+                    "hospitalPreference": "",
+                    "emergencyContactName": "Tanish",
+                    "emergencyContactPhone": "7980718556",
+                    "emergencyContactRelation": "Family"
+                }
+            }
+        """.trimIndent()
+
+        val parsed = json.decodeFromString(ProfileResponse.serializer(), rawJson)
+        assertTrue(parsed.success)
+        assertNotNull(parsed.profile)
+        val p = parsed.profile!!
+        assertEquals("SECD1000TAAM", p.memberId)
+        assertEquals("Mr Tanish Alam", p.name)
+        assertEquals("tanishalam61@gmail.com", p.email)
+        assertEquals("7980721244", p.phone)
+        assertEquals("7980718556", p.alternatePhone)
+        assertEquals("Rabindra Nagar Kolkata", p.addressLine1)
+        assertEquals("Rabindra Nagar Bus Stand", p.nearestLandmark)
+        assertEquals("Shield Shine — Single (12 Months)", p.membershipName)
+        assertEquals("ACTIVE", p.status)
+        assertEquals("Tanish", p.emergencyContactName)
+    }
+
+    @Test
+    fun testOneTapSosRequestPayload() {
+        val testJson = Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+            encodeDefaults = true
+        }
+        val sosReq = SosTriggerRequest(
+            triggerSource = "MEMBER_APP_SOS",
+            latitude = 22.5726,
+            longitude = 88.3639,
+            accuracy = 12.5f,
+            notes = "One-tap emergency SOS triggered by member from Sunshine Member App"
+        )
+        val jsonStr = testJson.encodeToString(SosTriggerRequest.serializer(), sosReq)
+        assertTrue(jsonStr.contains("MEMBER_APP_SOS"))
+        assertTrue(jsonStr.contains("22.5726"))
+        assertTrue(jsonStr.contains("88.3639"))
+
+        val decoded = testJson.decodeFromString(SosTriggerRequest.serializer(), jsonStr)
+        assertEquals("MEMBER_APP_SOS", decoded.triggerSource)
+        assertEquals(22.5726, decoded.latitude ?: 0.0, 0.0001)
+        assertEquals(88.3639, decoded.longitude ?: 0.0, 0.0001)
     }
 }
