@@ -25,9 +25,13 @@ export function EmergencyAudioAlert({
     const next = !muted;
     setMuted(next);
     localStorage.setItem("emergencyos_sound_muted", String(next));
+    if (!next && audioCtxRef.current?.state === "suspended") {
+      audioCtxRef.current.resume();
+    }
   };
 
-  const playChime = useCallback(() => {
+  // High-intensity piercing dual-harmonic emergency siren with dynamic compression
+  const playPiercingEmergencyAlert = useCallback(() => {
     if (muted) return;
     try {
       const AudioCtx =
@@ -42,36 +46,95 @@ export function EmergencyAudioAlert({
         ctx.resume();
       }
 
-      // Generate urgent dual-tone emergency pulse (880Hz -> 660Hz)
       const now = ctx.currentTime;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
 
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(880, now);
-      osc.frequency.setValueAtTime(660, now + 0.15);
-      osc.frequency.setValueAtTime(880, now + 0.3);
+      // 1. Dynamics Compressor to maximize perceived loudness without clipping
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.setValueAtTime(-18, now);
+      compressor.knee.setValueAtTime(30, now);
+      compressor.ratio.setValueAtTime(12, now);
+      compressor.attack.setValueAtTime(0.003, now);
+      compressor.release.setValueAtTime(0.2, now);
+      compressor.connect(ctx.destination);
 
-      gain.gain.setValueAtTime(0.001, now);
-      gain.gain.exponentialRampToValueAtTime(0.35, now + 0.05);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+      // 2. Master Gain (0.85 peak)
+      const masterGain = ctx.createGain();
+      masterGain.gain.setValueAtTime(0.001, now);
+      masterGain.connect(compressor);
 
-      osc.connect(gain);
-      gain.connect(ctx.destination);
+      // Play 3 urgent emergency siren pulses: [Pulse 1, Pulse 2, Pulse 3]
+      const pulses = [
+        { start: now + 0.0, end: now + 0.22, freq1: 960, freq2: 1440 },
+        { start: now + 0.28, end: now + 0.50, freq1: 770, freq2: 1155 },
+        { start: now + 0.56, end: now + 0.85, freq1: 960, freq2: 1440 },
+      ];
 
-      osc.start(now);
-      osc.stop(now + 0.46);
+      pulses.forEach((p) => {
+        // Primary Sawtooth Oscillator (Rich upper harmonics for high intelligibility on laptop speakers)
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = "sawtooth";
+        osc1.frequency.setValueAtTime(p.freq1, p.start);
+
+        gain1.gain.setValueAtTime(0.001, p.start);
+        gain1.gain.exponentialRampToValueAtTime(0.85, p.start + 0.02);
+        gain1.gain.exponentialRampToValueAtTime(0.001, p.end - 0.01);
+
+        osc1.connect(gain1);
+        gain1.connect(masterGain);
+
+        osc1.start(p.start);
+        osc1.stop(p.end);
+
+        // Secondary Square-Wave Harmonic Oscillator for acoustic piercing power
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = "square";
+        osc2.frequency.setValueAtTime(p.freq2, p.start);
+
+        gain2.gain.setValueAtTime(0.001, p.start);
+        gain2.gain.exponentialRampToValueAtTime(0.35, p.start + 0.02);
+        gain2.gain.exponentialRampToValueAtTime(0.001, p.end - 0.01);
+
+        osc2.connect(gain2);
+        gain2.connect(masterGain);
+
+        osc2.start(p.start);
+        osc2.stop(p.end);
+      });
+
+      // Master envelope open for the burst duration
+      masterGain.gain.setValueAtTime(1.0, now);
+      masterGain.gain.setValueAtTime(1.0, now + 0.86);
+      masterGain.gain.exponentialRampToValueAtTime(0.001, now + 0.90);
     } catch {
-      // Audio context might be restricted before first user interaction
+      // Audio context may be restricted prior to first user gesture
     }
   }, [muted]);
 
   useEffect(() => {
+    // Unlock Web Audio on first user interaction in case browser policy blocked autoplay
+    const unlockAudio = () => {
+      if (audioCtxRef.current && audioCtxRef.current.state === "suspended") {
+        audioCtxRef.current.resume();
+      }
+    };
+    window.addEventListener("click", unlockAudio, { once: true });
+    window.addEventListener("keydown", unlockAudio, { once: true });
+
+    return () => {
+      window.removeEventListener("click", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+    };
+  }, []);
+
+  useEffect(() => {
     if (unacknowledgedCodeRedCount > 0 && !muted) {
-      playChime();
+      // Play immediately, then repeat every 2.5 seconds until acknowledged or muted
+      playPiercingEmergencyAlert();
       intervalRef.current = setInterval(() => {
-        playChime();
-      }, 4000);
+        playPiercingEmergencyAlert();
+      }, 2500);
     } else {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
@@ -85,7 +148,7 @@ export function EmergencyAudioAlert({
         intervalRef.current = null;
       }
     };
-  }, [unacknowledgedCodeRedCount, muted, playChime]);
+  }, [unacknowledgedCodeRedCount, muted, playPiercingEmergencyAlert]);
 
   return (
     <div className="flex items-center gap-2">
@@ -103,7 +166,7 @@ export function EmergencyAudioAlert({
           muted
             ? "bg-white text-slate-400 border-slate-200 hover:text-slate-600 hover:bg-slate-50"
             : unacknowledgedCodeRedCount > 0
-            ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100"
+            ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100 ring-2 ring-red-500 animate-pulse"
             : "bg-white text-emerald-600 border-slate-200 hover:bg-slate-50"
         }`}
       >

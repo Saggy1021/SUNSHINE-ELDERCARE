@@ -72,4 +72,15 @@ interface EmployeeApiService {
         @Path("id") visitId: String,
         @Body request: CompleteVisitRequest
     ): Response<CompleteVisitResponse>
+
+    // Emergency incident dispatch endpoints
+    @GET("api/employee/emergency/active")
+    @Headers("Accept: application/json")
+    suspend fun getActiveEmergency(): Response<ActiveEmergencyResponse>
+
+    @POST("api/employee/emergency/arrival")
+    @Headers("Accept: application/json", "Content-Type: application/json")
+    suspend fun recordEmergencyArrival(
+        @Body request: RecordArrivalRequest
+    ): Response<RecordArrivalResponse>
 }

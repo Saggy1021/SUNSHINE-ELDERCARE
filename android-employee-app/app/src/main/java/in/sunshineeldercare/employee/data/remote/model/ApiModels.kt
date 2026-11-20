@@ -183,3 +183,55 @@ data class GenericApiResponse(
     val message: String? = null,
     val error: String? = null
 )
+
+@Serializable
+data class ActiveEmergencyResponse(
+    val success: Boolean,
+    val hasAssignment: Boolean = false,
+    val assignment: EmergencyAssignmentDto? = null,
+    val error: String? = null
+)
+
+@Serializable
+data class EmergencyAssignmentDto(
+    val id: String,
+    val incidentNumber: String,
+    val status: String,
+    val classification: String = "CODE_RED",
+    val callerName: String? = null,
+    val callerPhone: String? = null,
+    val address: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val locationAccuracy: Float? = null,
+    val locationTimestamp: String? = null,
+    val dispatchNotes: String? = null,
+    val dispatchedAt: String? = null,
+    val responderArrivedAt: String? = null,
+    val member: EmergencyMemberDto? = null
+)
+
+@Serializable
+data class EmergencyMemberDto(
+    val memberId: String? = null,
+    val name: String? = null,
+    val phone: String? = null,
+    val address: String? = null,
+    val landmark: String? = null,
+    val bloodGroup: String? = null
+)
+
+@Serializable
+data class RecordArrivalRequest(
+    val incidentId: String,
+    val notes: String? = null
+)
+
+@Serializable
+data class RecordArrivalResponse(
+    val success: Boolean,
+    val message: String? = null,
+    val status: String? = null,
+    val responderArrivedAt: String? = null,
+    val error: String? = null
+)

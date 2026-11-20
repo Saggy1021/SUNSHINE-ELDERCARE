@@ -10,6 +10,7 @@ import `in`.sunshineeldercare.employee.SunshineEmployeeApp
 import `in`.sunshineeldercare.employee.ui.screens.auth.ActivationScreen
 import `in`.sunshineeldercare.employee.ui.screens.auth.LoginScreen
 import `in`.sunshineeldercare.employee.ui.screens.detail.VisitDetailScreen
+import `in`.sunshineeldercare.employee.ui.screens.emergency.EmergencyAssignmentScreen
 
 @Composable
 fun NavGraph(
@@ -55,6 +56,9 @@ fun NavGraph(
                 onVisitClick = { visitId ->
                     navController.navigate(Screen.VisitDetail.createRoute(visitId))
                 },
+                onEmergencyClick = { incidentId ->
+                    navController.navigate(Screen.EmergencyDetail.createRoute(incidentId))
+                },
                 onLogout = {
                     navController.navigate(Screen.Login.route) {
                         popUpTo(Screen.Main.route) { inclusive = true }
@@ -73,6 +77,21 @@ fun NavGraph(
             VisitDetailScreen(
                 visitId = visitId,
                 onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(
+            route = Screen.EmergencyDetail.route,
+            arguments = listOf(
+                navArgument("incidentId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val incidentId = backStackEntry.arguments?.getString("incidentId").orEmpty()
+            EmergencyAssignmentScreen(
+                incidentId = incidentId,
+                onBack = {
                     navController.popBackStack()
                 }
             )

@@ -46,6 +46,14 @@ class MainActivity : ComponentActivity() {
                     } else {
                         key(resetKey) {
                             val navController = rememberNavController()
+                            val pendingIncidentId = intent?.getStringExtra("extra_incident_id")
+
+                            LaunchedEffect(pendingIncidentId) {
+                                if (!pendingIncidentId.isNullOrBlank() && SunshineEmployeeApp.instance.tokenManager.isLoggedIn) {
+                                    navController.navigate(Screen.EmergencyDetail.createRoute(pendingIncidentId))
+                                }
+                            }
+
                             NavGraph(navController = navController)
                         }
                     }

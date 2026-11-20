@@ -38,6 +38,9 @@ class SunshineEmployeeApp : Application() {
         apiService = RetrofitClient.create(tokenManager)
         authRepository = AuthRepository(apiService, tokenManager)
         visitsRepository = VisitsRepository(apiService, database.visitDao())
+
+        // Start emergency assignment monitor
+        `in`.sunshineeldercare.employee.util.EmergencyDispatchMonitor.start(this)
     }
 
     companion object {

@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Sunshine Eldercare</string>
+    <string name="app_short_name">Sunshine Care</string>
+    <string name="helpline_number">03340585515</string>
+    <string name="helpline_display">033-40585515</string>
+    <string name="care_desk_number">+91 90888 82222</string>
+    <string name="website_renewal_url">https://www.sunshineeldercare.in/dashboard/renew</string>
+    <string name="forgot_password_url">https://www.sunshineeldercare.in/forgot-password</string>
+    <string name="privacy_policy_url">https://www.sunshineeldercare.in/privacy</string>
+</resources>
+

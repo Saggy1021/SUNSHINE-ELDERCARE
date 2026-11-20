@@ -476,6 +476,27 @@ export function employeeActivationOtpEmail(data: {
   return { subject, html, text }
 }
 
+export function memberActivationOtpEmail(data: {
+  memberName: string
+  memberId: string
+  otp: string
+}): { subject: string; html: string; text: string } {
+  const subject = 'Your Sunshine Eldercare Member App Activation Code'
+  const html = baseLayout(`
+    ${heading('Member Account Activation')}
+    ${paragraph(`Dear ${data.memberName},`)}
+    ${paragraph(`You are initiating first-time activation for your Sunshine Eldercare Member App account (Member ID: <strong>${data.memberId}</strong>).`)}
+    ${paragraph('Enter the 6-digit one-time verification code below to verify your email and set your password:')}
+    <div style="margin:24px 0;text-align:center;">
+      <span style="display:inline-block;padding:16px 32px;background-color:#f8fafc;color:#091329;font-size:32px;font-weight:700;letter-spacing:8px;border:1px solid #e2e8f0;border-radius:12px;">${data.otp}</span>
+    </div>
+    ${securityNotice('This code will expire in 5 minutes and can only be used once. Do not share this OTP with anyone.')}
+    ${paragraph('After verification, you will be prompted to create your confidential password.')}
+  `)
+  const text = `Dear ${data.memberName},\n\nYour Sunshine Eldercare Member App activation code is: ${data.otp}\nMember ID: ${data.memberId}\n\nThis code will expire in 5 minutes. Do not share it with anyone.`
+  return { subject, html, text }
+}
+
 export function loginOtpEmail(data: {
   memberName: string
   otp: string

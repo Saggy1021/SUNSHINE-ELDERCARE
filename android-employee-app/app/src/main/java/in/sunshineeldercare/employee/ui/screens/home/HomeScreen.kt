@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,15 +25,18 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import `in`.sunshineeldercare.employee.R
 import `in`.sunshineeldercare.employee.ui.components.StatusBadge
 import `in`.sunshineeldercare.employee.ui.theme.*
+import `in`.sunshineeldercare.employee.util.EmergencyDispatchMonitor
 
 @Composable
 fun HomeScreen(
     onNavigateToToday: () -> Unit,
     onNavigateToUpcoming: () -> Unit,
     onVisitClick: (String) -> Unit,
+    onEmergencyClick: (String) -> Unit = {},
     viewModel: HomeViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val activeEmergency by EmergencyDispatchMonitor.activeAssignment.collectAsState()
 
     Column(
         modifier = Modifier
@@ -84,6 +88,57 @@ fun HomeScreen(
                     }
                 }
                 HorizontalDivider(color = Slate100, thickness = 1.dp)
+            }
+        }
+
+        // Active Emergency Dispatch Banner
+        activeEmergency?.let { emg ->
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                    .clickable { onEmergencyClick(emg.id) },
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFFFEF2F2),
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFDC2626)),
+                shadowElevation = 4.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(Color(0xFFDC2626)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "🚨 EMERGENCY DISPATCH: ${emg.incidentNumber}",
+                            color = Color(0xFFDC2626),
+                            fontWeight = FontWeight.Black,
+                            fontSize = 13.sp
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Member: ${emg.member?.name ?: emg.callerName ?: "Member"} | ${emg.classification}",
+                            color = DeepNavy,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            text = "Tap to open assignment and navigate",
+                            color = Slate600,
+                            fontSize = 11.sp
+                        )
+                    }
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(20.dp))
+                }
             }
         }
 

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sunshine Eldercare Canonical Brand Colors -->
+    <color name="ic_launcher_background">#000614</color>
+    <color name="navy_dark">#091329</color>
+    <color name="navy_light">#162850</color>
+    <color name="gold_primary">#B08A4A</color>
+    <color name="gold_light">#D8C08A</color>
+    <color name="ivory_background">#FAF9F5</color>
+    <color name="card_background">#FFFFFF</color>
+    <color name="sos_red">#DC2626</color>
+    <color name="emerald_active">#059669</color>
+    <color name="text_primary">#091329</color>
+    <color name="text_secondary">#64748B</color>
+    <color name="border_subtle">#E2E8F0</color>
+</resources>
+

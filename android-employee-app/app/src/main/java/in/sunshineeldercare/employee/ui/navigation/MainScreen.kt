@@ -16,6 +16,7 @@ import `in`.sunshineeldercare.employee.ui.screens.visits.UpcomingVisitsScreen
 @Composable
 fun MainScreen(
     onVisitClick: (String) -> Unit,
+    onEmergencyClick: (String) -> Unit = {},
     onLogout: () -> Unit
 ) {
     var currentTabRoute by rememberSaveable { mutableStateOf(BottomTab.Home.route) }
@@ -40,7 +41,8 @@ fun MainScreen(
                 BottomTab.Home -> HomeScreen(
                     onNavigateToToday = { currentTabRoute = BottomTab.Today.route },
                     onNavigateToUpcoming = { currentTabRoute = BottomTab.Upcoming.route },
-                    onVisitClick = onVisitClick
+                    onVisitClick = onVisitClick,
+                    onEmergencyClick = onEmergencyClick
                 )
                 BottomTab.Today -> TodayVisitsScreen(onVisitClick = onVisitClick)
                 BottomTab.Upcoming -> UpcomingVisitsScreen(onVisitClick = onVisitClick)

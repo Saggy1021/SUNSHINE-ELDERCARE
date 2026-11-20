@@ -73,6 +73,16 @@ export interface LogCallParams {
 }
 
 export class EmergencyService {
+  private static async resolveAuthorId(client: any, actorId?: string | null): Promise<string | null> {
+    if (!actorId) return null;
+    try {
+      const u = await client.user.findUnique({ where: { id: actorId }, select: { id: true } });
+      return u ? u.id : null;
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * Generates a date-based sequence incident number, e.g. EMG-20261120-001
    */
@@ -235,7 +245,7 @@ export class EmergencyService {
       await tx.emergencyIncidentLog.create({
         data: {
           incidentId: params.incidentId,
-          authorId: params.actorId,
+          authorId: await this.resolveAuthorId(tx, params.actorId),
           authorName: params.actorName,
           action: isDowngrade ? "DOWNGRADED" : "CLASSIFIED",
           details: isDowngrade
@@ -271,7 +281,7 @@ export class EmergencyService {
       await tx.emergencyIncidentLog.create({
         data: {
           incidentId: params.incidentId,
-          authorId: params.actorId,
+          authorId: await this.resolveAuthorId(tx, params.actorId),
           authorName: params.actorName,
           action: "DISPATCHED",
           details: `Dispatched field responder ${employee.firstName} ${employee.lastName} (${employee.employeeId}). Operator: ${params.actorName}. Notes: ${params.notes || "None"}`,
@@ -298,7 +308,7 @@ export class EmergencyService {
       await tx.emergencyIncidentLog.create({
         data: {
           incidentId: params.incidentId,
-          authorId: params.actorId,
+          authorId: await this.resolveAuthorId(tx, params.actorId),
           authorName: params.actorName,
           action: "ARRIVED",
           details: `Field responder arrived on scene. Recorded by ${params.actorName}. Notes: ${params.notes || "None"}`,
@@ -330,7 +340,7 @@ export class EmergencyService {
       await tx.emergencyIncidentLog.create({
         data: {
           incidentId: params.incidentId,
-          authorId: params.actorId,
+          authorId: await this.resolveAuthorId(tx, params.actorId),
           authorName: params.actorName,
           action: "SAFETY_CONFIRMED",
           details: `Member safety confirmed by ${params.confirmedBy}. Recorded by ${params.actorName}. Notes: ${params.safetyNotes}`,
@@ -345,10 +355,11 @@ export class EmergencyService {
    * Logs a phone call made regarding the incident.
    */
   static async logCall(params: LogCallParams) {
+    const authorId = await this.resolveAuthorId(db, params.actorId);
     return db.emergencyIncidentLog.create({
       data: {
         incidentId: params.incidentId,
-        authorId: params.actorId,
+        authorId,
         authorName: params.actorName,
         action: "CALL_LOGGED",
         callRecipient: params.recipient,
@@ -363,10 +374,11 @@ export class EmergencyService {
    * Adds an operational note to the incident timeline.
    */
   static async addNote(params: { incidentId: string; note: string; actorId: string; actorName: string }) {
+    const authorId = await this.resolveAuthorId(db, params.actorId);
     return db.emergencyIncidentLog.create({
       data: {
         incidentId: params.incidentId,
-        authorId: params.actorId,
+        authorId,
         authorName: params.actorName,
         action: "NOTE_ADDED",
         details: params.note,
@@ -402,7 +414,7 @@ export class EmergencyService {
       await tx.emergencyIncidentLog.create({
         data: {
           incidentId: params.incidentId,
-          authorId: params.actorId,
+          authorId: await this.resolveAuthorId(tx, params.actorId),
           authorName: params.actorName,
           action: "RESOLVED",
           details: `Incident resolved and closed. Operator: ${params.actorName}. GPS tracking terminated. Summary: ${params.resolutionNotes}`,
