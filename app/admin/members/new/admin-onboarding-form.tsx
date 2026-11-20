@@ -3,8 +3,29 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Check, AlertCircle, CalendarDays, Clock, Info } from 'lucide-react'
+import { Check, AlertCircle, CalendarDays, Clock, Info, RotateCcw } from 'lucide-react'
 import { PREFERRED_VISIT_DAYS, normalize12HourTime } from '@/lib/services/preferred-schedule'
+
+function calculateClientEndDateIso(startDateStr: string, durationMonths: number): string {
+  if (!startDateStr || !durationMonths) return ""
+  const parts = startDateStr.split("-").map(Number)
+  if (parts.length !== 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) return ""
+
+  const year = parts[0]
+  const month = parts[1] - 1 // 0-indexed
+  const day = parts[2]
+
+  const totalMonths = month + durationMonths
+  const targetYear = year + Math.floor(totalMonths / 12)
+  const targetMonth = ((totalMonths % 12) + 12) % 12
+
+  // Month-end clamping
+  const daysInTargetMonth = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate()
+  const targetDay = Math.min(day, daysInTargetMonth)
+
+  const d = new Date(Date.UTC(targetYear, targetMonth, targetDay))
+  return d.toISOString().split("T")[0]
+}
 
 function calculateClientEndDate(startDateStr: string, durationMonths: number): string {
   if (!startDateStr) return ""
@@ -44,12 +65,49 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
   const [spouseFileError, setSpouseFileError] = useState<string | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<string>('')
   const [paymentFileError, setPaymentFileError] = useState<string | null>(null)
-  const [startDateStr, setStartDateStr] = useState<string>(() => new Date().toISOString().split('T')[0])
+  const initialStart = new Date().toISOString().split('T')[0]
+  const [startDateStr, setStartDateStr] = useState<string>(initialStart)
+  const [endDateStr, setEndDateStr] = useState<string>(() => calculateClientEndDateIso(initialStart, 1))
+  const [isManualEndDate, setIsManualEndDate] = useState<boolean>(false)
   const [preferredVisitTime, setPreferredVisitTime] = useState<string>('')
 
   const selectedPlan = plans.find(p => p.id === selectedPlanId)
   const isCouplePlan = selectedPlan?.variantType === 'COUPLE'
   const shouldShowSpouse = isCouplePlan || showSpouseSection
+
+  const handlePlanSelect = (planId: string) => {
+    setSelectedPlanId(planId)
+    const plan = plans.find(p => p.id === planId)
+    const months = plan?.months || 1
+    if (!isManualEndDate) {
+      const autoEnd = calculateClientEndDateIso(startDateStr, months)
+      setEndDateStr(autoEnd)
+    }
+  }
+
+  const handleStartDateChange = (newStart: string) => {
+    setStartDateStr(newStart)
+    if (!isManualEndDate && newStart) {
+      const months = selectedPlan?.months || 1
+      const autoEnd = calculateClientEndDateIso(newStart, months)
+      setEndDateStr(autoEnd)
+    }
+  }
+
+  const handleEndDateChange = (newEnd: string) => {
+    setEndDateStr(newEnd)
+    const months = selectedPlan?.months || 1
+    const autoEnd = calculateClientEndDateIso(startDateStr, months)
+    setIsManualEndDate(newEnd !== autoEnd)
+  }
+
+  const handleResetToCalculated = () => {
+    const months = selectedPlan?.months || 1
+    const autoEnd = calculateClientEndDateIso(startDateStr, months)
+    setEndDateStr(autoEnd)
+    setIsManualEndDate(false)
+    setError(null)
+  }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -57,6 +115,15 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
     if (primaryFileError || spouseFileError || paymentFileError) {
       setError("Please fix document upload errors before submitting.")
       return
+    }
+
+    if (startDateStr && endDateStr) {
+      const sDate = new Date(startDateStr)
+      const eDate = new Date(endDateStr)
+      if (eDate <= sDate) {
+        setError("Membership End Date must be later than Joined / Start Date.")
+        return
+      }
     }
 
     setLoading(true)
@@ -124,6 +191,8 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
     submissionData.append('memberData', JSON.stringify(memberData))
     submissionData.append('planId', formData.get('planId') as string)
     submissionData.append('membershipStartDate', startDateStr)
+    submissionData.append('membershipEndDate', endDateStr)
+    submissionData.append('isManualEndDate', isManualEndDate ? 'true' : 'false')
     submissionData.append('addOnIds', JSON.stringify(selectedAddOns))
     if (isCustomPrice) {
       submissionData.append('customPrice', formData.get('customPrice') as string)
@@ -712,7 +781,7 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
                     className="peer sr-only"
                     required
                     checked={selectedPlanId === plan.id}
-                    onChange={(e) => setSelectedPlanId(e.target.value)}
+                    onChange={() => handlePlanSelect(plan.id)}
                   />
                   <div className="rounded-lg border border-slate-200 bg-white p-4 hover:bg-slate-50 peer-checked:border-[#091329] peer-checked:ring-2 peer-checked:ring-[#091329]/20 peer-checked:shadow-xs transition-all">
                     <div className="font-medium text-slate-900 text-sm">{plan.name}</div>
@@ -739,7 +808,7 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
                   type="date"
                   name="membershipStartDate"
                   value={startDateStr}
-                  onChange={(e) => setStartDateStr(e.target.value)}
+                  onChange={(e) => handleStartDateChange(e.target.value)}
                   required
                   className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none focus:border-[#091329] focus:ring-1 focus:ring-[#091329]"
                 />
@@ -755,13 +824,47 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
               </div>
 
               <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-600">
-                  Calculated End Date
-                </label>
-                <div className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2 text-sm font-semibold text-[#091329] flex items-center justify-between">
-                  <span>{calculateClientEndDate(startDateStr, selectedPlan?.months || 1) || '—'}</span>
-                  <span className="text-[10px] uppercase font-bold text-slate-500 bg-slate-200/60 px-1.5 py-0.5 rounded">Auto</span>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600">
+                    Calculated End Date *
+                  </label>
+                  {isManualEndDate ? (
+                    <span className="inline-flex items-center text-[10px] uppercase font-bold text-amber-800 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded">
+                      Manual Adjustment
+                    </span>
+                  ) : (
+                    <span className="text-[10px] uppercase font-bold text-slate-500 bg-slate-200/60 px-1.5 py-0.5 rounded">
+                      Auto
+                    </span>
+                  )}
                 </div>
+                <input
+                  type="date"
+                  name="membershipEndDate"
+                  value={endDateStr}
+                  onChange={(e) => handleEndDateChange(e.target.value)}
+                  min={startDateStr}
+                  required
+                  className={`w-full rounded-lg border ${
+                    isManualEndDate ? 'border-amber-400 bg-amber-50/20' : 'border-slate-200 bg-white'
+                  } px-3.5 py-2 text-sm text-slate-900 outline-none focus:border-[#091329] focus:ring-1 focus:ring-[#091329]`}
+                />
+                {isManualEndDate ? (
+                  <div className="flex items-center justify-between mt-1 text-[11px] text-amber-800">
+                    <span>Manually adjusted end date</span>
+                    <button
+                      type="button"
+                      onClick={handleResetToCalculated}
+                      className="inline-flex items-center gap-1 font-semibold text-indigo-700 hover:text-indigo-900 underline cursor-pointer"
+                    >
+                      <RotateCcw className="h-3 w-3" /> Reset to Calculated Date
+                    </button>
+                  </div>
+                ) : (
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    Automatically calculated from start date and duration
+                  </p>
+                )}
               </div>
             </div>
           </div>

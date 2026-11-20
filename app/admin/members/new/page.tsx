@@ -2,6 +2,7 @@ import { AdminOnboardingForm } from "./admin-onboarding-form"
 import Link from "next/link"
 import { ArrowLeft, UserPlus } from "lucide-react"
 import { carePricingService } from "@/lib/services/care-plans"
+import { formatFullMembershipName } from "@/lib/utils/format-membership"
 
 export default async function AdminNewMemberPage() {
   const catalog = await carePricingService.getCatalog()
@@ -11,7 +12,7 @@ export default async function AdminNewMemberPage() {
     plan.variants.flatMap(variant =>
       variant.durations.map(duration => ({
         id: `${plan.slug}|${variant.variantType}|${duration.months}`,
-        name: `${plan.name} - ${variant.variantType === 'SINGLE' ? 'Single' : 'Couple'} (${duration.months} Month${duration.months > 1 ? 's' : ''})`,
+        name: formatFullMembershipName(plan.name, variant.variantType, duration.months),
         price: duration.documentedTotal,
         slug: plan.slug,
         variantType: variant.variantType,

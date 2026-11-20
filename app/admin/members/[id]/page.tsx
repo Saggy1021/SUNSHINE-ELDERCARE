@@ -3,6 +3,7 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, UserSquare2, Shield, ShieldAlert, CheckCircle2, Clock, CalendarDays, Receipt, FileText, ClipboardList, Activity, Edit, Calendar, Info } from "lucide-react"
 import { MembershipDateEditor } from "@/components/admin/membership-date-editor"
+import { formatFullMembershipName } from "@/lib/utils/format-membership"
 import { auth } from "@/auth"
 import { AuthorizationService } from "@/lib/services/authorization"
 import { MemberLifecycleActions } from "@/components/admin/member-lifecycle-actions"
@@ -340,19 +341,22 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
               <div className="space-y-4">
                 {member.subscriptions.map((sub: any, index: number) => {
                   const isCurrent = index === 0;
-                  const planName = sub.customPlan ? sub.customPlan.name : (sub.carePlan?.name || "Unknown Plan");
+                  const rawPlanName = sub.customPlan ? sub.customPlan.name : (sub.carePlan?.name || "Unknown Plan");
+                  const fullMembershipName = formatFullMembershipName(rawPlanName, sub.variantType, sub.durationMonths);
                   return (
                     <div key={sub.id} className={`p-4 rounded-lg border ${isCurrent ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white'} shadow-sm`}>
                       <div className="flex justify-between items-start mb-2">
                         <div>
                           <div className="flex items-center gap-2">
                             {isCurrent && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-200 text-amber-800 uppercase tracking-wider">Current</span>}
-                            <h3 className="font-semibold text-slate-900">{planName}</h3>
+                            <h3 className="font-semibold text-slate-900">{fullMembershipName}</h3>
                             {sub.customPlan && (
                               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700 uppercase tracking-wider">Custom Plan</span>
                             )}
                           </div>
-                          <p className="text-sm text-slate-500 mt-1">{sub.durationMonths} Months • {sub.variantType || 'Custom'}</p>
+                          <p className="text-sm text-slate-500 mt-1">
+                            {sub.variantType ? (sub.variantType.toUpperCase() === 'COUPLE' ? 'Couple Membership' : 'Single Membership') : 'Custom Membership'} • {sub.durationMonths || '—'} Months
+                          </p>
                         </div>
                         <span className={`px-3 py-1 rounded-full text-xs font-medium tracking-wide
                           ${sub.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-600' : 
@@ -398,7 +402,9 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
                 {member.renewalRequests.map((req: any) => (
                   <div key={req.id} className="flex justify-between items-center bg-slate-50 p-4 rounded-lg border border-slate-100">
                     <div>
-                      <p className="font-semibold text-slate-900 text-sm">{req.planName} ({req.durationMonths}m)</p>
+                      <p className="font-semibold text-slate-900 text-sm">
+                        {formatFullMembershipName(req.planName, req.variantType, req.durationMonths)}
+                      </p>
                       <p className="text-xs text-slate-500 mt-1">Requested Start: {req.requestedStartDate.toLocaleDateString('en-GB')}</p>
                     </div>
                     <span className={`px-2 py-1 rounded-md text-xs font-semibold

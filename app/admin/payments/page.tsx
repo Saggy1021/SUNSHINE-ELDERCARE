@@ -1,6 +1,7 @@
 import { getPendingPayments } from "@/app/actions/payment"
 import PaymentVerificationActions from "@/components/yoga/admin/payment-verification-actions"
 import { ShieldCheck, Receipt } from "lucide-react"
+import { formatFullMembershipName } from "@/lib/utils/format-membership"
 
 export default async function AdminPaymentsPage() {
   const payments = await getPendingPayments()
@@ -54,7 +55,7 @@ export default async function AdminPaymentsPage() {
                     </div>
                     {payment.renewalRequest && (
                       <p className="text-xs text-slate-500 mt-1">
-                        {payment.renewalRequest.planName} · {payment.renewalRequest.durationMonths}m
+                        {formatFullMembershipName(payment.renewalRequest.planName, payment.renewalRequest.variantType, payment.renewalRequest.durationMonths)}
                       </p>
                     )}
                   </td>

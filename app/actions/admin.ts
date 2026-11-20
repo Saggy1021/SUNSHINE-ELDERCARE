@@ -9,6 +9,7 @@ import { notificationService } from "@/lib/services/notification"
 import { AuthorizationService } from "@/lib/services/authorization"
 import { RateLimitService } from "@/lib/services/rate-limit"
 import { calculateMembershipEndDate } from "@/lib/services/dates"
+import { formatFullMembershipName } from "@/lib/utils/format-membership"
 import { formatPreferredSchedule, normalize12HourTime } from "@/lib/services/preferred-schedule"
 import { EXCLUDED_MEMBER_EMAILS, ADMIN_DISPLAY_EMAILS, DASHBOARD_EXCLUDED_EMAILS } from "@/lib/constants/members"
 
@@ -500,6 +501,7 @@ export async function getMembersCore(
             startDate: true,
             endDate: true,
             durationMonths: true,
+            variantType: true,
             plan: { select: { name: true } },
             carePlan: { select: { name: true } },
             customPlan: { select: { name: true } },
@@ -579,12 +581,7 @@ export async function getMembersCore(
   let enrichedMembers = members.map((m: any) => {
     const sub = m.subscriptions?.[0];
     const planName = sub?.carePlan?.name || sub?.plan?.name || sub?.customPlan?.name;
-    let service = "—";
-    if (planName) {
-      service = sub?.durationMonths ? `${planName} (${sub.durationMonths} Month${sub.durationMonths > 1 ? 's' : ''})` : planName;
-    } else if (sub?.durationMonths) {
-      service = `${sub.durationMonths} Month${sub.durationMonths > 1 ? 's' : ''}`;
-    }
+    const service = formatFullMembershipName(planName, sub?.variantType, sub?.durationMonths);
 
     const hasSpouse = Boolean(
       m.memberProfile?.spouseFirstName?.trim() ||
@@ -683,10 +680,11 @@ export async function getMembers(
 }
 
 // --- Membership Date Modification Core Logic ---
-export async function updateMembershipStartDateCore(
+export async function updateMembershipDatesCore(
   subscriptionId: string,
   newStartDateStr: string,
-  sessionUserId: string,
+  newEndDateStr?: string | null,
+  sessionUserId: string = "system",
   database: any = db
 ) {
   if (!newStartDateStr) {
@@ -695,7 +693,7 @@ export async function updateMembershipStartDateCore(
 
   const newStartDate = new Date(newStartDateStr);
   if (isNaN(newStartDate.getTime())) {
-    return { success: false, error: "Invalid date format." };
+    return { success: false, error: "Invalid start date format." };
   }
 
   const subscription = await database.subscription.findUnique({
@@ -714,14 +712,29 @@ export async function updateMembershipStartDateCore(
   }
 
   const durationMonths = subscription.durationMonths || 1;
-  const newEndDate = calculateMembershipEndDate(newStartDate, durationMonths);
+  const calculatedEndDate = calculateMembershipEndDate(newStartDate, durationMonths);
+
+  let finalEndDate = calculatedEndDate;
+  let isManualEndDate = false;
+
+  if (newEndDateStr) {
+    const parsedEndDate = new Date(newEndDateStr);
+    if (isNaN(parsedEndDate.getTime())) {
+      return { success: false, error: "Invalid end date format." };
+    }
+    if (parsedEndDate <= newStartDate) {
+      return { success: false, error: "Membership end date must be later than start date." };
+    }
+    finalEndDate = parsedEndDate;
+    isManualEndDate = finalEndDate.getTime() !== calculatedEndDate.getTime();
+  }
 
   await database.$transaction(async (tx: any) => {
     await tx.subscription.update({
       where: { id: subscription.id },
       data: {
         startDate: newStartDate,
-        endDate: newEndDate,
+        endDate: finalEndDate,
       },
     });
 
@@ -736,7 +749,9 @@ export async function updateMembershipStartDateCore(
           previousStartDate: subscription.startDate,
           previousEndDate: subscription.endDate,
           newStartDate,
-          newEndDate,
+          newEndDate: finalEndDate,
+          calculatedEndDate,
+          isManualEndDate,
           durationMonths,
         },
       },
@@ -746,16 +761,18 @@ export async function updateMembershipStartDateCore(
   return {
     success: true,
     startDate: newStartDate,
-    endDate: newEndDate,
+    endDate: finalEndDate,
+    isManualEndDate,
   };
 }
 
-export async function updateMembershipStartDate(
+export async function updateMembershipDates(
   subscriptionId: string,
-  newStartDateStr: string
+  newStartDateStr: string,
+  newEndDateStr?: string | null
 ) {
   const sessionUserId = await requirePermission("MEMBER_MANAGE");
-  const result = await updateMembershipStartDateCore(subscriptionId, newStartDateStr, sessionUserId, db);
+  const result = await updateMembershipDatesCore(subscriptionId, newStartDateStr, newEndDateStr, sessionUserId, db);
   if (result.success) {
     revalidatePath("/admin");
     revalidatePath("/admin/members");
@@ -765,6 +782,22 @@ export async function updateMembershipStartDate(
     }
   }
   return result;
+}
+
+export async function updateMembershipStartDateCore(
+  subscriptionId: string,
+  newStartDateStr: string,
+  sessionUserId: string,
+  database: any = db
+) {
+  return updateMembershipDatesCore(subscriptionId, newStartDateStr, null, sessionUserId, database);
+}
+
+export async function updateMembershipStartDate(
+  subscriptionId: string,
+  newStartDateStr: string
+) {
+  return updateMembershipDates(subscriptionId, newStartDateStr, null);
 }
 
 // --- Comprehensive Member Profile Editing ---

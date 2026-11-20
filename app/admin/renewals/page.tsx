@@ -1,6 +1,7 @@
 import { getRenewalRequests } from "@/app/actions/admin"
 import RenewalActions from "@/components/yoga/admin/renewal-actions"
 import { RefreshCw, CalendarDays } from "lucide-react"
+import { formatFullMembershipName } from "@/lib/utils/format-membership"
 
 export default async function AdminRenewalsPage() {
   const requests = await getRenewalRequests()
@@ -45,7 +46,9 @@ export default async function AdminRenewalsPage() {
                     <p className="text-xs text-slate-500 mt-0.5">{req.user.email}</p>
                   </td>
                   <td className="px-5 py-3.5">
-                    <p className="font-medium text-slate-900">{req.planName}</p>
+                    <p className="font-medium text-slate-900">
+                      {formatFullMembershipName(req.planName, req.variantType, req.durationMonths)}
+                    </p>
                     <p className="text-xs text-slate-500 uppercase mt-0.5">{req.variantType}</p>
                   </td>
                   <td className="px-5 py-3.5 text-slate-700">{req.durationMonths} Months</td>

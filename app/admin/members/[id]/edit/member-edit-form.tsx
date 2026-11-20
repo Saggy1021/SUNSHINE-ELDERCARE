@@ -3,9 +3,10 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Check, AlertCircle, CalendarDays, Loader2, User, Users, Shield, Activity, HeartPulse, PhoneCall, Building2, Clock, Calendar, X, Info } from 'lucide-react'
+import { Check, AlertCircle, CalendarDays, Loader2, User, Users, Shield, Activity, HeartPulse, PhoneCall, Building2, Clock, Calendar, X, Info, RotateCcw } from 'lucide-react'
 import { adminUpdateMember } from '@/app/actions/admin'
 import { PREFERRED_VISIT_DAYS, to24HourTime, normalize12HourTime } from '@/lib/services/preferred-schedule'
+import { formatFullMembershipName } from '@/lib/utils/format-membership'
 
 function formatDateForInput(date: Date | string | null | undefined): string {
   if (!date) return '';
@@ -56,9 +57,14 @@ export function MemberEditForm({ member, catalog }: { member: any; catalog?: any
   // Subscription dates
   const initialStartDate = formatDateForInput(currentSub?.startDate)
   const initialEndDate = formatDateForInput(currentSub?.endDate)
+  const initialDuration = currentSub?.durationMonths || 6
+  const defaultAutoEnd = calculateClientEndDate(initialStartDate, initialDuration)
+  const initialIsManual = Boolean(initialEndDate && defaultAutoEnd && initialEndDate !== defaultAutoEnd)
+
   const [startDate, setStartDate] = useState(initialStartDate)
   const [endDate, setEndDate] = useState(initialEndDate)
-  const [durationMonths, setDurationMonths] = useState<number>(currentSub?.durationMonths || 6)
+  const [durationMonths, setDurationMonths] = useState<number>(initialDuration)
+  const [isManualEndDate, setIsManualEndDate] = useState(initialIsManual)
 
   // Preferred visit schedule
   const [preferredDay, setPreferredDay] = useState(profile?.preferredVisitDay || "")
@@ -70,7 +76,7 @@ export function MemberEditForm({ member, catalog }: { member: any; catalog?: any
 
   const handleStartDateChange = (newStart: string) => {
     setStartDate(newStart)
-    if (newStart && durationMonths) {
+    if (!isManualEndDate && newStart && durationMonths) {
       const autoEnd = calculateClientEndDate(newStart, durationMonths)
       if (autoEnd) {
         setEndDate(autoEnd)
@@ -80,7 +86,7 @@ export function MemberEditForm({ member, catalog }: { member: any; catalog?: any
 
   const handleDurationChange = (newMonths: number) => {
     setDurationMonths(newMonths)
-    if (startDate && newMonths) {
+    if (!isManualEndDate && startDate && newMonths) {
       const autoEnd = calculateClientEndDate(startDate, newMonths)
       if (autoEnd) {
         setEndDate(autoEnd)
@@ -88,8 +94,33 @@ export function MemberEditForm({ member, catalog }: { member: any; catalog?: any
     }
   }
 
+  const handleEndDateChange = (newEnd: string) => {
+    setEndDate(newEnd)
+    const autoEnd = calculateClientEndDate(startDate, durationMonths)
+    setIsManualEndDate(newEnd !== autoEnd)
+  }
+
+  const handleResetToCalculated = () => {
+    const autoEnd = calculateClientEndDate(startDate, durationMonths)
+    if (autoEnd) {
+      setEndDate(autoEnd)
+      setIsManualEndDate(false)
+      setError(null)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+
+    if (startDate && endDate) {
+      const sDate = new Date(startDate)
+      const eDate = new Date(endDate)
+      if (eDate <= sDate) {
+        setError('Membership end date must be later than start date.')
+        return
+      }
+    }
+
     setLoading(true)
     setError(null)
     setSuccess(null)
@@ -503,16 +534,42 @@ export function MemberEditForm({ member, catalog }: { member: any; catalog?: any
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-              To (Membership End Date)
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                To (Membership End Date)
+              </label>
+              {isManualEndDate ? (
+                <span className="text-[10px] uppercase font-bold text-amber-800 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded">
+                  Manual Adjustment
+                </span>
+              ) : (
+                <span className="text-[10px] uppercase font-bold text-slate-500 bg-slate-200/60 px-1.5 py-0.5 rounded">
+                  Auto
+                </span>
+              )}
+            </div>
             <input
               type="date"
               name="endDate"
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:bg-white focus:border-[#091329] focus:ring-1 focus:ring-[#091329] outline-none"
+              onChange={(e) => handleEndDateChange(e.target.value)}
+              min={startDate}
+              className={`w-full px-3 py-2 ${
+                isManualEndDate ? 'border-amber-400 bg-amber-50/20' : 'bg-slate-50 border-slate-300'
+              } border rounded-lg text-sm text-slate-900 focus:bg-white focus:border-[#091329] focus:ring-1 focus:ring-[#091329] outline-none`}
             />
+            {isManualEndDate && (
+              <div className="flex items-center justify-between mt-1 text-[11px] text-amber-800">
+                <span>Manually adjusted end date</span>
+                <button
+                  type="button"
+                  onClick={handleResetToCalculated}
+                  className="inline-flex items-center gap-1 font-semibold text-indigo-700 hover:text-indigo-900 underline cursor-pointer"
+                >
+                  <RotateCcw className="h-3 w-3" /> Reset to Calculated Date
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -526,7 +583,7 @@ export function MemberEditForm({ member, catalog }: { member: any; catalog?: any
               defaultValue={currentSub?.carePlanId || ''}
               className="w-full md:w-1/2 px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:bg-white focus:border-[#091329] focus:ring-1 focus:ring-[#091329] outline-none"
             >
-              <option value="">Keep current plan ({currentSub?.carePlan?.name || currentSub?.customPlan?.name || 'Default'})</option>
+              <option value="">Keep current plan ({formatFullMembershipName(currentSub?.carePlan?.name || currentSub?.customPlan?.name, currentSub?.variantType, currentSub?.durationMonths) || 'Default'})</option>
               {catalog.map((cp: any) => (
                 <option key={cp.id || cp.slug} value={cp.id || cp.slug}>
                   {cp.name}

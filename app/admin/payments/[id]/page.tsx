@@ -5,6 +5,7 @@ import { db } from "@/lib/db"
 import { ShieldCheck, Receipt, User, Clock, FileText, ArrowLeft, Mail, Download, CheckCircle2, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import { notFound } from "next/navigation"
+import { formatFullMembershipName } from "@/lib/utils/format-membership"
 
 export default async function PaymentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: paymentId } = await params;
@@ -209,7 +210,7 @@ export default async function PaymentDetailPage({ params }: { params: Promise<{ 
               <h3 className="font-semibold text-slate-900 mb-2">Membership Status</h3>
               {subscription ? (
                 <>
-                  <p><span className="text-slate-500">Plan:</span> {subscription.carePlan?.name || "Care Plan"}</p>
+                  <p><span className="text-slate-500">Plan:</span> {formatFullMembershipName(subscription.carePlan?.name, subscription.variantType, subscription.durationMonths)}</p>
                   <p><span className="text-slate-500">Status:</span> <span className="font-semibold text-emerald-700">{subscription.status}</span></p>
                   {subscription.startDate && (
                     <p><span className="text-slate-500">Start:</span> {subscription.startDate.toLocaleDateString('en-GB')}</p>

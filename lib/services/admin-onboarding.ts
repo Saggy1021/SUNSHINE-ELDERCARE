@@ -125,6 +125,21 @@ export async function executeAdminOnboardMember(
   const membershipStartDate = new Date(membershipStartDateStr)
   const calculatedEndDate = calculateMembershipEndDate(membershipStartDate, durationMonths)
 
+  const membershipEndDateStr = (formData.get('membershipEndDate') as string) || ''
+  let actualEndDate = calculatedEndDate
+  let isManualEndDate = false
+
+  if (membershipEndDateStr) {
+    const manualEndDate = new Date(membershipEndDateStr)
+    if (!isNaN(manualEndDate.getTime())) {
+      if (manualEndDate <= membershipStartDate) {
+        return { success: false, error: 'Membership End Date must be later than Start Date' }
+      }
+      actualEndDate = manualEndDate
+      isManualEndDate = actualEndDate.getTime() !== calculatedEndDate.getTime()
+    }
+  }
+
   let carePlanResult
   try {
     carePlanResult = await pricing.lookupPrice({
@@ -322,7 +337,7 @@ export async function executeAdminOnboardMember(
             variantType: carePlanResult.variantType,
             durationMonths,
             startDate: membershipStartDate,
-            endDate: calculatedEndDate,
+            endDate: actualEndDate,
             status: 'PENDING',
           }
         })
@@ -414,7 +429,9 @@ export async function executeAdminOnboardMember(
           metadata: {
             subscriptionId: txResult.subscriptionId,
             startDate: membershipStartDate.toISOString(),
-            endDate: calculatedEndDate.toISOString(),
+            endDate: actualEndDate.toISOString(),
+            calculatedEndDate: calculatedEndDate.toISOString(),
+            isManualEndDate,
             durationMonths,
           }
         }
@@ -434,7 +451,9 @@ export async function executeAdminOnboardMember(
           paymentMethod,
           customPriceReason,
           startDate: membershipStartDate.toISOString(),
-          endDate: calculatedEndDate.toISOString(),
+          endDate: actualEndDate.toISOString(),
+          calculatedEndDate: calculatedEndDate.toISOString(),
+          isManualEndDate,
           durationMonths,
         }
       }
