@@ -36,6 +36,7 @@ interface IncidentSummary {
   locationAccuracy: number | null;
   fallbackAddress: string | null;
   triggeredAt: string | Date;
+  createdAt?: string | Date;
   acknowledgedAt: string | Date | null;
   safetyConfirmedAt: string | Date | null;
   assignedEmployee: {
@@ -85,7 +86,12 @@ export function EmergencyDashboardClient({
         if (res.ok) {
           const data = await res.json();
           if (isMounted && data.activeIncidents) {
-            setIncidents(data.activeIncidents);
+            const sorted = [...data.activeIncidents].sort((a, b) => {
+              const timeA = new Date(a.createdAt || a.triggeredAt).getTime();
+              const timeB = new Date(b.createdAt || b.triggeredAt).getTime();
+              return timeB - timeA;
+            });
+            setIncidents(sorted);
             if (data.metrics) {
               setMetrics(data.metrics);
             }
@@ -130,20 +136,26 @@ export function EmergencyDashboardClient({
     });
   };
 
-  const filteredIncidents = incidents.filter((incident) => {
-    if (filterClassification !== "ALL" && incident.classification !== filterClassification) {
-      return false;
-    }
-    if (searchQuery.trim().length > 0) {
-      const q = searchQuery.toLowerCase();
-      const matchNumber = incident.incidentNumber.toLowerCase().includes(q);
-      const matchName = incident.callerName?.toLowerCase().includes(q) ?? false;
-      const matchMemberId = incident.memberId?.toLowerCase().includes(q) ?? false;
-      const matchPhone = incident.callerPhone?.includes(q) ?? false;
-      return matchNumber || matchName || matchMemberId || matchPhone;
-    }
-    return true;
-  });
+  const filteredIncidents = incidents
+    .filter((incident) => {
+      if (filterClassification !== "ALL" && incident.classification !== filterClassification) {
+        return false;
+      }
+      if (searchQuery.trim().length > 0) {
+        const q = searchQuery.toLowerCase();
+        const matchNumber = incident.incidentNumber.toLowerCase().includes(q);
+        const matchName = incident.callerName?.toLowerCase().includes(q) ?? false;
+        const matchMemberId = incident.memberId?.toLowerCase().includes(q) ?? false;
+        const matchPhone = incident.callerPhone?.includes(q) ?? false;
+        return matchNumber || matchName || matchMemberId || matchPhone;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const timeA = new Date(a.createdAt || a.triggeredAt).getTime();
+      const timeB = new Date(b.createdAt || b.triggeredAt).getTime();
+      return timeB - timeA;
+    });
 
   const formatElapsed = (dateInput: string | Date) => {
     const d = new Date(dateInput);
@@ -176,6 +188,7 @@ export function EmergencyDashboardClient({
         <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
           <EmergencyAudioAlert
             unacknowledgedCodeRedCount={unacknowledgedCodeReds.length}
+            newIncidentIds={unacknowledgedCodeReds.map((i) => i.id)}
           />
           <Link
             href="/emergencyos/incidents/new"

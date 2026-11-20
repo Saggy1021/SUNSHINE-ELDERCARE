@@ -21,6 +21,10 @@ import {
 export interface ScheduleVisitDTO {
   id: string;
   careCaseId: string;
+  isEmergency?: boolean;
+  emergencyClassification?: string;
+  emergencyIncidentNumber?: string;
+  emergencyIncidentId?: string;
   scheduledStart: string;
   scheduledEnd: string;
   actualStart?: string | null;
@@ -172,6 +176,192 @@ async function requireSchedulePermission(requiredManage = false): Promise<{ user
   }
 
   return { userId: session.user.id, email: session.user.email || "" };
+}
+
+/**
+ * Appends active and resolved emergency incidents that have assigned field responders to the visit schedule.
+ * Data-integrity guarantee: Emergency incidents are queried directly as a read model without creating duplicate
+ * CareVisit rows or modifying membership quotas or billing. Reassigning an employee updates the same incident,
+ * strictly preventing duplicate schedule entries.
+ */
+async function appendEmergencyResponderVisits(
+  dtoList: ScheduleVisitDTO[],
+  filters: {
+    startDate: string;
+    endDate: string;
+    memberSearch?: string;
+    caregiverId?: string;
+    status?: string;
+    category?: string;
+    location?: string;
+  },
+  rangeStart: Date,
+  rangeEnd: Date
+): Promise<ScheduleVisitDTO[]> {
+  try {
+    // If category is explicitly filtered to "Scheduled", skip ad-hoc emergency assignments
+    if (filters.category && filters.category !== "ALL" && filters.category !== "Ad-hoc") {
+      return dtoList;
+    }
+
+    const emergencyWhere: any = {
+      assignedEmployeeId: { not: null },
+      OR: [
+        { triggeredAt: { gte: rangeStart, lte: rangeEnd } },
+        { dispatchedAt: { gte: rangeStart, lte: rangeEnd } },
+        {
+          status: { in: ["DISPATCHED", "RESPONDER_ON_SCENE", "TRIGGERED", "ACKNOWLEDGED"] },
+          triggeredAt: { lte: rangeEnd },
+        },
+      ],
+    };
+
+    if (filters.caregiverId && filters.caregiverId !== "ALL") {
+      emergencyWhere.assignedEmployeeId = filters.caregiverId;
+    }
+
+    if (filters.status && filters.status !== "ALL") {
+      if (filters.status === "COMPLETED") {
+        emergencyWhere.status = "RESOLVED";
+      } else if (filters.status === "IN_PROGRESS") {
+        emergencyWhere.status = { in: ["DISPATCHED", "RESPONDER_ON_SCENE"] };
+      } else {
+        // "SCHEDULED", "WAITLISTED", "CONFIRMED" do not match emergency responder assignments
+        return dtoList;
+      }
+    }
+
+    const emergencies = await db.emergencyIncident.findMany({
+      where: emergencyWhere,
+      include: {
+        assignedEmployee: true,
+        user: {
+          include: {
+            memberProfile: true,
+            emergencyContact: true,
+          },
+        },
+      },
+      orderBy: { triggeredAt: "desc" },
+    });
+
+    for (const inc of emergencies) {
+      if (!inc.assignedEmployee) continue;
+
+      // Filter by memberSearch if provided
+      if (filters.memberSearch && filters.memberSearch.trim()) {
+        const q = filters.memberSearch.trim().toLowerCase();
+        const callerMatch = inc.callerName?.toLowerCase().includes(q) ?? false;
+        const memberIdMatch =
+          (inc.memberId?.toLowerCase().includes(q) ?? false) ||
+          (inc.user?.memberProfile?.memberId?.toLowerCase().includes(q) ?? false);
+        const phoneMatch =
+          (inc.callerPhone?.includes(q) ?? false) ||
+          (inc.user?.memberProfile?.mobileNumber?.includes(q) ?? false);
+        const incNumMatch = inc.incidentNumber.toLowerCase().includes(q);
+        const userMatch = inc.user?.name?.toLowerCase().includes(q) ?? false;
+        if (!callerMatch && !memberIdMatch && !phoneMatch && !incNumMatch && !userMatch) {
+          continue;
+        }
+      }
+
+      // Filter by location if provided
+      if (filters.location && filters.location.trim()) {
+        const locQ = filters.location.trim().toLowerCase();
+        const address = inc.fallbackAddress || inc.user?.memberProfile?.serviceAddress || "";
+        if (!address.toLowerCase().includes(locQ)) {
+          continue;
+        }
+      }
+
+      const isResolved = inc.status === "RESOLVED";
+      const memberSalutation = inc.user?.memberProfile?.salutation || "Mr";
+      const memberName =
+        (inc.user?.memberProfile?.firstName
+          ? `${memberSalutation} ${inc.user.memberProfile.firstName} ${inc.user.memberProfile.lastName || ""}`.trim()
+          : null) ||
+        inc.callerName ||
+        inc.user?.name ||
+        "Emergency Member";
+
+      const start = inc.dispatchedAt || inc.triggeredAt;
+      const end = inc.resolvedAt || new Date(start.getTime() + 2 * 3600 * 1000);
+
+      // Duration display if resolved
+      let durationDisplay: string | null = null;
+      if (inc.dispatchedAt && inc.resolvedAt) {
+        const diffMs = inc.resolvedAt.getTime() - inc.dispatchedAt.getTime();
+        if (diffMs >= 0) {
+          const totalMins = Math.round(diffMs / 60000);
+          const hrs = Math.floor(totalMins / 60);
+          const mins = totalMins % 60;
+          durationDisplay = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+        }
+      }
+
+      dtoList.push({
+        id: `emg-${inc.id}`,
+        careCaseId: `emg-${inc.id}`,
+        isEmergency: true,
+        emergencyClassification: inc.classification, // "CODE_RED", "CODE_YELLOW", "CODE_GREEN"
+        emergencyIncidentNumber: inc.incidentNumber,
+        emergencyIncidentId: inc.id,
+        scheduledStart: start.toISOString(),
+        scheduledEnd: end.toISOString(),
+        actualStart: inc.dispatchedAt ? inc.dispatchedAt.toISOString() : inc.triggeredAt.toISOString(),
+        actualEnd: inc.resolvedAt ? inc.resolvedAt.toISOString() : null,
+        completedAt: inc.resolvedAt ? inc.resolvedAt.toISOString() : null,
+        actualDurationDisplay: durationDisplay,
+        status: isResolved ? "COMPLETED" : (inc.status === "RESPONDER_ON_SCENE" ? "IN_PROGRESS" : inc.status),
+        category: "Ad-hoc",
+        workDescription: inc.resolutionNotes || null,
+        operationalNotes: inc.dispatchNotes || inc.triggerNotes || null,
+        carePlanName: `EmergencyOS — ${inc.classification.replace("_", " ")}`,
+        member: {
+          userId: inc.userId || "",
+          name: memberName,
+          email: inc.user?.email || "",
+          memberId: inc.memberId || inc.user?.memberProfile?.memberId || null,
+          serviceAddress: inc.fallbackAddress || inc.user?.memberProfile?.serviceAddress || "Address on record",
+          mobileNumber: inc.callerPhone || inc.user?.memberProfile?.mobileNumber || inc.user?.emergencyContact?.phone || null,
+          preferredVisitDay: null,
+          preferredVisitTime: null,
+          preferredScheduleDisplay: "Immediate Emergency Dispatch",
+        },
+        elder: {
+          id: inc.userId || inc.id,
+          firstName: memberName,
+          lastName: "",
+          relationship: "Self / Member",
+          address: inc.fallbackAddress || inc.user?.memberProfile?.serviceAddress || null,
+          city: "Kolkata",
+          contactNumber: inc.callerPhone || inc.user?.memberProfile?.mobileNumber || null,
+        },
+        assignedEmployee: {
+          id: inc.assignedEmployee.id,
+          employeeId: inc.assignedEmployee.employeeId,
+          firstName: inc.assignedEmployee.firstName,
+          lastName: inc.assignedEmployee.lastName,
+          designation: inc.assignedEmployee.designation,
+          contactNumber: inc.assignedEmployee.contactNumber || null,
+        },
+        assignedCaregiver: {
+          id: inc.assignedEmployee.id,
+          employeeId: inc.assignedEmployee.employeeId,
+          firstName: inc.assignedEmployee.firstName,
+          lastName: inc.assignedEmployee.lastName,
+          designation: inc.assignedEmployee.designation,
+          contactNumber: inc.assignedEmployee.contactNumber || null,
+        },
+        additionalCaregivers: [],
+      });
+    }
+
+    dtoList.sort((a, b) => new Date(a.scheduledStart).getTime() - new Date(b.scheduledStart).getTime());
+  } catch (err) {
+    console.warn("[appendEmergencyResponderVisits] Error querying emergency incidents:", err);
+  }
+  return dtoList;
 }
 
 /**
@@ -438,7 +628,7 @@ export async function getScheduleVisits(filters: {
         });
       }
 
-      return dtoList;
+      return appendEmergencyResponderVisits(dtoList, filters, rangeStart, rangeEnd);
     } catch (err) {
       console.warn("[getScheduleVisits] $queryRaw failed, falling back to Prisma findMany:", err);
     }
@@ -607,7 +797,7 @@ export async function getScheduleVisits(filters: {
     });
   }
 
-  return dtoList;
+  return appendEmergencyResponderVisits(dtoList, filters, rangeStart, rangeEnd);
 }
 
 /**
@@ -708,7 +898,38 @@ export async function getEmployeeAvailability(params: {
     },
   });
 
+  // Also query active emergency dispatches that block employee availability
+  const blockingEmergencies = await db.emergencyIncident.findMany({
+    where: {
+      assignedEmployeeId: { not: null },
+      status: { in: ["DISPATCHED", "RESPONDER_ON_SCENE"] },
+      triggeredAt: { lt: scheduledEnd },
+    },
+    select: {
+      id: true,
+      incidentNumber: true,
+      assignedEmployeeId: true,
+      classification: true,
+      callerName: true,
+      dispatchedAt: true,
+      triggeredAt: true,
+    },
+  });
+
   return employees.map((emp) => {
+    // Check emergency conflict first
+    const emergencyConflict = blockingEmergencies.find((e) => e.assignedEmployeeId === emp.id);
+    if (emergencyConflict) {
+      const start = emergencyConflict.dispatchedAt || emergencyConflict.triggeredAt;
+      const timeStr = formatTimeIST(start);
+      return {
+        employeeId: emp.id,
+        available: false,
+        conflictTime: timeStr,
+        conflictReason: `Active Emergency Dispatch (${emergencyConflict.incidentNumber} - ${emergencyConflict.callerName || "Member"})`,
+      };
+    }
+
     const conflict = blockingVisits.find(
       (v) => v.assignedEmpId === emp.id || v.assignments.some((a) => a.employeeId === emp.id)
     );

@@ -500,7 +500,7 @@ export class EmergencyService {
             },
           },
         },
-        orderBy: [{ triggeredAt: "asc" }],
+        orderBy: [{ createdAt: "desc" }, { triggeredAt: "desc" }],
       }),
       // Count resolved today
       db.emergencyIncident.count({
@@ -513,18 +513,11 @@ export class EmergencyService {
       }),
     ]);
 
-    // Priority sort: CODE_RED first, then CODE_YELLOW, then CODE_GREEN
-    const classificationOrder: Record<string, number> = {
-      CODE_RED: 1,
-      CODE_YELLOW: 2,
-      CODE_GREEN: 3,
-    };
-
+    // Active incidents sorted newest first by creation timestamp (createdAt / triggeredAt descending)
     activeIncidents.sort((a, b) => {
-      const orderA = classificationOrder[a.classification] || 99;
-      const orderB = classificationOrder[b.classification] || 99;
-      if (orderA !== orderB) return orderA - orderB;
-      return a.triggeredAt.getTime() - b.triggeredAt.getTime();
+      const timeA = new Date(a.createdAt || a.triggeredAt).getTime();
+      const timeB = new Date(b.createdAt || b.triggeredAt).getTime();
+      return timeB - timeA;
     });
 
     const codeRedCount = activeIncidents.filter((i) => i.classification === "CODE_RED").length;

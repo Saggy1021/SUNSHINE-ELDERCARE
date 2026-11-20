@@ -28,6 +28,8 @@ import {
   Phone,
   ShieldCheck,
   Cake,
+  Flame,
+  Siren,
 } from "lucide-react";
 import { SearchableMemberSelect } from "./SearchableMemberSelect";
 import { SearchableEmployeeSelect } from "./SearchableEmployeeSelect";
@@ -191,6 +193,42 @@ export function VisitScheduleCalendar({
   }, [
     dateRangeStart.toISOString(),
     dateRangeEnd.toISOString(),
+    memberSearch,
+    selectedEmployeeFilter,
+    selectedStatus,
+    selectedCategory,
+    selectedLocation,
+  ]);
+
+  // Live refresh: background polling every 10s ensures new emergency assignments & status changes appear in real-time
+  useEffect(() => {
+    let isMounted = true;
+    const interval = setInterval(async () => {
+      try {
+        const data = await getScheduleVisits({
+          startDate: dateRangeStart.toISOString(),
+          endDate: dateRangeEnd.toISOString(),
+          memberSearch: memberSearch || undefined,
+          caregiverId: selectedEmployeeFilter !== "ALL" ? selectedEmployeeFilter : undefined,
+          status: selectedStatus !== "ALL" ? selectedStatus : undefined,
+          category: selectedCategory !== "ALL" ? selectedCategory : undefined,
+          location: selectedLocation || undefined,
+        });
+        if (isMounted) {
+          setVisits(data);
+        }
+      } catch {
+        // Silently retry next interval
+      }
+    }, 10000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [
+    dateRangeStart,
+    dateRangeEnd,
     memberSearch,
     selectedEmployeeFilter,
     selectedStatus,
@@ -435,9 +473,28 @@ export function VisitScheduleCalendar({
           </span>
         );
       case "COMPLETED":
+      case "RESOLVED":
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-            <span className="h-1.5 w-1.5 rounded-full bg-slate-400" /> Completed
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-300">
+            <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Completed
+          </span>
+        );
+      case "TRIGGERED":
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-800 border border-red-300 animate-pulse">
+            <span className="h-1.5 w-1.5 rounded-full bg-red-600" /> Triggered
+          </span>
+        );
+      case "DISPATCHED":
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-800 border border-red-300 animate-pulse">
+            <span className="h-1.5 w-1.5 rounded-full bg-red-600" /> Dispatched
+          </span>
+        );
+      case "RESPONDER_ON_SCENE":
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-800 border border-purple-300 animate-pulse">
+            <span className="h-1.5 w-1.5 rounded-full bg-purple-600" /> On Scene
           </span>
         );
       case "CANCELLED":
@@ -455,9 +512,24 @@ export function VisitScheduleCalendar({
     }
   };
 
-  // Category Badge UI Helper
-  const renderCategoryBadge = (category: "Scheduled" | "Ad-hoc") => {
-    if (category === "Ad-hoc") {
+  // Category & Emergency Badge UI Helper
+  const renderCategoryBadge = (visit: ScheduleVisitDTO) => {
+    if (visit.isEmergency) {
+      const isCodeRed = (visit.emergencyClassification || "CODE_RED") === "CODE_RED";
+      return (
+        <span
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+            isCodeRed
+              ? "bg-red-600 text-white shadow-2xs"
+              : "bg-amber-600 text-white shadow-2xs"
+          }`}
+        >
+          <Flame className="w-3 h-3" />
+          {visit.emergencyClassification ? visit.emergencyClassification.replace("_", " ") : "CODE RED"}
+        </span>
+      );
+    }
+    if (visit.category === "Ad-hoc") {
       return (
         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
           Ad-hoc
@@ -469,6 +541,64 @@ export function VisitScheduleCalendar({
         Scheduled
       </span>
     );
+  };
+
+  // Status-based Card Border & Visual Styling Helper (Requirement 5 & 4)
+  const getVisitCardBorderClasses = (visit: ScheduleVisitDTO) => {
+    const isEmergency = Boolean(visit.isEmergency);
+    const isCompleted = visit.status === "COMPLETED" || visit.status === "RESOLVED";
+
+    if (isEmergency) {
+      if (isCompleted) {
+        // Completed emergency-linked Code Red entry: GREEN border
+        return "border-2 border-emerald-500 bg-emerald-50/20 hover:border-emerald-600 shadow-2xs";
+      }
+      // Active Code Red emergency: prominent RED border / highlight
+      return "border-2 border-red-500 bg-red-50/40 hover:border-red-600 shadow-sm ring-2 ring-red-400/25";
+    }
+
+    // Normal CareVisits
+    if (isCompleted) {
+      // Completed normal CareVisits: GREEN border
+      return "border-2 border-emerald-500 bg-emerald-50/15 hover:border-emerald-600 shadow-2xs";
+    }
+
+    if (visit.status === "IN_PROGRESS") {
+      return "border-2 border-purple-400 bg-purple-50/10 hover:border-purple-500 shadow-2xs";
+    }
+
+    if (visit.status === "WAITLISTED") {
+      return "border-2 border-amber-300 bg-amber-50/20 hover:border-amber-400 shadow-2xs";
+    }
+
+    if (visit.status === "CANCELLED") {
+      return "border border-slate-200 bg-slate-50/80 opacity-60";
+    }
+
+    // Scheduled / Confirmed normal visits: retain existing styling
+    return "border border-slate-200 hover:border-[#091329]/60 bg-white shadow-2xs";
+  };
+
+  const getMonthPillClasses = (visit: ScheduleVisitDTO) => {
+    const isEmergency = Boolean(visit.isEmergency);
+    const isCompleted = visit.status === "COMPLETED" || visit.status === "RESOLVED";
+
+    if (isEmergency) {
+      if (isCompleted) {
+        return "bg-emerald-50 text-emerald-800 border border-emerald-400 font-bold";
+      }
+      return "bg-red-50 text-red-900 border border-red-500 font-black";
+    }
+
+    if (isCompleted) {
+      return "bg-emerald-50 text-emerald-800 border border-emerald-400 font-medium";
+    }
+
+    if (visit.status === "IN_PROGRESS") {
+      return "bg-purple-50 text-purple-800 border border-purple-300 font-medium";
+    }
+
+    return "bg-slate-100 text-slate-800 border border-slate-200 font-medium";
   };
 
   // Header Title based on active view
@@ -856,15 +986,26 @@ export function VisitScheduleCalendar({
                       <>
                         {dayVisits.map((visit) => {
                           const assignedPerson = visit.assignedEmployee || visit.assignedCaregiver;
+                          const isEmergency = Boolean(visit.isEmergency);
+
                           return (
                             <div
                               key={visit.id}
                               onClick={() => setSelectedVisit(visit)}
-                              className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs hover:border-[#091329]/60 hover:shadow-sm transition-all cursor-pointer space-y-2.5 text-left group"
+                              className={`p-3.5 rounded-xl transition-all cursor-pointer space-y-2.5 text-left group ${getVisitCardBorderClasses(
+                                visit
+                              )}`}
                             >
                               {/* Badges row */}
                               <div className="flex items-center justify-between gap-1 flex-wrap">
-                                {renderCategoryBadge(visit.category)}
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {renderCategoryBadge(visit)}
+                                  {isEmergency && visit.emergencyIncidentNumber && (
+                                    <span className="font-mono text-[10px] font-bold text-red-700 bg-red-100/90 border border-red-200 px-1 rounded">
+                                      {visit.emergencyIncidentNumber}
+                                    </span>
+                                  )}
+                                </div>
                                 {renderStatusBadge(visit.status)}
                               </div>
 
@@ -873,7 +1014,7 @@ export function VisitScheduleCalendar({
                                 <p className="text-xs font-bold text-slate-900 group-hover:text-[#091329] line-clamp-1">
                                   {visit.elder.firstName} {visit.elder.lastName}
                                 </p>
-                                <div className="flex items-center gap-1.5 mt-0.5">
+                                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                                   {visit.member.memberId ? (
                                     <span className="font-mono text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-1 rounded">
                                       {visit.member.memberId}
@@ -881,6 +1022,18 @@ export function VisitScheduleCalendar({
                                   ) : (
                                     <span className="text-[10px] text-slate-400 truncate max-w-[120px]">
                                       {visit.member.name}
+                                    </span>
+                                  )}
+                                  {/* Member Phone */}
+                                  {visit.member.mobileNumber && (
+                                    <span
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="inline-flex items-center gap-0.5 text-[10px] text-slate-600 hover:text-slate-900 font-mono"
+                                    >
+                                      <Phone className="h-2.5 w-2.5 text-slate-400" />
+                                      <a href={`tel:${visit.member.mobileNumber}`} className="hover:underline">
+                                        {visit.member.mobileNumber}
+                                      </a>
                                     </span>
                                   )}
                                 </div>
@@ -894,17 +1047,30 @@ export function VisitScheduleCalendar({
                                 </span>
                               </div>
 
-                              {/* Assigned Employee */}
-                              <div className="flex items-center gap-1.5 text-[11px] text-slate-700">
-                                <User className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                {assignedPerson ? (
-                                  <span className="font-medium truncate">
-                                    {assignedPerson.firstName} {assignedPerson.lastName}
-                                  </span>
-                                ) : (
-                                  <span className="text-amber-700 font-medium text-[10px] bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60">
-                                    Unassigned
-                                  </span>
+                              {/* Assigned Employee & Phone */}
+                              <div className="flex items-center justify-between gap-1 text-[11px] text-slate-700">
+                                <div className="flex items-center gap-1.5 truncate">
+                                  <User className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                  {assignedPerson ? (
+                                    <span className="font-medium truncate">
+                                      {assignedPerson.firstName} {assignedPerson.lastName}
+                                    </span>
+                                  ) : (
+                                    <span className="text-amber-700 font-medium text-[10px] bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60">
+                                      Unassigned
+                                    </span>
+                                  )}
+                                </div>
+                                {assignedPerson?.contactNumber && (
+                                  <a
+                                    href={`tel:${assignedPerson.contactNumber}`}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="text-[10px] font-mono text-slate-500 hover:text-slate-900 flex items-center gap-0.5 shrink-0"
+                                    title={`Call ${assignedPerson.firstName}: ${assignedPerson.contactNumber}`}
+                                  >
+                                    <Phone className="h-2.5 w-2.5 text-slate-400" />
+                                    <span>{assignedPerson.contactNumber}</span>
+                                  </a>
                                 )}
                               </div>
 
@@ -982,14 +1148,18 @@ export function VisitScheduleCalendar({
               <div className="space-y-3">
                 {dayVisits.map((visit) => {
                   const assignedPerson = visit.assignedEmployee || visit.assignedCaregiver;
+                  const isEmergency = Boolean(visit.isEmergency);
+
                   return (
                     <div
                       key={visit.id}
                       onClick={() => setSelectedVisit(visit)}
-                      className="p-4 rounded-xl border border-slate-200 hover:border-[#091329]/50 transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                      className={`p-4 rounded-xl transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${getVisitCardBorderClasses(
+                        visit
+                      )}`}
                     >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold text-sm text-[#091329]">
                             {visit.elder.firstName} {visit.elder.lastName}
                           </span>
@@ -998,11 +1168,16 @@ export function VisitScheduleCalendar({
                               {visit.member.memberId}
                             </span>
                           )}
-                          {renderCategoryBadge(visit.category)}
+                          {isEmergency && visit.emergencyIncidentNumber && (
+                            <span className="font-mono text-xs font-bold text-red-700 bg-red-100 border border-red-200 px-1.5 py-0.5 rounded">
+                              {visit.emergencyIncidentNumber}
+                            </span>
+                          )}
+                          {renderCategoryBadge(visit)}
                           {renderStatusBadge(visit.status)}
                         </div>
-                        <div className="flex items-center gap-4 text-xs text-slate-500">
-                          <span className="flex items-center gap-1">
+                        <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
+                          <span className="flex items-center gap-1 font-medium text-slate-700">
                             <Clock className="h-3.5 w-3.5 text-slate-400" />
                             {formatTimeIST(visit.scheduledStart)} – {formatTimeIST(visit.scheduledEnd)}
                           </span>
@@ -1010,16 +1185,40 @@ export function VisitScheduleCalendar({
                           <span className="flex items-center gap-1">
                             <User className="h-3.5 w-3.5 text-slate-400" />
                             Employee: {assignedPerson ? `${assignedPerson.firstName} ${assignedPerson.lastName}` : "Unassigned"}
+                            {assignedPerson?.contactNumber && (
+                              <a
+                                href={`tel:${assignedPerson.contactNumber}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="font-mono text-slate-600 hover:text-slate-900 ml-1 inline-flex items-center gap-0.5"
+                              >
+                                <Phone className="h-3 w-3 text-slate-400" /> {assignedPerson.contactNumber}
+                              </a>
+                            )}
                           </span>
+                          {visit.member.mobileNumber && (
+                            <>
+                              <span>·</span>
+                              <span className="flex items-center gap-1">
+                                Member Phone:
+                                <a
+                                  href={`tel:${visit.member.mobileNumber}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="font-mono text-slate-700 hover:text-slate-900 font-semibold"
+                                >
+                                  {visit.member.mobileNumber}
+                                </a>
+                              </span>
+                            </>
+                          )}
                         </div>
                         {visit.member.serviceAddress && (
                           <p className="text-xs text-slate-500 flex items-center gap-1">
-                            <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                            <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                             {visit.member.serviceAddress}
                           </p>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 self-end sm:self-auto text-xs text-slate-400 font-medium">
+                      <div className="flex items-center gap-2 self-end sm:self-auto text-xs text-slate-500 font-medium shrink-0">
                         Click for details <ArrowRight className="h-3.5 w-3.5" />
                       </div>
                     </div>
@@ -1119,8 +1318,9 @@ export function VisitScheduleCalendar({
                       {cellVisits.slice(0, 2).map((v) => (
                         <div
                           key={v.id}
-                          className="text-[10px] truncate px-1.5 py-0.5 rounded bg-slate-100 font-medium text-slate-800"
+                          className={`text-[10px] truncate px-1.5 py-0.5 rounded ${getMonthPillClasses(v)}`}
                         >
+                          {v.isEmergency && <span className="font-bold text-red-600 mr-1">SOS</span>}
                           {formatTimeIST(v.scheduledStart)} · {v.elder.firstName}
                         </div>
                       ))}
@@ -1149,16 +1349,33 @@ export function VisitScheduleCalendar({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden">
             {/* Modal Header */}
-            <div className="px-6 py-4 bg-[#091329] text-white flex items-center justify-between">
+            <div
+              className={`px-6 py-4 text-white flex items-center justify-between ${
+                selectedVisit.isEmergency ? "bg-red-950 border-b border-red-800" : "bg-[#091329]"
+              }`}
+            >
               <div>
                 <h3 className="font-bold text-base text-white flex items-center gap-2">
-                  <CalendarDays className="h-5 w-5 text-[#B08A4A]" /> Care Visit Details
+                  {selectedVisit.isEmergency ? (
+                    <>
+                      <Flame className="h-5 w-5 text-red-500 animate-pulse" /> Emergency Incident Assignment —{" "}
+                      {selectedVisit.emergencyClassification?.replace("_", " ") || "CODE RED"}
+                    </>
+                  ) : (
+                    <>
+                      <CalendarDays className="h-5 w-5 text-[#B08A4A]" /> Care Visit Details
+                    </>
+                  )}
                 </h3>
-                <p className="text-xs text-slate-300 font-mono mt-0.5">Visit ID: {selectedVisit.id}</p>
+                <p className="text-xs text-slate-300 font-mono mt-0.5">
+                  {selectedVisit.isEmergency
+                    ? `Incident Number: ${selectedVisit.emergencyIncidentNumber || selectedVisit.id}`
+                    : `Visit ID: ${selectedVisit.id}`}
+                </p>
               </div>
               <button
                 onClick={() => setSelectedVisit(null)}
-                className="p-1 rounded-lg hover:bg-white/10 text-slate-300 hover:text-white transition-colors"
+                className="p-1 rounded-lg hover:bg-white/10 text-slate-300 hover:text-white transition-colors cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -1167,9 +1384,14 @@ export function VisitScheduleCalendar({
             {/* Modal Content */}
             <div className="p-6 space-y-5 max-h-[80vh] overflow-y-auto text-sm">
               {/* Badges bar */}
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  {renderCategoryBadge(selectedVisit.category)}
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {renderCategoryBadge(selectedVisit)}
+                  {selectedVisit.isEmergency && selectedVisit.emergencyIncidentNumber && (
+                    <span className="font-mono text-xs font-bold text-red-700 bg-red-100 border border-red-200 px-1.5 py-0.5 rounded">
+                      {selectedVisit.emergencyIncidentNumber}
+                    </span>
+                  )}
                   {renderStatusBadge(selectedVisit.status)}
                 </div>
                 <span className="text-xs font-medium text-slate-500">
@@ -1180,11 +1402,21 @@ export function VisitScheduleCalendar({
               {/* Member & Elder Information */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
                 <div>
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Care Recipient</p>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    {selectedVisit.isEmergency ? "Caller / Patient" : "Care Recipient"}
+                  </p>
                   <p className="text-sm font-bold text-slate-900 mt-0.5">
                     {selectedVisit.elder.firstName} {selectedVisit.elder.lastName}
                   </p>
                   <p className="text-xs text-slate-500">Relationship: {selectedVisit.elder.relationship}</p>
+                  {selectedVisit.elder.contactNumber && (
+                    <p className="text-xs text-slate-600 mt-1 font-mono flex items-center gap-1">
+                      <Phone className="h-3 w-3 text-slate-400" />
+                      <a href={`tel:${selectedVisit.elder.contactNumber}`} className="hover:underline">
+                        {selectedVisit.elder.contactNumber}
+                      </a>
+                    </p>
+                  )}
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Primary Member</p>
@@ -1195,6 +1427,14 @@ export function VisitScheduleCalendar({
                     </span>
                   ) : (
                     <p className="text-xs text-slate-400">{selectedVisit.member.email}</p>
+                  )}
+                  {selectedVisit.member.mobileNumber && (
+                    <p className="text-xs text-slate-600 mt-1 font-mono flex items-center gap-1">
+                      <Phone className="h-3 w-3 text-slate-400" />
+                      <a href={`tel:${selectedVisit.member.mobileNumber}`} className="hover:underline">
+                        {selectedVisit.member.mobileNumber}
+                      </a>
+                    </p>
                   )}
                 </div>
               </div>
@@ -1294,7 +1534,7 @@ export function VisitScheduleCalendar({
                   <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-1">
                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Assigned Employee</p>
                     {assignedPerson ? (
-                      <div className="flex items-center justify-between pt-1">
+                      <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
                         <div>
                           <p className="font-bold text-slate-900 text-sm">
                             {assignedPerson.firstName} {assignedPerson.lastName}
@@ -1304,9 +1544,13 @@ export function VisitScheduleCalendar({
                           </p>
                         </div>
                         {assignedPerson.contactNumber && (
-                          <span className="text-xs font-mono text-slate-600 bg-slate-100 px-2 py-1 rounded">
+                          <a
+                            href={`tel:${assignedPerson.contactNumber}`}
+                            className="text-xs font-mono text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded inline-flex items-center gap-1 transition-colors"
+                          >
+                            <Phone className="h-3 w-3 text-slate-400" />
                             {assignedPerson.contactNumber}
-                          </span>
+                          </a>
                         )}
                       </div>
                     ) : (
@@ -1318,16 +1562,21 @@ export function VisitScheduleCalendar({
 
               {/* Address */}
               <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-1">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Service Address</p>
-                <p className="text-xs text-slate-700 leading-relaxed pt-1">
-                  {selectedVisit.member.serviceAddress || "Address not specified on profile."}
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  {selectedVisit.isEmergency ? "Incident Location / Address" : "Service Address"}
+                </p>
+                <p className="text-xs text-slate-700 leading-relaxed pt-1 flex items-start gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
+                  <span>{selectedVisit.member.serviceAddress || "Address not specified on profile."}</span>
                 </p>
               </div>
 
               {/* Operational Notes */}
               {selectedVisit.operationalNotes && (
                 <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-1">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Operational Notes</p>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    {selectedVisit.isEmergency ? "Dispatch & Emergency Notes" : "Operational Notes"}
+                  </p>
                   <p className="text-xs text-slate-700 whitespace-pre-wrap">{selectedVisit.operationalNotes}</p>
                 </div>
               )}
@@ -1335,18 +1584,30 @@ export function VisitScheduleCalendar({
 
             {/* Modal Actions Footer */}
             <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
-              <Link
-                href={selectedVisit.member.userId ? `/admin/members/${selectedVisit.member.userId}` : "#"}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#091329] hover:underline"
-              >
-                <ExternalLink className="h-3.5 w-3.5" /> View Member Details
-              </Link>
+              <div className="flex items-center gap-3">
+                {selectedVisit.isEmergency && selectedVisit.emergencyIncidentId && (
+                  <Link
+                    href={`/emergencyos/incidents/${selectedVisit.emergencyIncidentId}`}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm transition-colors"
+                  >
+                    <Flame className="h-3.5 w-3.5 text-amber-300" /> Open in EmergencyOS Console
+                  </Link>
+                )}
+                {selectedVisit.member.userId ? (
+                  <Link
+                    href={`/admin/members/${selectedVisit.member.userId}`}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#091329] hover:underline"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" /> View Member Details
+                  </Link>
+                ) : null}
+              </div>
 
-              {canManage && (
+              {!selectedVisit.isEmergency && canManage && (
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => setShowStatusModal(true)}
-                    className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-2xs"
+                    className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
                   >
                     Change Status
                   </button>
@@ -1359,7 +1620,7 @@ export function VisitScheduleCalendar({
                       setActionError(null);
                       setShowRescheduleModal(true);
                     }}
-                    className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-2xs"
+                    className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
                   >
                     Reschedule
                   </button>
@@ -1372,14 +1633,14 @@ export function VisitScheduleCalendar({
                       setActionError(null);
                       setShowEditModal(true);
                     }}
-                    className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-2xs"
+                    className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
                   >
                     Edit Visit
                   </button>
                   {selectedVisit.status !== "CANCELLED" && (
                     <button
                       onClick={() => setShowCancelModal(true)}
-                      className="px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 transition-colors"
+                      className="px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 transition-colors cursor-pointer"
                     >
                       Cancel Visit
                     </button>

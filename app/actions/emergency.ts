@@ -98,6 +98,7 @@ export async function dispatchEmergencyResponderAction(
   });
   revalidatePath("/emergencyos");
   revalidatePath(`/emergencyos/incidents/${incidentId}`);
+  revalidatePath("/admin/schedule");
   return { success: true, incident: res };
 }
 
@@ -114,6 +115,7 @@ export async function recordEmergencyArrivalAction(
   });
   revalidatePath("/emergencyos");
   revalidatePath(`/emergencyos/incidents/${incidentId}`);
+  revalidatePath("/admin/schedule");
   return { success: true, incident: res };
 }
 
@@ -182,6 +184,7 @@ export async function resolveEmergencyIncidentAction(
   revalidatePath("/emergencyos");
   revalidatePath(`/emergencyos/incidents/${incidentId}`);
   revalidatePath("/emergencyos/history");
+  revalidatePath("/admin/schedule");
   return { success: true, incident: res };
 }
 
