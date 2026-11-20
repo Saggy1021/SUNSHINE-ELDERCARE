@@ -107,6 +107,12 @@ export function AdminEmergencyMonitoringDashboard({
     setIsRefreshing(false);
   };
 
+  const unacknowledgedIncidents = incidents.filter(
+    (i) =>
+      (i.classification === "CODE_RED" || i.classification === "CODE_YELLOW") &&
+      i.status === "TRIGGERED" &&
+      !i.acknowledgedAt
+  );
   const activeCodeReds = incidents.filter(
     (i) => i.classification === "CODE_RED" && i.status !== "RESOLVED"
   );
@@ -144,8 +150,9 @@ export function AdminEmergencyMonitoringDashboard({
         {/* Audio Controls & Standalone Console Shortcut */}
         <div className="flex flex-wrap items-center gap-3">
           <EmergencyAudioAlert
+            unacknowledgedIncidents={unacknowledgedIncidents}
             unacknowledgedCodeRedCount={unacknowledgedCodeReds.length}
-            newIncidentIds={incidents.map((i) => i.id)}
+            newIncidentIds={unacknowledgedIncidents.map((i) => i.id)}
           />
 
           <button

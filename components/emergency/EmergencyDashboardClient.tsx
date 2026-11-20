@@ -108,8 +108,17 @@ export function EmergencyDashboardClient({
     };
   }, []);
 
-  const unacknowledgedCodeReds = incidents.filter(
-    (i) => i.classification === "CODE_RED" && i.status === "TRIGGERED"
+  const unacknowledgedIncidents = incidents.filter(
+    (i) =>
+      (i.classification === "CODE_RED" || i.classification === "CODE_YELLOW") &&
+      i.status === "TRIGGERED" &&
+      !i.acknowledgedAt
+  );
+  const unacknowledgedCodeReds = unacknowledgedIncidents.filter(
+    (i) => i.classification === "CODE_RED"
+  );
+  const unacknowledgedCodeYellows = unacknowledgedIncidents.filter(
+    (i) => i.classification === "CODE_YELLOW"
   );
 
   const handleAcknowledge = async (id: string) => {
@@ -187,8 +196,9 @@ export function EmergencyDashboardClient({
 
         <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
           <EmergencyAudioAlert
+            unacknowledgedIncidents={unacknowledgedIncidents}
             unacknowledgedCodeRedCount={unacknowledgedCodeReds.length}
-            newIncidentIds={unacknowledgedCodeReds.map((i) => i.id)}
+            newIncidentIds={unacknowledgedIncidents.map((i) => i.id)}
           />
           <Link
             href="/emergencyos/incidents/new"
@@ -200,30 +210,48 @@ export function EmergencyDashboardClient({
         </div>
       </div>
 
-      {/* Critical SLA Alarm Banner if Unacknowledged Code Red exists */}
-      {unacknowledgedCodeReds.length > 0 && (
-        <div className="bg-red-50 border-2 border-red-500 rounded-xl p-4 text-red-950 shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      {/* Critical SLA Alarm Banner if Unacknowledged Code Red or Code Yellow exists */}
+      {unacknowledgedIncidents.length > 0 && (
+        <div
+          className={`border-2 rounded-xl p-4 shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${
+            unacknowledgedCodeReds.length > 0
+              ? "bg-red-50 border-red-500 text-red-950"
+              : "bg-amber-50 border-amber-500 text-amber-950"
+          }`}
+        >
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-red-600 rounded-lg text-white">
+            <div
+              className={`p-3 rounded-lg text-white ${
+                unacknowledgedCodeReds.length > 0 ? "bg-red-600" : "bg-amber-600"
+              }`}
+            >
               <Flame className="w-6 h-6 animate-bounce" />
             </div>
             <div>
-              <div className="text-xs font-black tracking-wider uppercase text-red-700">
-                Critical Emergency SOS Triggered
+              <div
+                className={`text-xs font-black tracking-wider uppercase ${
+                  unacknowledgedCodeReds.length > 0 ? "text-red-700" : "text-amber-700"
+                }`}
+              >
+                Emergency Alert Active
               </div>
-              <div className="text-sm sm:text-base font-bold text-red-950">
-                {unacknowledgedCodeReds.length} Unacknowledged CODE RED alert(s) requiring immediate action!
+              <div className="text-sm sm:text-base font-bold">
+                {unacknowledgedIncidents.length} Unacknowledged emergency alert(s) requiring immediate operator acknowledgement!
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 w-full md:w-auto">
-            {unacknowledgedCodeReds.map((inc) => (
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            {unacknowledgedIncidents.map((inc) => (
               <button
                 key={inc.id}
                 type="button"
                 disabled={acknowledgingId === inc.id}
                 onClick={() => handleAcknowledge(inc.id)}
-                className="px-4 py-2 text-xs font-black uppercase tracking-wider rounded-lg bg-red-600 hover:bg-red-700 text-white shadow-sm transition-all whitespace-nowrap"
+                className={`px-4 py-2 text-xs font-black uppercase tracking-wider rounded-lg text-white shadow-sm transition-all whitespace-nowrap cursor-pointer ${
+                  inc.classification === "CODE_RED"
+                    ? "bg-red-600 hover:bg-red-700"
+                    : "bg-amber-600 hover:bg-amber-700"
+                }`}
               >
                 {acknowledgingId === inc.id
                   ? "Acknowledging..."
@@ -532,7 +560,13 @@ export function EmergencyDashboardClient({
                         type="button"
                         disabled={acknowledgingId === incident.id}
                         onClick={() => handleAcknowledge(incident.id)}
-                        className="px-3.5 py-2 text-xs font-bold rounded-lg bg-red-600 hover:bg-red-700 text-white shadow-sm transition-colors"
+                        className={`px-3.5 py-2 text-xs font-bold rounded-lg text-white shadow-sm transition-colors cursor-pointer ${
+                          isCodeRed
+                            ? "bg-red-600 hover:bg-red-700"
+                            : incident.classification === "CODE_YELLOW"
+                            ? "bg-amber-600 hover:bg-amber-700"
+                            : "bg-emerald-600 hover:bg-emerald-700"
+                        }`}
                       >
                         {acknowledgingId === incident.id
                           ? "Acknowledging..."

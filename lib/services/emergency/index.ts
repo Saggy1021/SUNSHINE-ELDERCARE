@@ -225,6 +225,12 @@ export class EmergencyService {
       throw new Error("A detailed reason is mandatory when downgrading a CODE RED incident.");
     }
 
+    // Rule 8: If an incident receives a genuine escalation requiring acknowledgement, reset to TRIGGERED
+    const isEscalation =
+      (incident.classification === "CODE_GREEN" &&
+        (params.newClassification === "CODE_RED" || params.newClassification === "CODE_YELLOW")) ||
+      (incident.classification === "CODE_YELLOW" && params.newClassification === "CODE_RED");
+
     return db.$transaction(async (tx) => {
       const updateData: any = {
         previousClassification: incident.classification,
@@ -237,6 +243,14 @@ export class EmergencyService {
         updateData.downgradeApprovedAt = new Date();
       }
 
+      if (isEscalation) {
+        updateData.status = "TRIGGERED";
+        updateData.acknowledgedAt = null;
+        updateData.acknowledgedById = null;
+        updateData.isEscalated = true;
+        updateData.escalationReason = params.reason || `Escalated to ${params.newClassification}`;
+      }
+
       const updated = await tx.emergencyIncident.update({
         where: { id: params.incidentId },
         data: updateData,
@@ -247,9 +261,11 @@ export class EmergencyService {
           incidentId: params.incidentId,
           authorId: await this.resolveAuthorId(tx, params.actorId),
           authorName: params.actorName,
-          action: isDowngrade ? "DOWNGRADED" : "CLASSIFIED",
+          action: isDowngrade ? "DOWNGRADED" : isEscalation ? "ESCALATED" : "CLASSIFIED",
           details: isDowngrade
             ? `Downgraded from ${incident.classification} to ${params.newClassification}. Supervisor Authorization: ${params.actorName}. Reason: ${params.reason}`
+            : isEscalation
+            ? `Escalated from ${incident.classification} to ${params.newClassification}. Requires operator acknowledgement. Operator: ${params.actorName}. Reason: ${params.reason || "Operational review"}`
             : `Classification updated to ${params.newClassification}. Operator: ${params.actorName}. Reason: ${params.reason || "Operational review"}`,
         },
       });
