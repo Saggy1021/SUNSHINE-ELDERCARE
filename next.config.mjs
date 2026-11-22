@@ -3,7 +3,11 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '4mb',
     },
-    agentUpgrade: false,
+  },
+  outputFileTracingExcludes: {
+    '*': [
+      './public/downloads/**/*',
+    ],
   },
   images: {
     unoptimized: true,

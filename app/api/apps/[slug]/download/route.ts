@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AppsService } from "@/lib/services/apps";
-import fs from "fs";
-import path from "path";
 
 export const dynamic = "force-dynamic";
 
@@ -30,19 +28,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         { error: `No published release found for application '${slug}'` },
         { status: 404 }
       );
-    }
-
-    // Verify binary exists if local path before redirecting (prevents HTML 404 disguised as APK)
-    if (app.latestRelease.apkUrl.startsWith("/")) {
-      const publicDir = path.join(process.cwd(), "public");
-      const localPath = path.join(publicDir, app.latestRelease.apkUrl);
-      if (fs.existsSync(publicDir) && !fs.existsSync(localPath)) {
-        console.error(`[GET /api/apps/[slug]/download] Binary missing on disk: ${localPath}`);
-        return NextResponse.json(
-          { error: `Binary file for release '${app.latestRelease.apkFileName}' is not available` },
-          { status: 404 }
-        );
-      }
     }
 
     // Telemetry: record download asynchronously (fire-and-forget)

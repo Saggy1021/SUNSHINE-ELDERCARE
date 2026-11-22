@@ -1,8 +1,5 @@
 import { db as prisma } from "@/lib/db";
 import { ApkValidator, ApkInspectionResult } from "../apk-validator";
-import fs from "fs";
-import path from "path";
-import crypto from "crypto";
 
 let activeDb: any = prisma;
 
@@ -262,21 +259,29 @@ export class AppsService {
    */
   private static verifyAndNormalizeLocalBinary(input: { apkUrl: string; sha256?: string; fileSize?: number }) {
     if (!input.apkUrl.startsWith("/")) return;
-    const publicDir = path.join(process.cwd(), "public");
-    if (!fs.existsSync(publicDir)) return;
+    if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) return;
+    try {
+      const nodeFs = require("fs");
+      const nodePath = require("path");
+      const nodeCrypto = require("crypto");
+      const publicDir = nodePath.join(process.cwd(), "public");
+      if (!nodeFs.existsSync(publicDir)) return;
 
-    const localPath = path.join(publicDir, input.apkUrl);
-    if (fs.existsSync(localPath)) {
-      const fileBuf = fs.readFileSync(localPath);
-      const diskSha256 = crypto.createHash("sha256").update(fileBuf).digest("hex");
-      const diskSize = fileBuf.length;
+      const localPath = nodePath.join(publicDir, input.apkUrl);
+      if (nodeFs.existsSync(localPath)) {
+        const fileBuf = nodeFs.readFileSync(localPath);
+        const diskSha256 = nodeCrypto.createHash("sha256").update(fileBuf).digest("hex");
+        const diskSize = fileBuf.length;
 
-      if (input.sha256 && input.sha256.toLowerCase() !== diskSha256.toLowerCase()) {
-        throw new Error(`APK SHA-256 mismatch with stored binary. Expected: ${input.sha256}, Actual: ${diskSha256}`);
+        if (input.sha256 && input.sha256.toLowerCase() !== diskSha256.toLowerCase()) {
+          throw new Error(`APK SHA-256 mismatch with stored binary. Expected: ${input.sha256}, Actual: ${diskSha256}`);
+        }
+
+        input.sha256 = diskSha256;
+        input.fileSize = diskSize;
       }
-
-      input.sha256 = diskSha256;
-      input.fileSize = diskSize;
+    } catch (e: any) {
+      if (e?.message && e.message.includes("APK SHA-256 mismatch")) throw e;
     }
   }
 
