@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import `in`.sunshineeldercare.member.ui.components.ActiveEmergencyStatusCard
 import `in`.sunshineeldercare.member.ui.components.ActiveMembershipCard
 import `in`.sunshineeldercare.member.ui.components.CircularSosButton
 import `in`.sunshineeldercare.member.ui.components.RaiseIssueSection
@@ -179,7 +180,10 @@ fun DashboardScreen(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // 2. Large Circular SOS Emergency Button
+            // Active Emergency Status Card (Displayed only if an active confirmed incident exists on server)
+            ActiveEmergencyStatusCard()
+
+            // 2. Large Circular SOS Emergency Button (Always in standard idle state on app launch)
             CircularSosButton()
 
             Spacer(modifier = Modifier.height(18.dp))

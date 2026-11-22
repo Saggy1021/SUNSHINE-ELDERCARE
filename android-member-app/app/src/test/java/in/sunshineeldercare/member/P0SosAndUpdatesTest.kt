@@ -361,6 +361,40 @@ class P0SosAndUpdatesTest {
     }
 
     @Test
+    fun testServerIncidentReconciliationDoesNotHijackSosButton() {
+        val incident = `in`.sunshineeldercare.member.data.model.EmergencyIncidentSummaryDto(
+            id = "inc_test_999",
+            incidentNumber = "EMG-20261122-099",
+            status = "ACKNOWLEDGED",
+            classification = "CODE_RED",
+            triggeredAt = "2026-11-22T21:00:00.000Z"
+        )
+
+        `in`.sunshineeldercare.member.data.repository.SosOutboxManager.reconcileWithServerIncident(incident)
+
+        // Strict invariant: Circular SOS Button state (_currentSos) MUST remain null (normal idle state)
+        assertNull(
+            "Circular SOS Button must stay idle and NOT be hijacked by background incident",
+            `in`.sunshineeldercare.member.data.repository.SosOutboxManager.currentSos.value
+        )
+
+        // Server incident state must be updated for background banner display
+        assertNotNull(
+            "Server active incident must be tracked for background status card",
+            `in`.sunshineeldercare.member.data.repository.SosOutboxManager.serverActiveIncident.value
+        )
+        assertEquals(
+            "EMG-20261122-099",
+            `in`.sunshineeldercare.member.data.repository.SosOutboxManager.serverActiveIncident.value?.incidentNumber
+        )
+
+        // Cleanup
+        `in`.sunshineeldercare.member.data.repository.SosOutboxManager.dismissCurrentEmergency()
+        assertNull(`in`.sunshineeldercare.member.data.repository.SosOutboxManager.serverActiveIncident.value)
+        assertNull(`in`.sunshineeldercare.member.data.repository.SosOutboxManager.currentSos.value)
+    }
+
+    @Test
     fun testConfirmationDialogPreventsUnintentionalSosTrigger() {
         // Simulates the UI logic: tapping the SOS button must not directly trigger SOS.
         // It must set showConfirmDialog = true, requiring explicit confirmation.

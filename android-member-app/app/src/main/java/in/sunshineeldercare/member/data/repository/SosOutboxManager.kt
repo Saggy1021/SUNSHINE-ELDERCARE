@@ -70,17 +70,22 @@ object SosOutboxManager {
     private val _currentSos = MutableStateFlow<SosOutboxItem?>(null)
     val currentSos: StateFlow<SosOutboxItem?> = _currentSos.asStateFlow()
 
+    // Confirmed active emergency incident from server, restored strictly as background status
+    private val _serverActiveIncident = MutableStateFlow<EmergencyIncidentSummaryDto?>(null)
+    val serverActiveIncident: StateFlow<EmergencyIncidentSummaryDto?> = _serverActiveIncident.asStateFlow()
+
     private var appContext: Context? = null
 
     fun init(context: Context) {
         appContext = context.applicationContext
-        loadPersistedOutbox()
-        // Do NOT automatically dispatch or trigger network calls on init.
-        // SOS requests and incident creation must only occur after explicit user interaction.
+        // Strictly ensure UI starts in normal idle state on app launch.
+        _currentSos.value = null
+        _serverActiveIncident.value = null
+        purgeStaleOutboxOnStartup()
     }
 
     /**
-     * Retrieves current SOS item, reloading from disk if null.
+     * Retrieves current SOS item, reloading from disk if null without mutating UI state.
      */
     fun getOrLoadCurrentSos(context: Context? = null): SosOutboxItem? {
         val inMemory = _currentSos.value
@@ -90,8 +95,41 @@ object SosOutboxManager {
         if (ctx != null && appContext == null) {
             appContext = ctx
         }
-        loadPersistedOutbox()
-        return _currentSos.value
+        return loadPersistedOutbox()
+    }
+
+    /**
+     * Purges stale, failed, or interrupted SOS requests on startup so the app is never stuck in retry state.
+     * Restores confirmed delivered incidents strictly as background status.
+     */
+    private fun purgeStaleOutboxOnStartup() {
+        try {
+            val file = getOutboxFile() ?: return
+            if (file.exists()) {
+                val content = file.readText()
+                if (content.isNotBlank()) {
+                    val item = json.decodeFromString<SosOutboxItem>(content)
+                    val ageHours = (System.currentTimeMillis() - item.timestamp) / (1000 * 60 * 60)
+                    // If older than 2 hours or in non-delivered state from a terminated session, purge it
+                    if (ageHours >= 2 || item.status == SosDeliveryStatus.FAILED || item.status == SosDeliveryStatus.SENDING || item.status == SosDeliveryStatus.PENDING_RETRY) {
+                        Log.i(TAG, "Purging stale unconfirmed outbox on startup: status=${item.status}, age=${ageHours}h")
+                        file.delete()
+                    } else if (item.status == SosDeliveryStatus.DELIVERED && !item.incidentNumber.isNullOrBlank()) {
+                        // Restore confirmed incident strictly as background status (does NOT activate SOS button)
+                        Log.i(TAG, "Restoring confirmed incident #${item.incidentNumber} as background status.")
+                        _serverActiveIncident.value = EmergencyIncidentSummaryDto(
+                            id = item.incidentId ?: item.requestId,
+                            incidentNumber = item.incidentNumber ?: "Active Incident",
+                            status = "ACKNOWLEDGED",
+                            classification = "CODE_RED",
+                            triggeredAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).format(java.util.Date(item.timestamp))
+                        )
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error cleaning outbox on startup", e)
+        }
     }
 
     /**
@@ -99,18 +137,9 @@ object SosOutboxManager {
      * Used by AppUpdateManager to ensure updates NEVER interrupt an emergency.
      */
     fun hasActiveOrPendingEmergency(): Boolean {
-        val item = _currentSos.value ?: return false
-        return when (item.status) {
-            SosDeliveryStatus.QUEUED,
-            SosDeliveryStatus.SENDING,
-            SosDeliveryStatus.PENDING_RETRY -> true
-            SosDeliveryStatus.DELIVERED -> {
-                // Keep active state for at most 2 hours unless explicitly cleared
-                val ageHours = (System.currentTimeMillis() - item.timestamp) / (1000 * 60 * 60)
-                ageHours < 2
-            }
-            else -> false
-        }
+        if (_currentSos.value?.status == SosDeliveryStatus.SENDING) return true
+        if (_serverActiveIncident.value != null) return true
+        return false
     }
 
     /**
@@ -259,56 +288,28 @@ object SosOutboxManager {
 
     /**
      * Reconciles active emergency state when server dashboard or API returns an ongoing incident.
+     * Restores confirmed incident strictly as background status without hijacking the Circular SOS button.
      */
     fun reconcileWithServerIncident(incident: EmergencyIncidentSummaryDto) {
         val activeStatuses = listOf("TRIGGERED", "ACKNOWLEDGED", "DISPATCHED", "RESPONDER_ON_SCENE")
         if (incident.status !in activeStatuses) {
+            _serverActiveIncident.value = null
             return
         }
 
-        val current = _currentSos.value
-        val needsReconciliation = current == null ||
-                current.status != SosDeliveryStatus.DELIVERED ||
-                current.incidentId != incident.id
-
-        if (needsReconciliation) {
-            Log.i(TAG, "Reconciling local SOS with active server incident #${incident.incidentNumber} (${incident.status})")
-            activeRetryJob?.cancel()
-            activeRetryJob = null
-
-            val ctx = appContext
-            if (ctx != null) {
-                cancelWorkManagerDelivery(ctx, current?.requestId ?: incident.id)
-                EmergencyLocationService.start(ctx, incident.id, incident.incidentNumber)
-            }
-
-            LiveRefreshManager.isSosActive = true
-
-            val reconciledItem = (current ?: SosOutboxItem(
-                requestId = UUID.randomUUID().toString(),
-                timestamp = System.currentTimeMillis()
-            )).copy(
-                status = SosDeliveryStatus.DELIVERED,
-                incidentId = incident.id,
-                incidentNumber = incident.incidentNumber,
-                lastAttempt = System.currentTimeMillis(),
-                failureReason = null
-            )
-
-            persistOutboxItem(reconciledItem)
-            _currentSos.value = reconciledItem
-        }
+        Log.i(TAG, "Reconciling server incident #${incident.incidentNumber} (${incident.status}) as background status.")
+        _serverActiveIncident.value = incident
+        // Strictly do NOT set _currentSos.value (which would replace the normal SOS button)
+        // Strictly do NOT start EmergencyLocationService or open dialogs on app launch
     }
 
     /**
      * Invoked when the server indicates that the active incident is resolved or cancelled.
      */
     fun onServerIncidentResolved() {
-        val current = _currentSos.value ?: return
-        if (current.status == SosDeliveryStatus.DELIVERED) {
-            Log.i(TAG, "Server incident #${current.incidentNumber} is closed. Dismissing active SOS.")
-            dismissCurrentEmergency()
-        }
+        Log.i(TAG, "Server incident is closed. Clearing background active emergency status.")
+        _serverActiveIncident.value = null
+        dismissCurrentEmergency()
     }
 
     /**
@@ -354,7 +355,14 @@ object SosOutboxManager {
                         failureReason = null
                     )
                     persistOutboxItem(deliveredItem)
-                    _currentSos.value = deliveredItem
+                    _currentSos.value = null // reset circular button to normal idle state
+                    _serverActiveIncident.value = EmergencyIncidentSummaryDto(
+                        id = incidentId ?: item.requestId,
+                        incidentNumber = incidentNumber,
+                        status = "ACKNOWLEDGED",
+                        classification = "CODE_RED",
+                        triggeredAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).format(java.util.Date(deliveredItem.timestamp))
+                    )
 
                     LiveRefreshManager.isSosActive = true
 
@@ -471,7 +479,6 @@ object SosOutboxManager {
                     if (ageHours >= 2 || item.status == SosDeliveryStatus.FAILED) {
                         Log.i(TAG, "Persisted outbox item is stale (${ageHours}h old or failed). Purging.")
                         file.delete()
-                        _currentSos.value = null
                         return null
                     }
                     val effectiveItem = if (item.status == SosDeliveryStatus.SENDING) {
@@ -480,7 +487,6 @@ object SosOutboxManager {
                     } else {
                         item
                     }
-                    _currentSos.value = effectiveItem
                     Log.d(TAG, "Loaded persisted SOS outbox: status=${effectiveItem.status}, incident=${effectiveItem.incidentNumber}")
                     return effectiveItem
                 }
@@ -509,38 +515,19 @@ object SosOutboxManager {
         }
     }
 
-    /**
-     * Checks if a pending outbox item exists upon app start or network reconnection,
-     * and resumes in-process retry and WorkManager immediately.
-     */
-    fun checkAndResumePendingDelivery() {
-        val item = _currentSos.value ?: loadPersistedOutbox() ?: return
-        val ctx = appContext ?: return
-
-        if (item.status == SosDeliveryStatus.QUEUED || item.status == SosDeliveryStatus.PENDING_RETRY || item.status == SosDeliveryStatus.SENDING) {
-            Log.i(TAG, "Resuming pending SOS delivery: ${item.requestId}")
-            scheduleWorkManagerDelivery(ctx, item.requestId)
-            startForegroundRetryLoop(ctx, item)
-        } else if (item.status == SosDeliveryStatus.DELIVERED) {
-            val ageHours = (System.currentTimeMillis() - item.timestamp) / (1000 * 60 * 60)
-            if (ageHours < 6) {
-                LiveRefreshManager.isSosActive = true
-            }
-        }
-    }
-
     fun dismissCurrentEmergency() {
         val item = _currentSos.value
         val ctx = appContext
         activeRetryJob?.cancel()
         activeRetryJob = null
 
-        if (item != null && ctx != null) {
-            cancelWorkManagerDelivery(ctx, item.requestId)
+        if (ctx != null) {
+            if (item != null) cancelWorkManagerDelivery(ctx, item.requestId)
             EmergencyLocationService.stop(ctx)
         }
         LiveRefreshManager.isSosActive = false
         _currentSos.value = null
+        _serverActiveIncident.value = null
         try {
             getOutboxFile()?.delete()
         } catch (_: Exception) {}

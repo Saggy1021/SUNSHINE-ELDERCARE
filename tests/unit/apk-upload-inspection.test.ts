@@ -22,12 +22,12 @@ async function runTests() {
   const serverInspection = ApkValidator.inspectApk(memberBuf);
   assert.strictEqual(serverInspection.isValid, true, "Inspection must be valid");
   assert.strictEqual(serverInspection.packageName, "in.sunshineeldercare.member", "Package ID must match");
-  assert.strictEqual(serverInspection.versionName, "1.0.2", "Version name must match 1.0.2");
-  assert.strictEqual(serverInspection.versionCode, 3, "Version code must be 3");
+  assert.strictEqual(serverInspection.versionName, "1.0.5", "Version name must match 1.0.5");
+  assert.strictEqual(serverInspection.versionCode, 6, "Version code must be 6");
   assert.strictEqual(serverInspection.certificateFingerprint, "370b03fd0c87a9a4620e41fac3859ceeb81ab98752c7673f272548793c4f3394", "Certificate fingerprint must match");
   assert.strictEqual(serverInspection.fileSize, memberBuf.length, "File size must match");
   assert.strictEqual(serverInspection.sha256, expectedMemberSha256, "SHA-256 must match");
-  console.log("  ✓ Scenario 1: Server-side pure TS inspection correctly extracts package, version 1.0.2 (code 3), and signing cert");
+  console.log("  ✓ Scenario 1: Server-side pure TS inspection correctly extracts package, version 1.0.5 (code 6), and signing cert");
 
   // --- SCENARIO 2: Client-Side In-Browser Pure JS Inspection ---
   console.log("\n--- SCENARIO 2: Client-Side In-Browser Pure JS Inspection ---");
@@ -37,8 +37,8 @@ async function runTests() {
   const clientInspection = await inspectApkInBrowser(mockFile);
   assert.strictEqual(clientInspection.isValid, true, "Client inspection must be valid");
   assert.strictEqual(clientInspection.packageName, "in.sunshineeldercare.member");
-  assert.strictEqual(clientInspection.versionName, "1.0.2");
-  assert.strictEqual(clientInspection.versionCode, 3);
+  assert.strictEqual(clientInspection.versionName, "1.0.5");
+  assert.strictEqual(clientInspection.versionCode, 6);
   assert.strictEqual(clientInspection.certificateFingerprint, "370b03fd0c87a9a4620e41fac3859ceeb81ab98752c7673f272548793c4f3394");
   assert.strictEqual(clientInspection.sha256, expectedMemberSha256);
   assert.ok(clientInspection.manifestBase64, "Must provide manifestBase64 proof");
@@ -54,7 +54,7 @@ async function runTests() {
   const manifestBuf = Buffer.from(clientInspection.manifestBase64!, "base64");
   const parsedManifest = parseAxml(manifestBuf);
   assert.strictEqual(parsedManifest?.packageName, "in.sunshineeldercare.member");
-  assert.strictEqual(parsedManifest?.versionCode, 3);
+  assert.strictEqual(parsedManifest?.versionCode, 6);
   console.log("  ✓ Scenario 3: Server independently validates client manifest and certificate cryptographic proofs");
 
   // --- SCENARIO 4: Security Invariant - Package ID Mismatch Rejected ---
@@ -83,12 +83,12 @@ async function runTests() {
 
   // --- SCENARIO 6: Non-Blocking Version Code Equal/Lower Advisory ---
   console.log("\n--- SCENARIO 6: Non-Blocking Version Code Equal/Lower Advisory ---");
-  const existingAtV3 = {
+  const existingAtV6 = {
     packageName: "in.sunshineeldercare.member",
     latestCertFingerprint: "370b03fd0c87a9a4620e41fac3859ceeb81ab98752c7673f272548793c4f3394",
-    latestVersionCode: 3,
+    latestVersionCode: 6,
   };
-  const codeCheck = ApkValidator.verifyApkUpdate(existingAtV3, serverInspection);
+  const codeCheck = ApkValidator.verifyApkUpdate(existingAtV6, serverInspection);
   assert.strictEqual(codeCheck.valid, true, "Upload must not be blocked for equal or lower version code");
   assert.strictEqual(codeCheck.hasCompatibilityWarning, true, "Must flag compatibility warning");
   assert.ok(codeCheck.warning?.includes("matches the currently published release"), "Warning must advise on OTA behavior for matching version code");
@@ -96,14 +96,14 @@ async function runTests() {
 
   // --- SCENARIO 7: Version Code Progression Allowed For Legitimate Update ---
   console.log("\n--- SCENARIO 7: Version Code Progression Allowed For Legitimate Update ---");
-  const existingAtV2 = {
+  const existingAtV5 = {
     packageName: "in.sunshineeldercare.member",
     latestCertFingerprint: "370b03fd0c87a9a4620e41fac3859ceeb81ab98752c7673f272548793c4f3394",
-    latestVersionCode: 2,
+    latestVersionCode: 5,
   };
-  const validUpdateCheck = ApkValidator.verifyApkUpdate(existingAtV2, serverInspection);
-  assert.strictEqual(validUpdateCheck.valid, true, "Version code 3 must be valid update for version code 2");
-  console.log("  ✓ Scenario 7: Version code 3 accepted as valid upgrade over version code 2");
+  const validUpdateCheck = ApkValidator.verifyApkUpdate(existingAtV5, serverInspection);
+  assert.strictEqual(validUpdateCheck.valid, true, "Version code 6 must be valid update for version code 5");
+  console.log("  ✓ Scenario 7: Version code 6 accepted as valid upgrade over version code 5");
 
   // --- SCENARIO 8: Corrupted and Oversized File Handling ---
   console.log("\n--- SCENARIO 8: Corrupted and Oversized File Handling ---");

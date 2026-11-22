@@ -41,25 +41,17 @@ fun CircularSosButton(
     val context = LocalContext.current
     val sosItem by SosOutboxManager.currentSos.collectAsState()
 
-    var showActiveEmergencyDialog by remember { mutableStateOf(false) }
     var showConfirmDialog by remember { mutableStateOf(false) }
     var isSubmittingSos by remember { mutableStateOf(false) }
 
+    // In-flight sending state (active only after explicit user confirmation in this session)
     val isSending = sosItem?.status == SosDeliveryStatus.SENDING || sosItem?.status == SosDeliveryStatus.QUEUED
-    val isDelivered = sosItem?.status == SosDeliveryStatus.DELIVERED
-    val isPendingRetry = sosItem?.status == SosDeliveryStatus.PENDING_RETRY
-    val isFailed = sosItem?.status == SosDeliveryStatus.FAILED
 
     // Pulsing animation for ambient emergency ring
     val infiniteTransition = rememberInfiniteTransition(label = "SosPulse")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = when {
-            isSending -> 1.25f
-            isDelivered -> 1.18f
-            isPendingRetry -> 1.20f
-            else -> 1.12f
-        },
+        targetValue = if (isSending) 1.25f else 1.12f,
         animationSpec = infiniteRepeatable(
             animation = tween(if (isSending) 600 else 1200, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -68,18 +60,9 @@ fun CircularSosButton(
     )
 
     fun handleSosClick() {
-        if (isDelivered) {
-            showActiveEmergencyDialog = true
-            return
-        }
         if (isSending || isSubmittingSos) return
 
-        if (isPendingRetry) {
-            SosOutboxManager.retryNow(context)
-            return
-        }
-
-        // Show explicit confirmation dialog before triggering SOS
+        // Always show explicit confirmation dialog before triggering SOS
         showConfirmDialog = true
     }
 
@@ -95,47 +78,24 @@ fun CircularSosButton(
                 .padding(vertical = 20.dp, horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Header Pill
+            // Header Pill: Always standard 24/7 assistance on launch, or dispatching when sending
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))
-                    .background(
-                        when {
-                            isDelivered -> Color(0xFFDCFCE7)
-                            isPendingRetry -> Color(0xFFFEF3C7)
-                            else -> Color(0xFFFEE2E2)
-                        }
-                    )
+                    .background(Color(0xFFFEE2E2))
                     .padding(horizontal = 14.dp, vertical = 6.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = when {
-                            isDelivered -> Icons.Default.CheckCircle
-                            isPendingRetry -> Icons.Default.Sync
-                            else -> Icons.Default.Shield
-                        },
+                        imageVector = Icons.Default.Shield,
                         contentDescription = null,
-                        tint = when {
-                            isDelivered -> Color(0xFF15803D)
-                            isPendingRetry -> Color(0xFFB45309)
-                            else -> SosRed
-                        },
+                        tint = SosRed,
                         modifier = Modifier.size(14.dp)
                     )
                     Spacer(modifier = Modifier.size(6.dp))
                     Text(
-                        text = when {
-                            isDelivered -> "EMERGENCY ACTIVE • COMMAND CENTER CONNECTED"
-                            isPendingRetry -> "EMERGENCY QUEUED • AUTO RETRYING"
-                            isSending -> "EMERGENCY SOS • DISPATCHING NOW"
-                            else -> "24/7 EMERGENCY ASSISTANCE"
-                        },
-                        color = when {
-                            isDelivered -> Color(0xFF15803D)
-                            isPendingRetry -> Color(0xFFB45309)
-                            else -> SosRed
-                        },
+                        text = if (isSending) "EMERGENCY SOS • DISPATCHING NOW" else "24/7 EMERGENCY ASSISTANCE",
+                        color = SosRed,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 0.5.sp
@@ -156,13 +116,7 @@ fun CircularSosButton(
                         .size(120.dp)
                         .scale(pulseScale)
                         .clip(CircleShape)
-                        .background(
-                            when {
-                                isDelivered -> Color(0x3316A34A)
-                                isPendingRetry -> Color(0x33D97706)
-                                else -> Color(0x33DC2626)
-                            }
-                        )
+                        .background(Color(0x33DC2626))
                 )
 
                 // Outer border ring
@@ -170,115 +124,58 @@ fun CircularSosButton(
                     modifier = Modifier
                         .size(106.dp)
                         .clip(CircleShape)
-                        .background(
-                            when {
-                                isDelivered -> Color(0x2216A34A)
-                                isPendingRetry -> Color(0x22D97706)
-                                else -> Color(0x22DC2626)
-                            }
-                        )
-                        .border(
-                            2.dp,
-                            when {
-                                isDelivered -> Color(0x6616A34A)
-                                isPendingRetry -> Color(0x66D97706)
-                                else -> Color(0x66DC2626)
-                            },
-                            CircleShape
-                        )
+                        .background(Color(0x22DC2626))
+                        .border(2.dp, Color(0x66DC2626), CircleShape)
                 )
 
-                // Inner Main Circular SOS Button (One-tap action)
+                // Inner Main Circular SOS Button (Requires explicit confirmation)
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
                         .size(94.dp)
                         .clip(CircleShape)
                         .background(
-                            Brush.linearGradient(
-                                when {
-                                    isDelivered -> listOf(Color(0xFF16A34A), Color(0xFF15803D))
-                                    isPendingRetry -> listOf(Color(0xFFD97706), Color(0xFFB45309))
-                                    else -> listOf(SosRed, SosRedDark)
-                                }
-                            )
+                            Brush.linearGradient(listOf(SosRed, SosRedDark))
                         )
                         .border(4.dp, IvoryBackground, CircleShape)
                         .clickable(enabled = !isSending && !isSubmittingSos) {
                             handleSosClick()
                         }
                 ) {
-                    when {
-                        isSending -> {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                CircularProgressIndicator(
-                                    color = Color.White,
-                                    modifier = Modifier.size(28.dp),
-                                    strokeWidth = 3.dp
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "SENDING",
-                                    color = Color.White,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.sp
-                                )
-                            }
+                    if (isSending) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                modifier = Modifier.size(28.dp),
+                                strokeWidth = 3.dp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "SENDING",
+                                color = Color.White,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
                         }
-                        isDelivered -> {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    imageVector = Icons.Default.Sensors,
-                                    contentDescription = "Active Emergency",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Text(
-                                    text = "ACTIVE",
-                                    color = Color.White,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = 1.5.sp
-                                )
-                            }
-                        }
-                        isPendingRetry -> {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    imageVector = Icons.Default.Sync,
-                                    contentDescription = "Retrying SOS",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Text(
-                                    text = "RETRY",
-                                    color = Color.White,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = 1.sp
-                                )
-                            }
-                        }
-                        else -> {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    imageVector = Icons.Default.PhoneInTalk,
-                                    contentDescription = "Emergency SOS",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Text(
-                                    text = "SOS",
-                                    color = Color.White,
-                                    fontSize = 21.sp,
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = 2.sp
-                                )
-                            }
+                    } else {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.PhoneInTalk,
+                                contentDescription = "Emergency SOS",
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Text(
+                                text = "SOS",
+                                color = Color.White,
+                                fontSize = 21.sp,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 2.sp
+                            )
                         }
                     }
                 }
@@ -288,19 +185,8 @@ fun CircularSosButton(
 
             // Clear Senior Action Label
             Text(
-                text = when {
-                    isSending -> "CONNECTING TO EMERGENCY COMMAND CENTER..."
-                    isDelivered -> "EMERGENCY ACKNOWLEDGED (INCIDENT #${sosItem?.incidentNumber ?: "REGISTERED"})"
-                    isPendingRetry -> "EMERGENCY QUEUED • RETRYING DISPATCH IN BACKGROUND (TAP TO RETRY NOW)"
-                    isFailed -> "DELIVERY FAILED • PLEASE CALL HELPLINE DIRECTLY"
-                    else -> "TAP FOR IMMEDIATE EMERGENCY ASSISTANCE"
-                },
-                color = when {
-                    isDelivered -> Color(0xFF15803D)
-                    isPendingRetry -> Color(0xFFB45309)
-                    isSending -> SosRedDark
-                    else -> NavyDark
-                },
+                text = if (isSending) "CONNECTING TO EMERGENCY COMMAND CENTER..." else "TAP FOR IMMEDIATE EMERGENCY ASSISTANCE",
+                color = if (isSending) SosRedDark else NavyDark,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 0.5.sp,
@@ -444,118 +330,6 @@ fun CircularSosButton(
                             color = TextPrimary,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 15.sp
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    // Active Emergency In Progress Dialog
-    if (showActiveEmergencyDialog && isDelivered) {
-        Dialog(onDismissRequest = { showActiveEmergencyDialog = false }) {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(72.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFDC2626)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Sensors,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(40.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        text = "EMERGENCY ACTIVE",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Black,
-                            color = SosRed,
-                            letterSpacing = 1.sp
-                        )
-                    )
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Surface(
-                        color = Color(0xFFFEF2F2),
-                        shape = RoundedCornerShape(8.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFECACA))
-                    ) {
-                        Text(
-                            text = "Incident #${sosItem?.incidentNumber ?: "REGISTERED"}",
-                            color = SosRedDark,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    Text(
-                        text = "Your emergency has been received by EmergencyOS. Live GPS location streaming is active so our response team can navigate directly to you.",
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            color = TextSecondary,
-                            textAlign = TextAlign.Center,
-                            lineHeight = 20.sp
-                        )
-                    )
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    Button(
-                        onClick = { launchEmergencyDialer(context, EMERGENCY_HELPLINE) },
-                        colors = navyButtonColors(),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PhoneInTalk,
-                            contentDescription = null,
-                            tint = GoldLight
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Speak with Operator ($DISPLAY_HELPLINE)",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    OutlinedButton(
-                        onClick = {
-                            SosOutboxManager.dismissCurrentEmergency()
-                            showActiveEmergencyDialog = false
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                    ) {
-                        Text(
-                            text = "I Am Safe / End Emergency",
-                            color = TextSecondary,
-                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
