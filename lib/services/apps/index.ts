@@ -48,6 +48,21 @@ export interface CreateReleaseInput {
   isPublished?: boolean;
 }
 
+export interface ReplaceReleaseInput {
+  versionName: string;
+  versionCode: number;
+  apkUrl: string;
+  apkFileName: string;
+  fileSize: number;
+  sha256: string;
+  certificateFingerprint?: string;
+  minAndroidVersion?: string;
+  targetSdkVersion?: number;
+  releaseNotes?: string;
+  isMandatory?: boolean;
+  isPublished?: boolean;
+}
+
 export class AppsService {
   /**
    * Returns all published applications with their latest published release for the public directory.
@@ -294,13 +309,85 @@ export class AppsService {
       });
 
       if (release.isPublished) {
+        const latestPublished = await tx.appRelease.findFirst({
+          where: { appId: input.appId, isPublished: true },
+          orderBy: [{ versionCode: "desc" }, { releasedAt: "desc" }],
+        });
+
         await tx.publishedApp.update({
           where: { id: input.appId },
-          data: { currentVersionId: release.id },
+          data: { currentVersionId: latestPublished?.id || release.id },
         });
       }
 
       return release;
+    });
+  }
+
+  /**
+   * ADMIN: Replaces an existing release binary and metadata with an authoritative new build.
+   * Ensures each binary has a unique immutable filename and SHA-256 to prevent CDN caching issues.
+   */
+  static async replaceRelease(releaseId: string, input: ReplaceReleaseInput) {
+    const existingRelease = await activeDb.appRelease.findUnique({
+      where: { id: releaseId },
+      include: { app: true },
+    });
+
+    if (!existingRelease) throw new Error("Release not found to replace.");
+
+    const verification = ApkValidator.verifyApkUpdate(
+      {
+        packageName: existingRelease.app.packageName,
+        latestCertFingerprint: existingRelease.certificateFingerprint || null,
+        latestVersionCode: null, // Non-blocking during explicit replacement of an existing release
+      },
+      {
+        isValid: true,
+        fileSize: input.fileSize,
+        sha256: input.sha256,
+        versionCode: input.versionCode,
+        versionName: input.versionName,
+        certificateFingerprint: input.certificateFingerprint,
+      }
+    );
+
+    if (!verification.valid) {
+      throw new Error(verification.reason || "APK validation failed.");
+    }
+
+    return activeDb.$transaction(async (tx: any) => {
+      const updated = await tx.appRelease.update({
+        where: { id: releaseId },
+        data: {
+          versionName: input.versionName.trim(),
+          versionCode: input.versionCode,
+          apkUrl: input.apkUrl.trim(),
+          apkFileName: input.apkFileName.trim(),
+          fileSize: input.fileSize,
+          sha256: input.sha256.trim(),
+          certificateFingerprint: input.certificateFingerprint?.trim() || existingRelease.certificateFingerprint,
+          minAndroidVersion: input.minAndroidVersion?.trim() || existingRelease.minAndroidVersion,
+          targetSdkVersion: input.targetSdkVersion || existingRelease.targetSdkVersion || 36,
+          releaseNotes: input.releaseNotes !== undefined ? input.releaseNotes.trim() : existingRelease.releaseNotes,
+          isMandatory: input.isMandatory !== undefined ? input.isMandatory : existingRelease.isMandatory,
+          isPublished: input.isPublished !== undefined ? input.isPublished : existingRelease.isPublished,
+          releasedAt: new Date(),
+        },
+      });
+
+      // Recalculate latest published release
+      const latestPublished = await tx.appRelease.findFirst({
+        where: { appId: existingRelease.appId, isPublished: true },
+        orderBy: [{ versionCode: "desc" }, { releasedAt: "desc" }],
+      });
+
+      await tx.publishedApp.update({
+        where: { id: existingRelease.appId },
+        data: { currentVersionId: latestPublished?.id || updated.id },
+      });
+
+      return updated;
     });
   }
 

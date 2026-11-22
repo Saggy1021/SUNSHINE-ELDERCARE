@@ -40,7 +40,8 @@ class AuthRepository {
                         memberId = member?.memberId ?: cleanId,
                         name = member?.name ?: "Sunshine Member",
                         gender = member?.gender,
-                        email = member?.email
+                        email = member?.email,
+                        phone = member?.phone
                     )
                     Log.d(TAG, "Login successful for member: ${member?.name}")
                     Result.success(body)

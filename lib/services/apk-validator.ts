@@ -18,6 +18,8 @@ export interface ApkInspectionResult {
 export interface UpdateVerificationResult {
   valid: boolean;
   reason?: string;
+  hasCompatibilityWarning?: boolean;
+  warning?: string;
 }
 
 /**
@@ -393,19 +395,30 @@ export class ApkValidator {
       };
     }
 
-    // Verify version code increments
+    // Android Package Manager compatibility check:
+    // Non-blocking: Equal or lower version code is permitted for replacement releases or maintenance builds,
+    // but Android will reject an over-the-air update on devices that already have this or a higher version installed.
+    let hasCompatibilityWarning = false;
+    let warning: string | undefined = undefined;
+
     if (
       existingApp.latestVersionCode !== undefined &&
       existingApp.latestVersionCode !== null &&
       newApk.versionCode !== undefined &&
       newApk.versionCode <= existingApp.latestVersionCode
     ) {
-      return {
-        valid: false,
-        reason: `Version code must be strictly greater than ${existingApp.latestVersionCode} (uploaded: ${newApk.versionCode}). Android rejects installs with lower or duplicate version codes.`,
-      };
+      hasCompatibilityWarning = true;
+      if (newApk.versionCode === existingApp.latestVersionCode) {
+        warning = `Version code ${newApk.versionCode} matches the currently published release. You can replace the existing release or create a new entry. (Note: Existing Android devices that already have this version installed will not detect this as an incremental upgrade).`;
+      } else {
+        warning = `Version code ${newApk.versionCode} is lower than the latest published release (${existingApp.latestVersionCode}). Android Package Manager rejects installing a lower version over a higher version without uninstalling first.`;
+      }
     }
 
-    return { valid: true };
+    return {
+      valid: true,
+      hasCompatibilityWarning,
+      warning,
+    };
   }
 }

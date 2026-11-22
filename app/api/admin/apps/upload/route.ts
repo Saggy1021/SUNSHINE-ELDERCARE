@@ -123,24 +123,31 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      let updateVerification: { valid: boolean; reason?: string; hasCompatibilityWarning?: boolean; warning?: string } | null = null;
+      let matchingRelease: any = null;
+
       // Verify against database invariants if target application is specified
-      if (appSlug) {
+      if (appSlug || packageName) {
         const app = await prisma.publishedApp.findFirst({
           where: {
-            OR: [{ slug: appSlug }, { packageName }],
+            OR: [
+              ...(appSlug ? [{ slug: appSlug }] : []),
+              ...(packageName ? [{ packageName }] : []),
+            ],
           },
           include: {
             versions: {
               where: { isPublished: true },
               orderBy: { versionCode: "desc" },
-              take: 1,
             },
           },
         });
 
         if (app) {
           const latestRelease = app.versions[0];
-          const updateVerification = ApkValidator.verifyApkUpdate(
+          matchingRelease = app.versions.find((v) => v.versionCode === Number(versionCode)) || null;
+
+          updateVerification = ApkValidator.verifyApkUpdate(
             {
               packageName: app.packageName,
               latestCertFingerprint: latestRelease?.certificateFingerprint || null,
@@ -152,7 +159,7 @@ export async function POST(request: NextRequest) {
               sha256,
               packageName,
               versionName,
-              versionCode,
+              versionCode: Number(versionCode),
               certificateFingerprint,
             }
           );
@@ -174,7 +181,8 @@ export async function POST(request: NextRequest) {
         prefix = "Sunshine-Employee";
       }
       const safeVersion = (versionName || "1.0.0").replace(/[^a-zA-Z0-9._-]/g, "_");
-      const uniqueFileName = `${prefix}-v${safeVersion}-b${versionCode}.apk`;
+      const shortSha = sha256.substring(0, 8);
+      const uniqueFileName = `${prefix}-v${safeVersion}-b${versionCode}-${shortSha}.apk`;
       const relativeUrl = `/downloads/apps/${uniqueFileName}`;
 
       return NextResponse.json({
@@ -192,6 +200,18 @@ export async function POST(request: NextRequest) {
           apkFileName: uniqueFileName,
           apkUrl: relativeUrl,
         },
+        compatibilityWarning: updateVerification?.warning || null,
+        hasCompatibilityWarning: Boolean(updateVerification?.hasCompatibilityWarning),
+        matchingRelease: matchingRelease
+          ? {
+              id: matchingRelease.id,
+              versionName: matchingRelease.versionName,
+              versionCode: matchingRelease.versionCode,
+              apkFileName: matchingRelease.apkFileName,
+              sha256: matchingRelease.sha256,
+              releasedAt: matchingRelease.releasedAt,
+            }
+          : null,
       });
     }
 
@@ -226,6 +246,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    let updateCheck: { valid: boolean; reason?: string; hasCompatibilityWarning?: boolean; warning?: string } | null = null;
+    let matchingRelease: any = null;
+
     // Verify against target app invariants if slug provided
     if (targetAppSlug || inspection.packageName) {
       const app = await prisma.publishedApp.findFirst({
@@ -239,14 +262,15 @@ export async function POST(request: NextRequest) {
           versions: {
             where: { isPublished: true },
             orderBy: { versionCode: "desc" },
-            take: 1,
           },
         },
       });
 
       if (app) {
         const latest = app.versions[0];
-        const updateCheck = ApkValidator.verifyApkUpdate(
+        matchingRelease = app.versions.find((v) => v.versionCode === Number(inspection.versionCode)) || null;
+
+        updateCheck = ApkValidator.verifyApkUpdate(
           {
             packageName: app.packageName,
             latestCertFingerprint: latest?.certificateFingerprint || null,
@@ -264,8 +288,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Sanitize filename
-    const safeName = originalName.replace(/[^a-zA-Z0-9._-]/g, "_");
+    // Sanitize filename and append shortSha to prevent CDN caching collisions
+    const shortSha = inspection.sha256 ? inspection.sha256.substring(0, 8) : Date.now().toString(36);
+    const baseName = originalName.replace(/\.apk$/i, "").replace(/[^a-zA-Z0-9._-]/g, "_");
+    const safeName = `${baseName}-${shortSha}.apk`;
     const relativeUrl = `/downloads/apps/${safeName}`;
 
     // Safely attempt to write to disk if filesystem is writable (catch read-only errors on serverless)
@@ -288,6 +314,18 @@ export async function POST(request: NextRequest) {
         apkFileName: safeName,
         apkUrl: relativeUrl,
       },
+      compatibilityWarning: updateCheck?.warning || null,
+      hasCompatibilityWarning: Boolean(updateCheck?.hasCompatibilityWarning),
+      matchingRelease: matchingRelease
+        ? {
+            id: matchingRelease.id,
+            versionName: matchingRelease.versionName,
+            versionCode: matchingRelease.versionCode,
+            apkFileName: matchingRelease.apkFileName,
+            sha256: matchingRelease.sha256,
+            releasedAt: matchingRelease.releasedAt,
+          }
+        : null,
     });
   } catch (error: any) {
     console.error("[POST /api/admin/apps/upload] Error:", error);

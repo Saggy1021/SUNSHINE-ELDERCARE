@@ -79,17 +79,18 @@ async function runTests() {
   assert.ok(certCheck.reason?.includes("Signing Certificate Mismatch"), "Reason must specify certificate mismatch");
   console.log("  ✓ Scenario 5: Uploading APK signed by unapproved keystore is rejected");
 
-  // --- SCENARIO 6: Security Invariant - Version Code Downgrade Rejected ---
-  console.log("\n--- SCENARIO 6: Security Invariant - Version Code Downgrade Rejected ---");
+  // --- SCENARIO 6: Non-Blocking Version Code Equal/Lower Advisory ---
+  console.log("\n--- SCENARIO 6: Non-Blocking Version Code Equal/Lower Advisory ---");
   const existingAtV3 = {
     packageName: "in.sunshineeldercare.member",
     latestCertFingerprint: "370b03fd0c87a9a4620e41fac3859ceeb81ab98752c7673f272548793c4f3394",
     latestVersionCode: 3,
   };
   const codeCheck = ApkValidator.verifyApkUpdate(existingAtV3, serverInspection);
-  assert.strictEqual(codeCheck.valid, false, "Must reject version code <= existing");
-  assert.ok(codeCheck.reason?.includes("Version code must be strictly greater than 3"), "Reason must specify version code progression requirement");
-  console.log("  ✓ Scenario 6: Version code equal to or lower than existing published release is rejected");
+  assert.strictEqual(codeCheck.valid, true, "Upload must not be blocked for equal or lower version code");
+  assert.strictEqual(codeCheck.hasCompatibilityWarning, true, "Must flag compatibility warning");
+  assert.ok(codeCheck.warning?.includes("matches the currently published release"), "Warning must advise on OTA behavior for matching version code");
+  console.log("  ✓ Scenario 6: Version code equal to existing release generates non-blocking advisory warning");
 
   // --- SCENARIO 7: Version Code Progression Allowed For Legitimate Update ---
   console.log("\n--- SCENARIO 7: Version Code Progression Allowed For Legitimate Update ---");

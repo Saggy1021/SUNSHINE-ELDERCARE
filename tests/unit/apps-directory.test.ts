@@ -432,9 +432,9 @@ async function runAppsDirectoryTestSuite() {
   });
 
   // -------------------------------------------------------------
-  // Test 8: Version code downgrade rejection
+  // Test 8: Non-blocking version code warning & replacement capability
   // -------------------------------------------------------------
-  await test("Scenario 8: Version code downgrade (equal or lower) is rejected", async () => {
+  await test("Scenario 8: Equal or lower version code generates non-blocking warning and supports release replacement", async () => {
     const verification = ApkValidator.verifyApkUpdate(
       {
         packageName: "in.sunshineeldercare.member",
@@ -452,8 +452,27 @@ async function runAppsDirectoryTestSuite() {
       }
     );
 
-    assert.strictEqual(verification.valid, false, "Version code downgrade must fail");
-    assert(verification.reason?.includes("greater than"), "Reason must indicate downgrade error");
+    assert.strictEqual(verification.valid, true, "Version code downgrade must not block upload");
+    assert.strictEqual(verification.hasCompatibilityWarning, true, "Must flag compatibility warning");
+    assert(verification.warning?.includes("lower than"), "Warning must advise on Android lower version behavior");
+
+    // Verify replacement action
+    const memberApps = await AppsService.getPublishedApps();
+    const memberApp = memberApps.find((a: any) => a.slug === "member-app" || a.packageName === "in.sunshineeldercare.member");
+    assert(memberApp?.latestRelease, "Member app release must exist");
+
+    const replaced = await AppsService.replaceRelease(memberApp.latestRelease.id, {
+      versionName: "1.0.2-patch",
+      versionCode: memberApp.latestRelease.versionCode,
+      apkUrl: "/downloads/apps/Sunshine-Member-v1.0.2-b3-replaced.apk",
+      apkFileName: "Sunshine-Member-v1.0.2-b3-replaced.apk",
+      fileSize: 46701738,
+      sha256: "d3f31e5631155416e7ed6ed056f4fbf710982fbbb7670c968d05181bfb49a725",
+      certificateFingerprint: memberApp.latestRelease.certificateFingerprint || undefined,
+    });
+
+    assert.strictEqual(replaced.versionName, "1.0.2-patch");
+    assert.strictEqual(replaced.apkFileName, "Sunshine-Member-v1.0.2-b3-replaced.apk");
   });
 
   // -------------------------------------------------------------

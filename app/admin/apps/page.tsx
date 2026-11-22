@@ -23,12 +23,14 @@ import {
   Copy,
   ChevronDown,
   ChevronUp,
+  AlertTriangle,
 } from "lucide-react";
 import {
   getAllAppsAdminAction,
   createAppAction,
   updateAppAction,
   createReleaseAction,
+  replaceReleaseAction,
   togglePublishReleaseAction,
   deleteReleaseAction,
 } from "@/app/actions/apps";
@@ -127,6 +129,17 @@ export default function AdminAppsPage() {
     apkUrl?: string;
     error?: string;
   } | null>(null);
+
+  const [releaseActionType, setReleaseActionType] = useState<"NEW" | "REPLACE">("NEW");
+  const [targetReplaceReleaseId, setTargetReplaceReleaseId] = useState<string | null>(null);
+  const [matchingReleaseInfo, setMatchingReleaseInfo] = useState<{
+    id: string;
+    versionName: string;
+    versionCode: number;
+    apkFileName: string;
+    sha256: string;
+  } | null>(null);
+  const [compatibilityWarning, setCompatibilityWarning] = useState<string | null>(null);
 
   const [releaseForm, setReleaseForm] = useState({
     versionName: "",
@@ -274,6 +287,10 @@ export default function AdminAppsPage() {
     setSelectedApp(app);
     setUploadFile(null);
     setInspectionResult(null);
+    setCompatibilityWarning(null);
+    setMatchingReleaseInfo(null);
+    setReleaseActionType("NEW");
+    setTargetReplaceReleaseId(app.versions[0]?.id || null);
     const nextCode = app.versions.length > 0 ? Math.max(...app.versions.map((v) => v.versionCode)) + 1 : 1;
     setReleaseForm({
       versionName: "1.0.0",
@@ -309,15 +326,52 @@ export default function AdminAppsPage() {
     setUploadFile(file);
     setUploading(true);
     setInspectionResult(null);
+    setCompatibilityWarning(null);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    let extractedMeta: {
+      packageName?: string;
+      versionName?: string;
+      versionCode?: number;
+      minSdkVersion?: string;
+      targetSdkVersion?: number;
+      fileSize: number;
+      sha256: string;
+      certificateFingerprint?: string;
+    } = {
+      fileSize: file.size,
+      sha256: "",
+    };
 
     try {
       // 1. Instantaneous in-browser binary inspection (< 200ms)
       const clientInspection = await inspectApkInBrowser(file);
       if (!clientInspection.isValid) {
         throw new Error(clientInspection.error || "Failed to parse APK structure");
+      }
+
+      extractedMeta = {
+        packageName: clientInspection.packageName,
+        versionName: clientInspection.versionName,
+        versionCode: clientInspection.versionCode,
+        minSdkVersion: clientInspection.minSdkVersion,
+        targetSdkVersion: clientInspection.targetSdkVersion,
+        fileSize: file.size,
+        sha256: clientInspection.sha256,
+        certificateFingerprint: clientInspection.certificateFingerprint,
+      };
+
+      // Automatically pre-fill form immediately from authoritative embedded APK metadata
+      if (clientInspection.versionName || clientInspection.versionCode) {
+        setReleaseForm((prev) => ({
+          ...prev,
+          versionName: clientInspection.versionName || prev.versionName,
+          versionCode: clientInspection.versionCode || prev.versionCode,
+          minAndroidVersion: clientInspection.minSdkVersion || prev.minAndroidVersion,
+          targetSdkVersion: clientInspection.targetSdkVersion || prev.targetSdkVersion,
+        }));
       }
 
       // 2. Authoritative backend verification with lightweight cryptographic proof (< 50KB payload)
@@ -347,6 +401,22 @@ export default function AdminAppsPage() {
 
       setInspectionResult(data.inspection);
 
+      if (data.hasCompatibilityWarning && data.compatibilityWarning) {
+        setCompatibilityWarning(data.compatibilityWarning);
+      } else {
+        setCompatibilityWarning(null);
+      }
+
+      if (data.matchingRelease) {
+        setMatchingReleaseInfo(data.matchingRelease);
+        setReleaseActionType("REPLACE");
+        setTargetReplaceReleaseId(data.matchingRelease.id);
+      } else {
+        setMatchingReleaseInfo(null);
+        setReleaseActionType("NEW");
+        setTargetReplaceReleaseId(selectedApp?.versions[0]?.id || null);
+      }
+
       // Pre-fill form from verified inspection
       if (data.inspection?.versionName) {
         setReleaseForm((prev) => ({
@@ -365,10 +435,15 @@ export default function AdminAppsPage() {
           ? "APK inspection timed out after 30 seconds. Please try again."
           : err?.message || "APK upload and inspection failed";
 
+      // Preserve extracted metadata so UI never displays "Package N/A, Version Name N/A, Version Code N/A"
       setInspectionResult({
         isValid: false,
         fileSize: file.size,
-        sha256: "",
+        sha256: extractedMeta.sha256,
+        packageName: extractedMeta.packageName,
+        versionName: extractedMeta.versionName,
+        versionCode: extractedMeta.versionCode,
+        certificateFingerprint: extractedMeta.certificateFingerprint,
         error: errorMsg,
       });
       showNotification(errorMsg, true);
@@ -385,43 +460,56 @@ export default function AdminAppsPage() {
       return;
     }
 
-    // Explicitly enforce valid version code progression
-    const latestVersionCode =
-      selectedApp.versions.length > 0
-        ? Math.max(...selectedApp.versions.map((v) => v.versionCode))
-        : 0;
-
     const submittedCode = Number(releaseForm.versionCode);
-    if (submittedCode <= latestVersionCode) {
-      showNotification(
-        `Version code must be strictly greater than ${latestVersionCode} (entered: ${submittedCode}). Android rejects installs with lower or duplicate version codes.`,
-        true
-      );
+    if (!submittedCode || isNaN(submittedCode)) {
+      showNotification("Please provide a valid integer version code", true);
       return;
     }
 
     setSaving(true);
     try {
-      await createReleaseAction({
-        appId: selectedApp.id,
-        versionName: releaseForm.versionName,
-        versionCode: submittedCode,
-        apkUrl: inspectionResult.apkUrl || `/downloads/apps/${inspectionResult.apkFileName}`,
-        apkFileName: inspectionResult.apkFileName || uploadFile?.name || "app-release.apk",
-        fileSize: inspectionResult.fileSize || 0,
-        sha256: inspectionResult.sha256 || "",
-        certificateFingerprint: inspectionResult.certificateFingerprint,
-        minAndroidVersion: releaseForm.minAndroidVersion,
-        targetSdkVersion: Number(releaseForm.targetSdkVersion),
-        releaseNotes: releaseForm.releaseNotes || undefined,
-        isMandatory: Boolean(releaseForm.isMandatory),
-        isPublished: Boolean(releaseForm.isPublished),
-      });
+      if (releaseActionType === "REPLACE" && targetReplaceReleaseId) {
+        await replaceReleaseAction(targetReplaceReleaseId, {
+          versionName: releaseForm.versionName,
+          versionCode: submittedCode,
+          apkUrl: inspectionResult.apkUrl || `/downloads/apps/${inspectionResult.apkFileName}`,
+          apkFileName: inspectionResult.apkFileName || uploadFile?.name || "app-release.apk",
+          fileSize: inspectionResult.fileSize || 0,
+          sha256: inspectionResult.sha256 || "",
+          certificateFingerprint: inspectionResult.certificateFingerprint,
+          minAndroidVersion: releaseForm.minAndroidVersion,
+          targetSdkVersion: Number(releaseForm.targetSdkVersion),
+          releaseNotes: releaseForm.releaseNotes || undefined,
+          isMandatory: Boolean(releaseForm.isMandatory),
+          isPublished: Boolean(releaseForm.isPublished),
+        });
 
-      setIsUploadModalOpen(false);
-      showNotification(
-        `Version ${releaseForm.versionName} for "${selectedApp.name}" published successfully!`
-      );
+        setIsUploadModalOpen(false);
+        showNotification(
+          `Release v${releaseForm.versionName} (Build ${submittedCode}) for "${selectedApp.name}" replaced successfully!`
+        );
+      } else {
+        await createReleaseAction({
+          appId: selectedApp.id,
+          versionName: releaseForm.versionName,
+          versionCode: submittedCode,
+          apkUrl: inspectionResult.apkUrl || `/downloads/apps/${inspectionResult.apkFileName}`,
+          apkFileName: inspectionResult.apkFileName || uploadFile?.name || "app-release.apk",
+          fileSize: inspectionResult.fileSize || 0,
+          sha256: inspectionResult.sha256 || "",
+          certificateFingerprint: inspectionResult.certificateFingerprint,
+          minAndroidVersion: releaseForm.minAndroidVersion,
+          targetSdkVersion: Number(releaseForm.targetSdkVersion),
+          releaseNotes: releaseForm.releaseNotes || undefined,
+          isMandatory: Boolean(releaseForm.isMandatory),
+          isPublished: Boolean(releaseForm.isPublished),
+        });
+
+        setIsUploadModalOpen(false);
+        showNotification(
+          `Version ${releaseForm.versionName} (Build ${submittedCode}) for "${selectedApp.name}" published successfully!`
+        );
+      }
       await loadApps();
     } catch (err: any) {
       showNotification(err?.message || "Failed to publish release", true);
@@ -1107,6 +1195,105 @@ export default function AdminAppsPage() {
                 </div>
               )}
 
+              {/* Compatibility Advisory (Non-blocking warning) */}
+              {compatibilityWarning && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3.5 text-xs text-amber-900 dark:text-amber-200">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <div className="font-bold text-amber-900 dark:text-amber-100">
+                        Android Compatibility Advisory
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-amber-800 dark:text-amber-300">
+                        {compatibilityWarning}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Release Strategy Selector (Replace Existing Release vs Create As New) */}
+              {inspectionResult && inspectionResult.isValid && selectedApp.versions.length > 0 && (
+                <div className="rounded-xl border border-border bg-muted/10 p-4 space-y-3">
+                  <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    Release Strategy
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <label
+                      className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors ${
+                        releaseActionType === "REPLACE"
+                          ? "border-[#B08A4A] bg-[#B08A4A]/5 ring-1 ring-[#B08A4A]"
+                          : "border-border hover:bg-muted/30"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="releaseActionType"
+                        value="REPLACE"
+                        checked={releaseActionType === "REPLACE"}
+                        onChange={() => setReleaseActionType("REPLACE")}
+                        className="mt-0.5 text-[#B08A4A]"
+                      />
+                      <div>
+                        <div className="font-semibold text-slate-800 dark:text-slate-200">
+                          Replace Existing Release
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                          {matchingReleaseInfo
+                            ? `Replace existing release v${matchingReleaseInfo.versionName} (Build ${matchingReleaseInfo.versionCode}) with this new binary.`
+                            : "Replace an existing release record with this new binary."}
+                        </p>
+                      </div>
+                    </label>
+
+                    <label
+                      className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors ${
+                        releaseActionType === "NEW"
+                          ? "border-[#B08A4A] bg-[#B08A4A]/5 ring-1 ring-[#B08A4A]"
+                          : "border-border hover:bg-muted/30"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="releaseActionType"
+                        value="NEW"
+                        checked={releaseActionType === "NEW"}
+                        onChange={() => setReleaseActionType("NEW")}
+                        className="mt-0.5 text-[#B08A4A]"
+                      />
+                      <div>
+                        <div className="font-semibold text-slate-800 dark:text-slate-200">
+                          Create as New Release
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                          Publish as a distinct new release entry in the catalog.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+
+                  {releaseActionType === "REPLACE" && (
+                    <div className="pt-2">
+                      <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
+                        Select Target Release to Replace:
+                      </label>
+                      <select
+                        value={targetReplaceReleaseId || ""}
+                        onChange={(e) => setTargetReplaceReleaseId(e.target.value)}
+                        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-mono"
+                      >
+                        {selectedApp.versions.map((ver) => (
+                          <option key={ver.id} value={ver.id}>
+                            v{ver.versionName} (Build {ver.versionCode}) — {ver.apkFileName}
+                            {ver.isPublished ? " [Published]" : " [Unpublished]"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Version & Metadata Fields */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -1203,11 +1390,17 @@ export default function AdminAppsPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={saving || uploading || !inspectionResult || !inspectionResult.isValid}
+                  disabled={
+                    saving ||
+                    uploading ||
+                    !inspectionResult ||
+                    !inspectionResult.isValid ||
+                    (releaseActionType === "REPLACE" && !targetReplaceReleaseId)
+                  }
                   className="inline-flex items-center gap-1.5 rounded-lg bg-[#B08A4A] px-4 py-2 text-xs font-bold text-white hover:bg-[#977338] disabled:opacity-50"
                 >
                   {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  <span>Publish Release</span>
+                  <span>{releaseActionType === "REPLACE" ? "Save & Replace Release" : "Publish Release"}</span>
                 </button>
               </div>
             </form>

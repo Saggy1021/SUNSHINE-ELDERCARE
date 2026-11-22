@@ -7,6 +7,7 @@ import android.location.LocationManager
 import android.util.Log
 import androidx.work.*
 import `in`.sunshineeldercare.member.data.api.ApiClient
+import `in`.sunshineeldercare.member.data.model.EmergencyIncidentSummaryDto
 import `in`.sunshineeldercare.member.data.model.SosTriggerRequest
 import `in`.sunshineeldercare.member.data.security.SecureSessionManager
 import `in`.sunshineeldercare.member.service.EmergencyLocationService
@@ -21,6 +22,7 @@ import kotlinx.serialization.json.Json
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import kotlin.math.min
 
 @Serializable
 enum class SosDeliveryStatus {
@@ -63,6 +65,7 @@ object SosOutboxManager {
     }
 
     private val managerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var activeRetryJob: Job? = null
 
     private val _currentSos = MutableStateFlow<SosOutboxItem?>(null)
     val currentSos: StateFlow<SosOutboxItem?> = _currentSos.asStateFlow()
@@ -73,6 +76,21 @@ object SosOutboxManager {
         appContext = context.applicationContext
         loadPersistedOutbox()
         checkAndResumePendingDelivery()
+    }
+
+    /**
+     * Retrieves current SOS item, reloading from disk if null.
+     */
+    fun getOrLoadCurrentSos(context: Context? = null): SosOutboxItem? {
+        val inMemory = _currentSos.value
+        if (inMemory != null) return inMemory
+
+        val ctx = context?.applicationContext ?: appContext
+        if (ctx != null && appContext == null) {
+            appContext = ctx
+        }
+        loadPersistedOutbox()
+        return _currentSos.value
     }
 
     /**
@@ -96,7 +114,7 @@ object SosOutboxManager {
 
     /**
      * Immediately registers a durable SOS outbox request and initiates delivery.
-     * Guaranteed non-blocking location acquisition with strict 2.5s timeout.
+     * If an emergency is already active or retrying, triggers immediate retry preserving requestId.
      */
     fun triggerSosImmediate(
         context: Context,
@@ -104,14 +122,23 @@ object SosOutboxManager {
     ) {
         val ctx = appContext ?: context.applicationContext
 
+        val existing = _currentSos.value
+        if (existing != null && (existing.status == SosDeliveryStatus.SENDING ||
+                    existing.status == SosDeliveryStatus.PENDING_RETRY ||
+                    existing.status == SosDeliveryStatus.QUEUED)) {
+            Log.i(TAG, "SOS already pending/sending (${existing.requestId}). Triggering immediate retry.")
+            retryNow(ctx, onImmediateResult)
+            return
+        }
+
         managerScope.launch {
             // 1. Non-blocking best-effort location acquisition (max 2.5s)
             val loc = acquireLocationQuick(ctx)
 
             val memberId = SecureSessionManager.getMemberId()
             val callerName = SecureSessionManager.getMemberName()
-            val cachedProfile = SecureSessionManager.getCachedProfile()
-            val callerPhone = cachedProfile?.phone?.ifBlank { null }
+            val callerPhone = SecureSessionManager.getMemberPhone()
+                ?: SecureSessionManager.getCachedProfile()?.phone?.ifBlank { null }
 
             val item = SosOutboxItem(
                 requestId = UUID.randomUUID().toString(),
@@ -130,45 +157,156 @@ object SosOutboxManager {
             persistOutboxItem(item)
             _currentSos.value = item
 
-            // 3. Schedule WorkManager persistent retry worker (survives app kill / device reboot)
+            // 3. Schedule WorkManager persistent retry worker (survives app kill / reboot)
             scheduleWorkManagerDelivery(ctx, item.requestId)
 
-            // 4. Attempt immediate in-process delivery with strict 8-second timeout
-            var delivered = false
-            var errorMsg: String? = null
+            // 4. Launch resilient in-process retry loop
+            startForegroundRetryLoop(ctx, item, onImmediateResult)
+        }
+    }
 
-            try {
-                withTimeout(8000) {
-                    val result = executeDeliveryNetworkCall(ctx, item)
-                    if (result.first) {
-                        delivered = true
-                    } else {
-                        errorMsg = result.second
+    /**
+     * Forces an immediate retry attempt for the active pending emergency.
+     */
+    fun retryNow(
+        context: Context,
+        onImmediateResult: ((Boolean, String?) -> Unit)? = null
+    ) {
+        val ctx = appContext ?: context.applicationContext
+        val item = _currentSos.value ?: loadPersistedOutbox() ?: return
+
+        if (item.status == SosDeliveryStatus.DELIVERED) {
+            onImmediateResult?.invoke(true, null)
+            return
+        }
+
+        managerScope.launch {
+            val sendingItem = item.copy(
+                status = SosDeliveryStatus.SENDING,
+                lastAttempt = System.currentTimeMillis()
+            )
+            persistOutboxItem(sendingItem)
+            _currentSos.value = sendingItem
+
+            // Re-schedule WorkManager in case it was cancelled
+            scheduleWorkManagerDelivery(ctx, item.requestId)
+
+            // Start in-process retry loop
+            startForegroundRetryLoop(ctx, sendingItem, onImmediateResult)
+        }
+    }
+
+    /**
+     * Resilient in-process foreground retry loop with bounded exponential backoff.
+     */
+    private fun startForegroundRetryLoop(
+        context: Context,
+        initialItem: SosOutboxItem,
+        onImmediateResult: ((Boolean, String?) -> Unit)? = null
+    ) {
+        activeRetryJob?.cancel()
+        activeRetryJob = managerScope.launch {
+            var current = initialItem
+            var firstAttemptCompleted = false
+
+            for (attempt in 0..12) {
+                if (_currentSos.value?.status == SosDeliveryStatus.DELIVERED) {
+                    Log.i(TAG, "Emergency already acknowledged/delivered; exiting retry loop.")
+                    break
+                }
+
+                if (attempt > 0) {
+                    val backoffSeconds = calculateBackoffSeconds(attempt)
+                    Log.d(TAG, "Scheduling in-process SOS retry #$attempt in ${backoffSeconds}s")
+                    delay(backoffSeconds * 1000L)
+                }
+
+                if (_currentSos.value?.status == SosDeliveryStatus.DELIVERED) break
+
+                val (success, errorMsg) = executeDeliveryNetworkCall(context, current, timeoutMs = 15000L)
+
+                if (success) {
+                    Log.i(TAG, "In-process SOS delivery succeeded on attempt $attempt")
+                    if (!firstAttemptCompleted) {
+                        firstAttemptCompleted = true
+                        withContext(Dispatchers.Main) {
+                            onImmediateResult?.invoke(true, null)
+                        }
+                    }
+                    break
+                } else {
+                    Log.w(TAG, "In-process SOS delivery attempt $attempt failed: $errorMsg")
+                    current = current.copy(
+                        status = SosDeliveryStatus.PENDING_RETRY,
+                        retryCount = attempt + 1,
+                        lastAttempt = System.currentTimeMillis(),
+                        failureReason = errorMsg
+                    )
+                    persistOutboxItem(current)
+                    _currentSos.value = current
+
+                    if (!firstAttemptCompleted) {
+                        firstAttemptCompleted = true
+                        withContext(Dispatchers.Main) {
+                            onImmediateResult?.invoke(false, errorMsg)
+                        }
                     }
                 }
-            } catch (e: TimeoutCancellationException) {
-                Log.w(TAG, "In-process SOS delivery timed out after 8s; continuing in background outbox.")
-                errorMsg = "Connecting to emergency command center took longer than expected. Automatic retry is active."
-            } catch (e: Exception) {
-                Log.e(TAG, "In-process SOS delivery error", e)
-                errorMsg = e.message ?: "Network error during emergency dispatch."
+            }
+        }
+    }
+
+    /**
+     * Reconciles active emergency state when server dashboard or API returns an ongoing incident.
+     */
+    fun reconcileWithServerIncident(incident: EmergencyIncidentSummaryDto) {
+        val activeStatuses = listOf("TRIGGERED", "ACKNOWLEDGED", "DISPATCHED", "RESPONDER_ON_SCENE")
+        if (incident.status !in activeStatuses) {
+            return
+        }
+
+        val current = _currentSos.value
+        val needsReconciliation = current == null ||
+                current.status != SosDeliveryStatus.DELIVERED ||
+                current.incidentId != incident.id
+
+        if (needsReconciliation) {
+            Log.i(TAG, "Reconciling local SOS with active server incident #${incident.incidentNumber} (${incident.status})")
+            activeRetryJob?.cancel()
+            activeRetryJob = null
+
+            val ctx = appContext
+            if (ctx != null) {
+                cancelWorkManagerDelivery(ctx, current?.requestId ?: incident.id)
+                EmergencyLocationService.start(ctx, incident.id, incident.incidentNumber)
             }
 
-            if (!delivered) {
-                // Update to PENDING_RETRY so UI clearly displays that emergency is registered
-                // and retrying, while avoiding infinite spinners
-                val retryingItem = item.copy(
-                    status = SosDeliveryStatus.PENDING_RETRY,
-                    lastAttempt = System.currentTimeMillis(),
-                    failureReason = errorMsg
-                )
-                persistOutboxItem(retryingItem)
-                _currentSos.value = retryingItem
-            }
+            LiveRefreshManager.isSosActive = true
 
-            withContext(Dispatchers.Main) {
-                onImmediateResult?.invoke(delivered, errorMsg)
-            }
+            val reconciledItem = (current ?: SosOutboxItem(
+                requestId = UUID.randomUUID().toString(),
+                timestamp = System.currentTimeMillis()
+            )).copy(
+                status = SosDeliveryStatus.DELIVERED,
+                incidentId = incident.id,
+                incidentNumber = incident.incidentNumber,
+                lastAttempt = System.currentTimeMillis(),
+                failureReason = null
+            )
+
+            persistOutboxItem(reconciledItem)
+            _currentSos.value = reconciledItem
+        }
+    }
+
+    /**
+     * Invoked when the server indicates that the active incident is resolved or cancelled.
+     */
+    fun onServerIncidentResolved() {
+        val current = _currentSos.value ?: return
+        if (current.status == SosDeliveryStatus.DELIVERED) {
+            Log.i(TAG, "Server incident #${current.incidentNumber} is closed. Dismissing active SOS.")
+            dismissCurrentEmergency()
         }
     }
 
@@ -178,55 +316,66 @@ object SosOutboxManager {
      */
     suspend fun executeDeliveryNetworkCall(
         context: Context,
-        item: SosOutboxItem
+        item: SosOutboxItem,
+        timeoutMs: Long = 15000L
     ): Pair<Boolean, String?> = withContext(Dispatchers.IO) {
         try {
-            val request = SosTriggerRequest(
-                triggerSource = "MEMBER_APP_SOS",
-                latitude = item.latitude,
-                longitude = item.longitude,
-                accuracy = item.accuracy,
-                notes = "One-tap emergency SOS triggered by member from Sunshine Member App",
-                idempotencyKey = item.requestId,
-                memberId = item.memberId,
-                callerName = item.callerName,
-                callerPhone = item.callerPhone
-            )
+            withTimeout(timeoutMs) {
+                val memberId = item.memberId ?: SecureSessionManager.getMemberId()
+                val callerName = item.callerName ?: SecureSessionManager.getMemberName()
+                val callerPhone = item.callerPhone ?: SecureSessionManager.getMemberPhone()
 
-            val response = ApiClient.service.triggerSos(request)
-
-            if (response.isSuccessful && response.body()?.success == true) {
-                val body = response.body()!!
-                val incidentId = body.incidentId
-                val incidentNumber = body.incidentNumber ?: "Active Incident"
-
-                val deliveredItem = item.copy(
-                    status = SosDeliveryStatus.DELIVERED,
-                    incidentId = incidentId,
-                    incidentNumber = incidentNumber,
-                    lastAttempt = System.currentTimeMillis(),
-                    failureReason = null
+                val request = SosTriggerRequest(
+                    triggerSource = "MEMBER_APP_SOS",
+                    latitude = item.latitude,
+                    longitude = item.longitude,
+                    accuracy = item.accuracy,
+                    notes = "One-tap emergency SOS triggered by member from Sunshine Member App",
+                    idempotencyKey = item.requestId,
+                    memberId = memberId,
+                    callerName = callerName,
+                    callerPhone = callerPhone
                 )
-                persistOutboxItem(deliveredItem)
-                _currentSos.value = deliveredItem
 
-                LiveRefreshManager.isSosActive = true
+                Log.d(TAG, "Executing SOS network call: key=${item.requestId}, member=$memberId")
+                val response = ApiClient.service.triggerSos(request)
 
-                // Start emergency GPS foreground streaming if incidentId is available
-                if (!incidentId.isNullOrBlank()) {
-                    EmergencyLocationService.start(context, incidentId, incidentNumber)
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val body = response.body()!!
+                    val incidentId = body.incidentId
+                    val incidentNumber = body.incidentNumber ?: "Active Incident"
+
+                    val deliveredItem = item.copy(
+                        status = SosDeliveryStatus.DELIVERED,
+                        incidentId = incidentId,
+                        incidentNumber = incidentNumber,
+                        lastAttempt = System.currentTimeMillis(),
+                        failureReason = null
+                    )
+                    persistOutboxItem(deliveredItem)
+                    _currentSos.value = deliveredItem
+
+                    LiveRefreshManager.isSosActive = true
+
+                    // Start emergency GPS foreground streaming if incidentId is available
+                    if (!incidentId.isNullOrBlank()) {
+                        EmergencyLocationService.start(context, incidentId, incidentNumber)
+                    }
+
+                    // Cancel scheduled background worker since delivery is complete
+                    cancelWorkManagerDelivery(context, item.requestId)
+
+                    Log.i(TAG, "SOS successfully delivered and acknowledged: $incidentNumber")
+                    Pair(true, null)
+                } else {
+                    val err = response.body()?.error ?: "Server returned error: ${response.code()}"
+                    Log.w(TAG, "SOS delivery server rejected: $err")
+                    Pair(false, err)
                 }
-
-                // Cancel scheduled background worker since delivery is complete
-                cancelWorkManagerDelivery(context, item.requestId)
-
-                Log.i(TAG, "SOS successfully delivered and acknowledged: $incidentNumber")
-                Pair(true, null)
-            } else {
-                val err = response.body()?.error ?: "Server returned error: ${response.code()}"
-                Log.w(TAG, "SOS delivery server rejected: $err")
-                Pair(false, err)
             }
+        } catch (e: TimeoutCancellationException) {
+            Log.w(TAG, "SOS network call timed out after ${timeoutMs}ms")
+            Pair(false, "Connecting to emergency command center took longer than expected. Automatic retry active.")
         } catch (e: Exception) {
             Log.e(TAG, "Network exception during SOS delivery", e)
             Pair(false, e.message ?: "Failed to connect to Sunshine emergency center")
@@ -234,7 +383,7 @@ object SosOutboxManager {
     }
 
     /**
-     * Enqueues durable WorkManager worker with exponential backoff and network constraints.
+     * Enqueues durable WorkManager worker with expedited execution and network constraints.
      */
     private fun scheduleWorkManagerDelivery(context: Context, requestId: String) {
         try {
@@ -247,6 +396,7 @@ object SosOutboxManager {
             val workRequest = OneTimeWorkRequestBuilder<SosDeliveryWorker>()
                 .setConstraints(constraints)
                 .setInputData(workData)
+                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .setBackoffCriteria(
                     BackoffPolicy.EXPONENTIAL,
                     5, TimeUnit.SECONDS
@@ -256,10 +406,10 @@ object SosOutboxManager {
 
             WorkManager.getInstance(context).enqueueUniqueWork(
                 "sos_delivery_$requestId",
-                ExistingWorkPolicy.KEEP,
+                ExistingWorkPolicy.REPLACE,
                 workRequest
             )
-            Log.d(TAG, "Enqueued WorkManager task: sos_delivery_$requestId")
+            Log.d(TAG, "Enqueued Expedited WorkManager task: sos_delivery_$requestId")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to schedule WorkManager task", e)
         }
@@ -280,7 +430,7 @@ object SosOutboxManager {
             try {
                 withTimeoutOrNull(2500) {
                     val locManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
-                    if (locManager == null) return@withTimeoutOrNull null
+                        ?: return@withTimeoutOrNull null
 
                     val hasGps = locManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
                     val hasNet = locManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
@@ -288,7 +438,6 @@ object SosOutboxManager {
                     val lastGps = if (hasGps) locManager.getLastKnownLocation(LocationManager.GPS_PROVIDER) else null
                     val lastNet = if (hasNet) locManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) else null
 
-                    // Prefer GPS if fresh, else network
                     when {
                         lastGps != null && (System.currentTimeMillis() - lastGps.time) < 60_000 -> lastGps
                         lastNet != null -> lastNet
@@ -309,19 +458,22 @@ object SosOutboxManager {
         return File(dir, OUTBOX_FILENAME)
     }
 
-    private fun loadPersistedOutbox() {
-        try {
-            val file = getOutboxFile() ?: return
+    private fun loadPersistedOutbox(): SosOutboxItem? {
+        return try {
+            val file = getOutboxFile() ?: return null
             if (file.exists()) {
                 val content = file.readText()
                 if (content.isNotBlank()) {
                     val item = json.decodeFromString<SosOutboxItem>(content)
                     _currentSos.value = item
                     Log.d(TAG, "Loaded persisted SOS outbox: status=${item.status}, incident=${item.incidentNumber}")
+                    return item
                 }
             }
+            null
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load persisted SOS outbox", e)
+            null
         }
     }
 
@@ -344,20 +496,17 @@ object SosOutboxManager {
 
     /**
      * Checks if a pending outbox item exists upon app start or network reconnection,
-     * and triggers WorkManager immediately.
+     * and resumes in-process retry and WorkManager immediately.
      */
     fun checkAndResumePendingDelivery() {
-        val item = _currentSos.value ?: return
+        val item = _currentSos.value ?: loadPersistedOutbox() ?: return
         val ctx = appContext ?: return
 
-        if (item.status == SosDeliveryStatus.QUEUED || item.status == SosDeliveryStatus.PENDING_RETRY) {
+        if (item.status == SosDeliveryStatus.QUEUED || item.status == SosDeliveryStatus.PENDING_RETRY || item.status == SosDeliveryStatus.SENDING) {
             Log.i(TAG, "Resuming pending SOS delivery: ${item.requestId}")
             scheduleWorkManagerDelivery(ctx, item.requestId)
-            managerScope.launch {
-                executeDeliveryNetworkCall(ctx, item)
-            }
+            startForegroundRetryLoop(ctx, item)
         } else if (item.status == SosDeliveryStatus.DELIVERED) {
-            // Restore active state in LiveRefreshManager
             val ageHours = (System.currentTimeMillis() - item.timestamp) / (1000 * 60 * 60)
             if (ageHours < 6) {
                 LiveRefreshManager.isSosActive = true
@@ -366,9 +515,12 @@ object SosOutboxManager {
     }
 
     fun dismissCurrentEmergency() {
-        val item = _currentSos.value ?: return
+        val item = _currentSos.value
         val ctx = appContext
-        if (ctx != null) {
+        activeRetryJob?.cancel()
+        activeRetryJob = null
+
+        if (item != null && ctx != null) {
             cancelWorkManagerDelivery(ctx, item.requestId)
             EmergencyLocationService.stop(ctx)
         }
@@ -377,5 +529,15 @@ object SosOutboxManager {
         try {
             getOutboxFile()?.delete()
         } catch (_: Exception) {}
+    }
+
+    fun calculateBackoffSeconds(attempt: Int): Long {
+        return when (attempt) {
+            1 -> 2L
+            2 -> 4L
+            3 -> 7L
+            4 -> 10L
+            else -> min(15L, (5L + attempt * 2L))
+        }
     }
 }

@@ -7,6 +7,7 @@ import {
   CreateAppInput,
   UpdateAppInput,
   CreateReleaseInput,
+  ReplaceReleaseInput,
 } from "@/lib/services/apps";
 import { ApkValidator, ApkInspectionResult } from "@/lib/services/apk-validator";
 import { revalidatePath } from "next/cache";
@@ -116,6 +117,19 @@ export async function createReleaseAction(input: CreateReleaseInput) {
   } catch (error: any) {
     console.error("[createReleaseAction] Error:", error);
     throw new Error(error?.message || "Failed to publish release");
+  }
+}
+
+export async function replaceReleaseAction(releaseId: string, input: ReplaceReleaseInput) {
+  await requireAdminUser();
+  try {
+    const release = await AppsService.replaceRelease(releaseId, input);
+    revalidatePath("/apps");
+    revalidatePath("/admin/apps");
+    return release;
+  } catch (error: any) {
+    console.error("[replaceReleaseAction] Error:", error);
+    throw new Error(error?.message || "Failed to replace release");
   }
 }
 

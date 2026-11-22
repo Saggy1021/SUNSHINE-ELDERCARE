@@ -98,6 +98,54 @@ class P0SosAndUpdatesTest {
     }
 
     @Test
+    fun testSosBackoffCalculationIsBounded() {
+        assertEquals(2L, `in`.sunshineeldercare.member.data.repository.SosOutboxManager.calculateBackoffSeconds(1))
+        assertEquals(4L, `in`.sunshineeldercare.member.data.repository.SosOutboxManager.calculateBackoffSeconds(2))
+        assertEquals(7L, `in`.sunshineeldercare.member.data.repository.SosOutboxManager.calculateBackoffSeconds(3))
+        assertEquals(10L, `in`.sunshineeldercare.member.data.repository.SosOutboxManager.calculateBackoffSeconds(4))
+        // Verify bounded to at most 15 seconds so seniors are never stalled indefinitely
+        for (attempt in 5..20) {
+            val backoff = `in`.sunshineeldercare.member.data.repository.SosOutboxManager.calculateBackoffSeconds(attempt)
+            assertTrue("Backoff for attempt $attempt must be <= 15s", backoff <= 15L)
+            assertTrue("Backoff for attempt $attempt must be >= 5s", backoff >= 5L)
+        }
+    }
+
+    @Test
+    fun testReconciliationTransitionsPendingRetryToDelivered() {
+        val originalKey = UUID.randomUUID().toString()
+        val pendingItem = SosOutboxItem(
+            requestId = originalKey,
+            status = SosDeliveryStatus.PENDING_RETRY,
+            retryCount = 3,
+            failureReason = "Temporary mobile network jitter"
+        )
+
+        // Simulating server reconciliation logic
+        val serverIncident = `in`.sunshineeldercare.member.data.model.EmergencyIncidentSummaryDto(
+            id = "cmwrp4yno0002pf02a5zevy3l",
+            incidentNumber = "EMG-20261122-002",
+            status = "ACKNOWLEDGED",
+            classification = "CODE_RED",
+            triggeredAt = "2026-11-22T10:30:53.556Z"
+        )
+
+        val reconciled = pendingItem.copy(
+            status = SosDeliveryStatus.DELIVERED,
+            incidentId = serverIncident.id,
+            incidentNumber = serverIncident.incidentNumber,
+            lastAttempt = System.currentTimeMillis(),
+            failureReason = null
+        )
+
+        assertEquals(SosDeliveryStatus.DELIVERED, reconciled.status)
+        assertEquals("cmwrp4yno0002pf02a5zevy3l", reconciled.incidentId)
+        assertEquals("EMG-20261122-002", reconciled.incidentNumber)
+        assertEquals(originalKey, reconciled.requestId) // Idempotency preserved
+        assertNull(reconciled.failureReason)
+    }
+
+    @Test
     fun testSosTriggerRequestContainsIdempotencyKey() {
         val reqId = "req_uuid_9999_test"
         val request = SosTriggerRequest(

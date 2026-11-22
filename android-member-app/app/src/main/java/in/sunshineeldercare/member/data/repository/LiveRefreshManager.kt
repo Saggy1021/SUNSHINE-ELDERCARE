@@ -70,12 +70,7 @@ object LiveRefreshManager {
             while (true) {
                 delay(currentIntervalMs)
 
-                // Skip if an active SOS emergency workflow is underway to preserve bandwidth
-                if (isSosActive) {
-                    Log.d(TAG, "Active emergency SOS in progress. Skipping periodic poll.")
-                    continue
-                }
-
+                // Continue polling periodically (every 5-10s) to keep incident & staff status updated in real time
                 executeRefresh(isSilent = true)
             }
         }
@@ -126,6 +121,25 @@ object LiveRefreshManager {
                     _dashboardFlow.value = freshData
                     currentIntervalMs = BASE_POLL_INTERVAL_MS
                     _lastError.value = null
+
+                    // Update cached member presentation details in session
+                    freshData.member?.let { m ->
+                        `in`.sunshineeldercare.member.data.security.SecureSessionManager.saveMemberDetails(
+                            memberId = m.memberId,
+                            name = m.name,
+                            phone = m.phone,
+                            gender = m.gender,
+                            email = m.email
+                        )
+                    }
+
+                    // Reconcile active emergency with server state
+                    val activeInc = freshData.activeIncident
+                    if (activeInc != null) {
+                        SosOutboxManager.reconcileWithServerIncident(activeInc)
+                    } else if (SosOutboxManager.currentSos.value?.status == SosDeliveryStatus.DELIVERED) {
+                        SosOutboxManager.onServerIncidentResolved()
+                    }
                 }
 
                 else -> {

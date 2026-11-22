@@ -53,6 +53,9 @@ class DashboardViewModel(
                             error = null
                         )
                     }
+                    freshData.activeIncident?.let {
+                        `in`.sunshineeldercare.member.data.repository.SosOutboxManager.reconcileWithServerIncident(it)
+                    }
                 }
             }
         }

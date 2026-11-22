@@ -32,7 +32,14 @@ object SecureSessionManager {
     private const val KEY_MEMBER_NAME = "member_name"
     private const val KEY_MEMBER_GENDER = "member_gender"
     private const val KEY_MEMBER_EMAIL = "member_email"
+    private const val KEY_MEMBER_PHONE = "member_phone"
     private const val KEY_CACHED_PROFILE_JSON = "cached_profile_json"
+
+    private val json = kotlinx.serialization.json.Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+        encodeDefaults = true
+    }
 
     private lateinit var prefs: SharedPreferences
 
@@ -124,23 +131,32 @@ object SecureSessionManager {
             Log.w(TAG, "Hardware KeyStore decryption failed, checking fallback decoding", e)
             try {
                 val plain = String(Base64.decode(encryptedBase64, Base64.NO_WRAP), Charsets.UTF_8)
-                if (plain.contains(".")) plain else null
+                if (plain.length >= 16) plain else null
             } catch (_: Exception) {
                 null
             }
         }
     }
 
-    fun saveSession(token: String, memberId: String, name: String, gender: String?, email: String? = null) {
+    fun saveSession(
+        token: String,
+        memberId: String,
+        name: String,
+        gender: String?,
+        email: String? = null,
+        phone: String? = null
+    ) {
         try {
             val encryptedToken = encrypt(token)
             val resolvedEmail = if (!email.isNullOrBlank()) email else (prefs.getString(KEY_MEMBER_EMAIL, "") ?: "")
+            val resolvedPhone = if (!phone.isNullOrBlank()) phone else (prefs.getString(KEY_MEMBER_PHONE, "") ?: "")
             prefs.edit()
                 .putString(KEY_ENCRYPTED_TOKEN, encryptedToken)
                 .putString(KEY_MEMBER_ID, memberId)
                 .putString(KEY_MEMBER_NAME, name)
                 .putString(KEY_MEMBER_GENDER, gender ?: "")
                 .putString(KEY_MEMBER_EMAIL, resolvedEmail)
+                .putString(KEY_MEMBER_PHONE, resolvedPhone)
                 .apply()
             Log.d(TAG, "Session persisted successfully for member ID: $memberId")
         } catch (e: Exception) {
@@ -148,13 +164,35 @@ object SecureSessionManager {
         }
     }
 
+    fun saveMemberDetails(
+        memberId: String,
+        name: String,
+        phone: String? = null,
+        gender: String? = null,
+        email: String? = null
+    ) {
+        try {
+            val editor = prefs.edit()
+                .putString(KEY_MEMBER_ID, memberId)
+                .putString(KEY_MEMBER_NAME, name)
+            if (!phone.isNullOrBlank()) editor.putString(KEY_MEMBER_PHONE, phone)
+            if (!gender.isNullOrBlank()) editor.putString(KEY_MEMBER_GENDER, gender)
+            if (!email.isNullOrBlank()) editor.putString(KEY_MEMBER_EMAIL, email)
+            editor.apply()
+            Log.d(TAG, "Member details updated in session store: $memberId")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to update member details", e)
+        }
+    }
+
     fun saveCachedProfile(profile: `in`.sunshineeldercare.member.data.model.FullProfileDto) {
         try {
-            val jsonStr = kotlinx.serialization.json.Json {
-                encodeDefaults = true
-                ignoreUnknownKeys = true
-            }.encodeToString(`in`.sunshineeldercare.member.data.model.FullProfileDto.serializer(), profile)
-            prefs.edit().putString(KEY_CACHED_PROFILE_JSON, jsonStr).apply()
+            val jsonStr = json.encodeToString(`in`.sunshineeldercare.member.data.model.FullProfileDto.serializer(), profile)
+            val editor = prefs.edit().putString(KEY_CACHED_PROFILE_JSON, jsonStr)
+            if (!profile.phone.isNullOrBlank()) {
+                editor.putString(KEY_MEMBER_PHONE, profile.phone)
+            }
+            editor.apply()
             Log.d(TAG, "Full member profile cached locally in secure store")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to cache member profile", e)
@@ -165,10 +203,7 @@ object SecureSessionManager {
         return try {
             val raw = prefs.getString(KEY_CACHED_PROFILE_JSON, null) ?: return null
             if (raw.isBlank()) return null
-            kotlinx.serialization.json.Json {
-                ignoreUnknownKeys = true
-                isLenient = true
-            }.decodeFromString(`in`.sunshineeldercare.member.data.model.FullProfileDto.serializer(), raw)
+            json.decodeFromString(`in`.sunshineeldercare.member.data.model.FullProfileDto.serializer(), raw)
         } catch (e: Exception) {
             Log.w(TAG, "Failed to decode cached member profile", e)
             null
@@ -193,14 +228,29 @@ object SecureSessionManager {
 
     fun getMemberEmail(): String? = try { prefs.getString(KEY_MEMBER_EMAIL, null) } catch (_: Exception) { null }
 
+    fun getMemberPhone(): String? = try { prefs.getString(KEY_MEMBER_PHONE, null) } catch (_: Exception) { null }
+
     fun isAuthenticated(): Boolean = !getAuthToken().isNullOrBlank()
 
     fun clearSession() {
         try {
-            prefs.edit().clear().apply()
-            Log.d(TAG, "Session cleared successfully")
+            // Invalidate auth token and cached profile, but preserve member emergency identity
+            prefs.edit()
+                .remove(KEY_ENCRYPTED_TOKEN)
+                .remove(KEY_CACHED_PROFILE_JSON)
+                .apply()
+            Log.d(TAG, "Session token cleared successfully (emergency identity retained)")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to clear session", e)
+        }
+    }
+
+    fun clearAll() {
+        try {
+            prefs.edit().clear().apply()
+            Log.d(TAG, "All session data cleared")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to clear all session data", e)
         }
     }
 }

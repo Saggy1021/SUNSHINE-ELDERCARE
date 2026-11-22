@@ -79,6 +79,11 @@ fun CircularSosButton(
         }
         if (isSending) return
 
+        if (isPendingRetry) {
+            SosOutboxManager.retryNow(context)
+            return
+        }
+
         SosOutboxManager.triggerSosImmediate(context) { _, _ -> }
     }
 
@@ -127,6 +132,7 @@ fun CircularSosButton(
                         text = when {
                             isDelivered -> "EMERGENCY ACTIVE • COMMAND CENTER CONNECTED"
                             isPendingRetry -> "EMERGENCY QUEUED • AUTO RETRYING"
+                            isSending -> "EMERGENCY SOS • DISPATCHING NOW"
                             else -> "24/7 EMERGENCY ASSISTANCE"
                         },
                         color = when {
@@ -253,9 +259,9 @@ fun CircularSosButton(
                                     modifier = Modifier.size(24.dp)
                                 )
                                 Text(
-                                    text = "RETRYING",
+                                    text = "RETRY",
                                     color = Color.White,
-                                    fontSize = 11.sp,
+                                    fontSize = 13.sp,
                                     fontWeight = FontWeight.Black,
                                     letterSpacing = 1.sp
                                 )
@@ -289,7 +295,7 @@ fun CircularSosButton(
                 text = when {
                     isSending -> "CONNECTING TO EMERGENCY COMMAND CENTER..."
                     isDelivered -> "EMERGENCY ACKNOWLEDGED (INCIDENT #${sosItem?.incidentNumber ?: "REGISTERED"})"
-                    isPendingRetry -> "EMERGENCY QUEUED • RETRYING DISPATCH IN BACKGROUND"
+                    isPendingRetry -> "EMERGENCY QUEUED • RETRYING DISPATCH IN BACKGROUND (TAP TO RETRY NOW)"
                     isFailed -> "DELIVERY FAILED • PLEASE CALL HELPLINE DIRECTLY"
                     else -> "TAP FOR IMMEDIATE EMERGENCY ASSISTANCE"
                 },
