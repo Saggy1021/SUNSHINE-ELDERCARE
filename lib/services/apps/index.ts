@@ -68,7 +68,7 @@ export class AppsService {
       orderBy: { createdAt: "asc" },
     });
 
-    return apps.map((app) => ({
+    return apps.map((app: any) => ({
       id: app.id,
       slug: app.slug,
       packageName: app.packageName,
@@ -140,8 +140,8 @@ export class AppsService {
     // Return manifest catalog of all published applications
     const apps = await this.getPublishedApps();
     return apps
-      .filter((a) => a.latestRelease !== null)
-      .map((a) => {
+      .filter((a: any) => a.latestRelease !== null)
+      .map((a: any) => {
         const r = a.latestRelease!;
         return {
           appId: a.slug,
@@ -274,7 +274,7 @@ export class AppsService {
       throw new Error(verification.reason || "APK validation failed.");
     }
 
-    return activeDb.$transaction(async (tx) => {
+    return activeDb.$transaction(async (tx: any) => {
       const release = await tx.appRelease.create({
         data: {
           appId: input.appId,
@@ -314,7 +314,7 @@ export class AppsService {
     });
     if (!release) throw new Error("Release not found.");
 
-    return activeDb.$transaction(async (tx) => {
+    return activeDb.$transaction(async (tx: any) => {
       const updated = await tx.appRelease.update({
         where: { id: releaseId },
         data: { isPublished },
@@ -347,7 +347,7 @@ export class AppsService {
     });
     if (!release) throw new Error("Release not found.");
 
-    return activeDb.$transaction(async (tx) => {
+    return activeDb.$transaction(async (tx: any) => {
       await tx.appRelease.delete({ where: { id: releaseId } });
 
       const latestPublished = await tx.appRelease.findFirst({

@@ -301,8 +301,8 @@ async function runAppsDirectoryTestSuite() {
   // -------------------------------------------------------------
   await test("Scenario 2: Published Member App & Employee App appear with version metadata", async () => {
     const apps = await AppsService.getPublishedApps();
-    const memberApp = apps.find((a) => a.slug === "member-app" || a.packageName === "in.sunshineeldercare.member");
-    const employeeApp = apps.find((a) => a.slug === "employee-app" || a.packageName === "in.sunshineeldercare.employee");
+    const memberApp = apps.find((a: any) => a.slug === "member-app" || a.packageName === "in.sunshineeldercare.member");
+    const employeeApp = apps.find((a: any) => a.slug === "employee-app" || a.packageName === "in.sunshineeldercare.employee");
 
     assert(memberApp, "Member App should be present in published catalog");
     assert(employeeApp, "Employee App should be present in published catalog");
@@ -330,7 +330,7 @@ async function runAppsDirectoryTestSuite() {
 
     try {
       const publicApps = await AppsService.getPublishedApps();
-      const foundInPublic = publicApps.find((a) => a.slug === testAppSlug);
+      const foundInPublic = publicApps.find((a: any) => a.slug === testAppSlug);
       assert.strictEqual(foundInPublic, undefined, "Unpublished app must not appear in public catalog");
 
       const publicSingle = await AppsService.getPublishedAppBySlug(testAppSlug);
@@ -492,7 +492,7 @@ async function runAppsDirectoryTestSuite() {
 
       // Fetch all releases for this app
       const allAdmin = await AppsService.getAllAppsAdmin();
-      const updatedApp = allAdmin.find((a) => a.id === app.id);
+      const updatedApp = allAdmin.find((a: any) => a.id === app.id);
 
       assert.strictEqual(updatedApp?.versions.length, 2, "Both releases must be preserved in history");
       assert.strictEqual(updatedApp?.versions[0].versionCode, 2, "Latest release is first (desc order)");

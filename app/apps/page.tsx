@@ -66,7 +66,7 @@ export default async function AppsDirectoryPage() {
             </div>
           ) : (
             <div className="grid gap-8 md:grid-cols-2">
-              {apps.map((app) => (
+              {apps.map((app: any) => (
                 <AppDownloadCard key={app.id} app={app} />
               ))}
             </div>
