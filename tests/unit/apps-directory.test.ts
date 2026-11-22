@@ -456,23 +456,38 @@ async function runAppsDirectoryTestSuite() {
     assert.strictEqual(verification.hasCompatibilityWarning, true, "Must flag compatibility warning");
     assert(verification.warning?.includes("lower than"), "Warning must advise on Android lower version behavior");
 
-    // Verify replacement action
-    const memberApps = await AppsService.getPublishedApps();
-    const memberApp = memberApps.find((a: any) => a.slug === "member-app" || a.packageName === "in.sunshineeldercare.member");
-    assert(memberApp?.latestRelease, "Member app release must exist");
-
-    const replaced = await AppsService.replaceRelease(memberApp.latestRelease.id, {
-      versionName: "1.0.2-patch",
-      versionCode: memberApp.latestRelease.versionCode,
-      apkUrl: "/downloads/apps/Sunshine-Member-v1.0.2-b3-replaced.apk",
-      apkFileName: "Sunshine-Member-v1.0.2-b3-replaced.apk",
-      fileSize: 46701738,
-      sha256: "d3f31e5631155416e7ed6ed056f4fbf710982fbbb7670c968d05181bfb49a725",
-      certificateFingerprint: memberApp.latestRelease.certificateFingerprint || undefined,
+    // Verify replacement action on an isolated test app to avoid mutating live applications
+    const testAppSlug = `test-replace-${Date.now()}`;
+    const testApp = await AppsService.createApp({
+      slug: testAppSlug,
+      packageName: `in.sunshine.replace.${Date.now()}`,
+      name: "Replacement Test App",
+      description: "Testing release replacement without mutating live records",
+      isPublished: true,
     });
 
-    assert.strictEqual(replaced.versionName, "1.0.2-patch");
-    assert.strictEqual(replaced.apkFileName, "Sunshine-Member-v1.0.2-b3-replaced.apk");
+    const initialRelease = await AppsService.createRelease({
+      appId: testApp.id,
+      versionName: "1.0.0",
+      versionCode: 1,
+      apkUrl: "/downloads/apps/test-orig.apk",
+      apkFileName: "test-orig.apk",
+      fileSize: 1000,
+      sha256: "1111111111111111111111111111111111111111111111111111111111111111",
+      isPublished: true,
+    });
+
+    const replaced = await AppsService.replaceRelease(initialRelease.id, {
+      versionName: "1.0.0-patch",
+      versionCode: 1,
+      apkUrl: "/downloads/apps/test-replaced.apk",
+      apkFileName: "test-replaced.apk",
+      fileSize: 2000,
+      sha256: "2222222222222222222222222222222222222222222222222222222222222222",
+    });
+
+    assert.strictEqual(replaced.versionName, "1.0.0-patch");
+    assert.strictEqual(replaced.apkFileName, "test-replaced.apk");
   });
 
   // -------------------------------------------------------------

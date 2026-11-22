@@ -15,6 +15,8 @@ async function runTests() {
   const memberBuf = fs.readFileSync(memberApkPath);
   console.log(`Loaded Member APK: ${memberBuf.length} bytes`);
 
+  const expectedMemberSha256 = crypto.createHash("sha256").update(memberBuf).digest("hex");
+
   // --- SCENARIO 1: Server-Side Pure TypeScript APK Inspection ---
   console.log("\n--- SCENARIO 1: Server-Side Pure TypeScript APK Inspection ---");
   const serverInspection = ApkValidator.inspectApk(memberBuf);
@@ -23,8 +25,8 @@ async function runTests() {
   assert.strictEqual(serverInspection.versionName, "1.0.2", "Version name must match 1.0.2");
   assert.strictEqual(serverInspection.versionCode, 3, "Version code must be 3");
   assert.strictEqual(serverInspection.certificateFingerprint, "370b03fd0c87a9a4620e41fac3859ceeb81ab98752c7673f272548793c4f3394", "Certificate fingerprint must match");
-  assert.strictEqual(serverInspection.fileSize, 46701738, "File size must match");
-  assert.strictEqual(serverInspection.sha256, "7a110c8f0b79c374b98c7b548beccaccf0aaedf8f416ed04ac00fd64935c1317", "SHA-256 must match");
+  assert.strictEqual(serverInspection.fileSize, memberBuf.length, "File size must match");
+  assert.strictEqual(serverInspection.sha256, expectedMemberSha256, "SHA-256 must match");
   console.log("  ✓ Scenario 1: Server-side pure TS inspection correctly extracts package, version 1.0.2 (code 3), and signing cert");
 
   // --- SCENARIO 2: Client-Side In-Browser Pure JS Inspection ---
@@ -38,7 +40,7 @@ async function runTests() {
   assert.strictEqual(clientInspection.versionName, "1.0.2");
   assert.strictEqual(clientInspection.versionCode, 3);
   assert.strictEqual(clientInspection.certificateFingerprint, "370b03fd0c87a9a4620e41fac3859ceeb81ab98752c7673f272548793c4f3394");
-  assert.strictEqual(clientInspection.sha256, "7a110c8f0b79c374b98c7b548beccaccf0aaedf8f416ed04ac00fd64935c1317");
+  assert.strictEqual(clientInspection.sha256, expectedMemberSha256);
   assert.ok(clientInspection.manifestBase64, "Must provide manifestBase64 proof");
   assert.ok(clientInspection.certificateBase64, "Must provide certificateBase64 proof");
   console.log("  ✓ Scenario 2: In-browser inspection completes under 200ms with cryptographic proofs");

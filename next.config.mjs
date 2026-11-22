@@ -72,10 +72,6 @@ const nextConfig = {
             value: 'application/vnd.android.package-archive',
           },
           {
-            key: 'Content-Disposition',
-            value: 'attachment',
-          },
-          {
             key: 'X-Content-Type-Options',
             value: 'nosniff',
           },
@@ -91,10 +87,6 @@ const nextConfig = {
           {
             key: 'Content-Type',
             value: 'application/vnd.android.package-archive',
-          },
-          {
-            key: 'Content-Disposition',
-            value: 'attachment',
           },
           {
             key: 'X-Content-Type-Options',

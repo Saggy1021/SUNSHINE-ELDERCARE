@@ -1,5 +1,8 @@
 import { db as prisma } from "@/lib/db";
 import { ApkValidator, ApkInspectionResult } from "../apk-validator";
+import fs from "fs";
+import path from "path";
+import crypto from "crypto";
 
 let activeDb: any = prisma;
 
@@ -253,9 +256,36 @@ export class AppsService {
   }
 
   /**
+   * Validates local APK storage existence and guarantees SHA-256 and byte size integrity.
+   * If the referenced binary exists on disk, calculates file size and SHA-256 directly
+   * from the stored file to eliminate metadata drift and checksum mismatches.
+   */
+  private static verifyAndNormalizeLocalBinary(input: { apkUrl: string; sha256?: string; fileSize?: number }) {
+    if (!input.apkUrl.startsWith("/")) return;
+    const publicDir = path.join(process.cwd(), "public");
+    if (!fs.existsSync(publicDir)) return;
+
+    const localPath = path.join(publicDir, input.apkUrl);
+    if (fs.existsSync(localPath)) {
+      const fileBuf = fs.readFileSync(localPath);
+      const diskSha256 = crypto.createHash("sha256").update(fileBuf).digest("hex");
+      const diskSize = fileBuf.length;
+
+      if (input.sha256 && input.sha256.toLowerCase() !== diskSha256.toLowerCase()) {
+        throw new Error(`APK SHA-256 mismatch with stored binary. Expected: ${input.sha256}, Actual: ${diskSha256}`);
+      }
+
+      input.sha256 = diskSha256;
+      input.fileSize = diskSize;
+    }
+  }
+
+  /**
    * ADMIN: Adds a new version release to an application.
    */
   static async createRelease(input: CreateReleaseInput) {
+    this.verifyAndNormalizeLocalBinary(input);
+
     const app = await activeDb.publishedApp.findUnique({
       where: { id: input.appId },
       include: {
@@ -329,6 +359,8 @@ export class AppsService {
    * Ensures each binary has a unique immutable filename and SHA-256 to prevent CDN caching issues.
    */
   static async replaceRelease(releaseId: string, input: ReplaceReleaseInput) {
+    this.verifyAndNormalizeLocalBinary(input);
+
     const existingRelease = await activeDb.appRelease.findUnique({
       where: { id: releaseId },
       include: { app: true },

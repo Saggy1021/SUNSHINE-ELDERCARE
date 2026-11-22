@@ -75,7 +75,7 @@ export function AppDownloadCard({ app }: PublishedAppCardProps) {
     }
   };
 
-  const downloadUrl = `/api/apps/${app.slug}/download`;
+  const directDownloadUrl = release?.apkUrl || `/api/apps/${app.slug}/download`;
 
   return (
     <div className="relative flex flex-col justify-between overflow-hidden rounded-2xl border border-[#B08A4A]/25 bg-white/95 p-6 sm:p-8 shadow-xl shadow-amber-950/5 transition-all duration-300 hover:border-[#B08A4A]/60 hover:shadow-2xl">
@@ -214,8 +214,12 @@ export function AppDownloadCard({ app }: PublishedAppCardProps) {
       <div className="mt-6 pt-4 border-t border-neutral-100">
         {release ? (
           <a
-            href={downloadUrl}
+            href={directDownloadUrl}
             download={release.apkFileName}
+            onClick={() => {
+              // Record download telemetry asynchronously without blocking user navigation
+              fetch(`/api/apps/${app.slug}/download`, { method: "GET" }).catch(() => {});
+            }}
             className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-[#B08A4A] px-5 py-3.5 text-center text-sm font-bold text-white shadow-md shadow-amber-900/20 transition-all duration-200 hover:bg-[#977338] hover:shadow-lg active:scale-[0.99]"
           >
             <Download className="h-5 w-5" />
