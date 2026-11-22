@@ -76,12 +76,12 @@ interface LeaveRequestItem {
   createdAt: string;
 }
 
+const getTodayISTString = () => {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+};
+
 export default function AttendanceAdminPage() {
-  const [selectedDate, setSelectedDate] = useState(() => {
-    // Current date in YYYY-MM-DD
-    const now = new Date();
-    return now.toISOString().split("T")[0];
-  });
+  const [selectedDate, setSelectedDate] = useState(() => getTodayISTString());
   const [activeTab, setActiveTab] = useState<"roster" | "leave">("roster");
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<AttendanceRosterData | null>(null);
@@ -102,18 +102,23 @@ export default function AttendanceAdminPage() {
   const [leaveAdminRemarks, setLeaveAdminRemarks] = useState("");
   const [isSubmittingLeaveReview, setIsSubmittingLeaveReview] = useState(false);
 
-  const fetchRoster = async () => {
-    setLoading(true);
+  const fetchRoster = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await fetch(`/api/admin/attendance?date=${selectedDate}`);
       const resData = await res.json();
       if (resData.success) {
         setData(resData);
+        setSelectedEmployeeSessions((prev) => {
+          if (!prev) return null;
+          const fresh = resData.roster.find((r: RosterEmployee) => r.id === prev.id);
+          return fresh || prev;
+        });
       }
     } catch (e) {
       console.error("Failed to fetch attendance roster:", e);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -130,12 +135,17 @@ export default function AttendanceAdminPage() {
   };
 
   useEffect(() => {
-    fetchRoster();
-  }, [selectedDate]);
-
-  useEffect(() => {
+    fetchRoster(false);
     fetchLeaveRequests();
-  }, []);
+
+    // Silent background synchronization every 3 seconds without UI disruption
+    const interval = setInterval(() => {
+      fetchRoster(true);
+      fetchLeaveRequests();
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [selectedDate]);
 
   const handleManualCorrectionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -311,7 +321,7 @@ export default function AttendanceAdminPage() {
           </div>
 
           <button
-            onClick={fetchRoster}
+            onClick={() => fetchRoster(false)}
             disabled={loading}
             className="p-2.5 rounded-lg border border-border/70 bg-card hover:bg-slate-50 text-slate-700 transition shadow-sm"
             title="Refresh Attendance Data"

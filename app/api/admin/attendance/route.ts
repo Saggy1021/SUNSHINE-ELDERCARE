@@ -31,7 +31,16 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const dateParam = searchParams.get("date");
-    const targetDate = dateParam ? new Date(dateParam) : new Date();
+    let targetDate = new Date();
+    if (dateParam) {
+      const match = dateParam.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (match) {
+        const [_, y, m, d] = match;
+        targetDate = new Date(`${y}-${m}-${d}T12:00:00+05:30`);
+      } else {
+        targetDate = new Date(dateParam);
+      }
+    }
 
     const roster = await DutyService.getAttendanceRoster(targetDate);
     return NextResponse.json(roster);

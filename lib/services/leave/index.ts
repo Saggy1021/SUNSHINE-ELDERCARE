@@ -31,8 +31,21 @@ export class LeaveService {
     });
     if (!employee) throw new Error("Employee not found.");
 
-    const start = new Date(params.startDate);
-    const end = new Date(params.endDate);
+    const parseISTDate = (input: string | Date, isEnd = false) => {
+      if (typeof input === "string") {
+        const match = input.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (match) {
+          const [_, y, m, d] = match;
+          return isEnd
+            ? new Date(`${y}-${m}-${d}T23:59:59.999+05:30`)
+            : new Date(`${y}-${m}-${d}T00:00:00+05:30`);
+        }
+      }
+      return new Date(input);
+    };
+
+    const start = parseISTDate(params.startDate, false);
+    const end = parseISTDate(params.endDate, true);
 
     if (isNaN(start.getTime()) || isNaN(end.getTime())) {
       throw new Error("Invalid start or end date.");
@@ -59,7 +72,7 @@ export class LeaveService {
       );
     }
 
-    const diffDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+    const diffDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
 
     const created = await activeDb.employeeLeaveRequest.create({
       data: {

@@ -285,6 +285,15 @@ data class DutyHistoryResponse(
 
 // Employee SOS Models
 @Serializable
+data class EmployeeSosIncidentDto(
+    val id: String = "",
+    val incidentNumber: String = "",
+    val status: String = "TRIGGERED",
+    val classification: String = "CODE_RED",
+    val triggeredAt: String = ""
+)
+
+@Serializable
 data class EmployeeSosRequest(
     val notes: String? = null,
     val latitude: Double? = null,
@@ -296,8 +305,13 @@ data class EmployeeSosResponse(
     val success: Boolean,
     val incidentId: String? = null,
     val incidentNumber: String? = null,
+    val status: String? = null,
+    val classification: String? = null,
     val message: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    val hasActiveSos: Boolean? = null,
+    val alreadyActive: Boolean? = null,
+    val incident: EmployeeSosIncidentDto? = null
 )
 
 // Community Events Models

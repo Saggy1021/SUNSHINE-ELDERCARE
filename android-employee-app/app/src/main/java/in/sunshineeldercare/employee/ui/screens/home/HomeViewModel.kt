@@ -10,6 +10,7 @@ import `in`.sunshineeldercare.employee.data.remote.model.*
 import `in`.sunshineeldercare.employee.data.repository.AuthRepository
 import `in`.sunshineeldercare.employee.data.repository.VisitsRepository
 import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -35,6 +36,7 @@ data class HomeUiState(
 
     // SOS State
     val isSosSending: Boolean = false,
+    val activeSosIncident: EmployeeSosIncidentDto? = null,
     val sosAlertMessage: String? = null,
 
     // Leave Application State
@@ -74,6 +76,15 @@ class HomeViewModel(
     init {
         observeData()
         refresh()
+
+        // Background silent polling every 3 seconds for live duty status and emergency sync
+        viewModelScope.launch {
+            while (isActive) {
+                kotlinx.coroutines.delay(3000L)
+                refreshDutyStatusInternal()
+                refreshActiveSosInternal()
+            }
+        }
     }
 
     private fun observeData() {
@@ -112,6 +123,7 @@ class HomeViewModel(
             runCatching { authRepository.refreshProfile() }
             val syncResult = visitsRepository.syncVisits()
             refreshDutyStatusInternal()
+            refreshActiveSosInternal()
             fetchEventsInternal()
             _uiState.update {
                 it.copy(
@@ -125,6 +137,29 @@ class HomeViewModel(
     fun refreshDutyStatus() {
         viewModelScope.launch(coroutineExceptionHandler) {
             refreshDutyStatusInternal()
+        }
+    }
+
+    private suspend fun refreshActiveSosInternal() {
+        try {
+            val response = apiService.getActiveSos()
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+                val incident = if (body.hasActiveSos == true) {
+                    body.incident ?: (if (body.incidentNumber != null) {
+                        EmployeeSosIncidentDto(
+                            id = body.incidentId ?: "",
+                            incidentNumber = body.incidentNumber,
+                            status = body.status ?: "TRIGGERED",
+                            classification = body.classification ?: "CODE_RED"
+                        )
+                    } else null)
+                } else null
+
+                _uiState.update { it.copy(activeSosIncident = incident) }
+            }
+        } catch (e: Throwable) {
+            Log.e("HomeViewModel", "Error checking active SOS status", e)
         }
     }
 
@@ -226,10 +261,20 @@ class HomeViewModel(
                 val response = apiService.triggerSos(EmployeeSosRequest(notes = notes))
                 if (response.isSuccessful && response.body()?.success == true) {
                     val res = response.body()!!
-                    val msg = "Emergency SOS Alert dispatched! Incident ID: ${res.incidentNumber ?: "EMG"}"
+                    val incident = res.incident ?: (if (res.incidentNumber != null) {
+                        EmployeeSosIncidentDto(
+                            id = res.incidentId ?: "",
+                            incidentNumber = res.incidentNumber,
+                            status = res.status ?: "TRIGGERED",
+                            classification = res.classification ?: "CODE_RED"
+                        )
+                    } else null)
+
+                    val msg = "Emergency SOS Alert dispatched! Incident #${res.incidentNumber ?: "EMG"}"
                     _uiState.update {
                         it.copy(
                             isSosSending = false,
+                            activeSosIncident = incident,
                             sosAlertMessage = msg
                         )
                     }

@@ -1,10 +1,16 @@
 package `in`.sunshineeldercare.employee.ui.screens.home
 
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -22,9 +28,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import `in`.sunshineeldercare.employee.R
 import `in`.sunshineeldercare.employee.ui.components.StatusBadge
@@ -48,9 +57,11 @@ fun HomeScreen(
     var showSosConfirmDialog by remember { mutableStateOf(false) }
     var showLeaveDialog by remember { mutableStateOf(false) }
 
-    // Leave form state
-    var leaveStartDate by remember { mutableStateOf("") }
-    var leaveEndDate by remember { mutableStateOf("") }
+    // Leave form state with formatted display (DD/MM/YYYY) and normalized backend (YYYY-MM-DD)
+    var leaveStartDateDisplay by remember { mutableStateOf("") }
+    var leaveEndDateDisplay by remember { mutableStateOf("") }
+    var leaveStartDateBackend by remember { mutableStateOf("") }
+    var leaveEndDateBackend by remember { mutableStateOf("") }
     var leaveReason by remember { mutableStateOf("") }
 
     Column(
@@ -82,80 +93,22 @@ fun HomeScreen(
                             .weight(1f, fill = false)
                     )
 
-                    // Duty ON/OFF Controller & Refresh
+                    // Duty ON/OFF Switch & Refresh
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        if (uiState.isDutyLoading) {
-                            CircularProgressIndicator(
-                                color = GoldPrimary,
-                                strokeWidth = 2.dp,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        } else if (uiState.isOnDuty) {
-                            // ON DUTY Pill
-                            Surface(
-                                shape = RoundedCornerShape(20.dp),
-                                color = Color(0xFFECFDF5),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981)),
-                                modifier = Modifier.clickable { showEndDutyDialog = true }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(Color(0xFF10B981))
-                                    )
-                                    Text(
-                                        text = "ON DUTY (${uiState.formattedTodayDuty})",
-                                        color = Color(0xFF065F46),
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp
-                                    )
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "End Duty",
-                                        tint = Color(0xFF047857),
-                                        modifier = Modifier.size(14.dp)
-                                    )
+                        DutyToggleSwitch(
+                            isOnDuty = uiState.isOnDuty,
+                            isLoading = uiState.isDutyLoading,
+                            onToggle = {
+                                if (uiState.isOnDuty) {
+                                    showEndDutyDialog = true
+                                } else {
+                                    viewModel.startDuty()
                                 }
                             }
-                        } else {
-                            // START DUTY Button
-                            Button(
-                                onClick = { viewModel.startDuty() },
-                                shape = RoundedCornerShape(20.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = DeepNavy,
-                                    contentColor = Color.White
-                                ),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                modifier = Modifier.height(34.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.PlayArrow,
-                                        contentDescription = null,
-                                        tint = GoldPrimary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(
-                                        text = "START DUTY",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
+                        )
 
                         // Refresh Button
                         IconButton(
@@ -235,59 +188,158 @@ fun HomeScreen(
             }
         }
 
-        // Dedicated Employee SOS Emergency Bar
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp)
-                .clickable { showSosConfirmDialog = true },
-            shape = RoundedCornerShape(12.dp),
-            color = Color(0xFFFFF1F2),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDA4AF))
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+        // Dedicated Employee SOS Emergency Section (Matching Member App Design & State)
+        if (uiState.activeSosIncident != null) {
+            val incident = uiState.activeSosIncident!!
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = Color(0xFFFEF2F2),
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFFECACA))
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Box(
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFE11D48)),
-                        contentAlignment = Alignment.Center
+                            .clip(RoundedCornerShape(50))
+                            .background(Color(0xFFFEE2E2))
+                            .border(1.dp, Color(0xFFFCA5A5), RoundedCornerShape(50))
+                            .padding(horizontal = 12.dp, vertical = 5.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Campaign,
-                            contentDescription = "SOS",
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp)
+                            imageVector = Icons.Default.Sensors,
+                            contentDescription = null,
+                            tint = Color(0xFFDC2626),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "EMERGENCY ACTIVE • COMMAND CENTER CONNECTED",
+                            color = Color(0xFF991B1B),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 0.5.sp
                         )
                     }
-                    Column {
-                        Text(
-                            text = "EMPLOYEE EMERGENCY SOS",
-                            color = Color(0xFF9F1239),
-                            fontWeight = FontWeight.Black,
-                            fontSize = 12.sp
-                        )
-                        Text(
-                            text = "Tap to trigger instant operations & safety alert",
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "Incident #${incident.incidentNumber}",
+                        color = Color(0xFFDC2626),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "Your field emergency has been registered with Sunshine EmergencyOS. Care coordinators and response teams are actively responding.",
+                        style = MaterialTheme.typography.bodySmall.copy(
                             color = Slate600,
-                            fontSize = 10.sp
+                            textAlign = TextAlign.Center,
+                            lineHeight = 18.sp
                         )
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Button(
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:03340585515"))
+                            context.startActivity(intent)
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFDC2626),
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                    ) {
+                        Icon(Icons.Default.PhoneInTalk, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Call Helpline: 033-40585515", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
                 }
-                Icon(
-                    imageVector = Icons.Default.Shield,
-                    contentDescription = null,
-                    tint = Color(0xFFE11D48),
-                    modifier = Modifier.size(18.dp)
-                )
+            }
+        } else {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFECACA)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFDC2626))
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "24/7 FIELD EMERGENCY ASSISTANCE",
+                                color = Color(0xFFDC2626),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Field Operations SOS",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = DeepNavy
+                        )
+                        Text(
+                            text = "Instant Code Red dispatch & safety alert",
+                            fontSize = 11.sp,
+                            color = Slate600
+                        )
+                    }
+
+                    Button(
+                        onClick = { showSosConfirmDialog = true },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFDC2626),
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        modifier = Modifier.height(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PhoneInTalk,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("SOS", fontWeight = FontWeight.Black, fontSize = 13.sp)
+                    }
+                }
             }
         }
 
@@ -771,76 +823,212 @@ fun HomeScreen(
         )
     }
 
-    // Emergency SOS Confirmation Dialog (Mandatory Confirmation - Zero Auto Activation)
+    // Emergency SOS Confirmation Dialog (Exact Member App Visual Quality & Safety Dialog)
     if (showSosConfirmDialog) {
-        AlertDialog(
-            onDismissRequest = { showSosConfirmDialog = false },
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Warning,
-                    contentDescription = null,
-                    tint = Color(0xFFDC2626),
-                    modifier = Modifier.size(36.dp)
-                )
-            },
-            title = {
-                Text(
-                    "Confirm Emergency SOS Alert",
-                    fontWeight = FontWeight.Black,
-                    color = Color(0xFF9F1239)
-                )
-            },
-            text = {
-                Text(
-                    "⚠️ This will immediately notify Care Operations and initiate a Code Red emergency dispatch incident with your current location. Only trigger this during real emergencies.",
-                    fontSize = 13.sp
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showSosConfirmDialog = false
-                        viewModel.triggerSos("Employee SOS button triggered from mobile app") { success, msg ->
-                            Toast.makeText(context, msg ?: if (success) "SOS Alert Dispatched" else "Failed to dispatch SOS", Toast.LENGTH_LONG).show()
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+        Dialog(onDismissRequest = { showSosConfirmDialog = false }) {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("TRIGGER SOS NOW", fontWeight = FontWeight.Black)
-                }
-            },
-            dismissButton = {
-                OutlinedButton(onClick = { showSosConfirmDialog = false }) {
-                    Text("Cancel")
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFFEE2E2)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = "Emergency Alert",
+                            tint = Color(0xFFDC2626),
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = "Confirm Emergency SOS",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Black,
+                            color = DeepNavy,
+                            textAlign = TextAlign.Center
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "Are you sure you want to trigger an emergency SOS?\n\nThis will immediately notify the Sunshine Emergency Command Center, transmit your live location, and initiate Code Red emergency dispatch assistance.",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = Slate600,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 22.sp
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Button(
+                        onClick = {
+                            showSosConfirmDialog = false
+                            viewModel.triggerSos("Employee SOS button triggered from mobile app") { success, msg ->
+                                Toast.makeText(
+                                    context,
+                                    msg ?: if (success) "Emergency SOS Alert Dispatched" else "Failed to dispatch SOS",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFDC2626),
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PhoneInTalk,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Confirm & Send SOS",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedButton(
+                        onClick = { showSosConfirmDialog = false },
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                    ) {
+                        Text(
+                            text = "Cancel",
+                            color = Slate600,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
-        )
+        }
     }
 
-    // Apply Leave Dialog
+    // Apply Leave Dialog (Native Calendar Date Pickers with DD/MM/YYYY formatting)
     if (showLeaveDialog) {
+        val calendar = java.util.Calendar.getInstance()
+        val currYear = calendar.get(java.util.Calendar.YEAR)
+        val currMonth = calendar.get(java.util.Calendar.MONTH)
+        val currDay = calendar.get(java.util.Calendar.DAY_OF_MONTH)
+
+        val startDatePicker = android.app.DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                leaveStartDateDisplay = String.format("%02d/%02d/%04d", dayOfMonth, month + 1, year)
+                leaveStartDateBackend = String.format("%04d-%02d-%02d", year, month + 1, dayOfMonth)
+            },
+            currYear,
+            currMonth,
+            currDay
+        )
+
+        val endDatePicker = android.app.DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                leaveEndDateDisplay = String.format("%02d/%02d/%04d", dayOfMonth, month + 1, year)
+                leaveEndDateBackend = String.format("%04d-%02d-%02d", year, month + 1, dayOfMonth)
+            },
+            currYear,
+            currMonth,
+            currDay
+        )
+
         AlertDialog(
             onDismissRequest = { showLeaveDialog = false },
             title = { Text("Apply for Leave", fontWeight = FontWeight.Bold, color = DeepNavy) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Enter your requested leave period (YYYY-MM-DD):", fontSize = 12.sp, color = Slate600)
-                    OutlinedTextField(
-                        value = leaveStartDate,
-                        onValueChange = { leaveStartDate = it },
-                        label = { Text("Start Date (e.g. 2026-11-25)") },
-                        modifier = Modifier.fillMaxWidth()
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Select your requested leave dates from the calendar:",
+                        fontSize = 12.sp,
+                        color = Slate600
                     )
-                    OutlinedTextField(
-                        value = leaveEndDate,
-                        onValueChange = { leaveEndDate = it },
-                        label = { Text("End Date (e.g. 2026-11-26)") },
+
+                    // Start Date Picker Field
+                    OutlinedCard(
+                        onClick = { startDatePicker.show() },
+                        shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
-                    )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text("Start Date", fontSize = 11.sp, color = Slate600)
+                                Text(
+                                    text = if (leaveStartDateDisplay.isNotBlank()) leaveStartDateDisplay else "Select Start Date",
+                                    fontSize = 14.sp,
+                                    fontWeight = if (leaveStartDateDisplay.isNotBlank()) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (leaveStartDateDisplay.isNotBlank()) DeepNavy else Slate600
+                                )
+                            }
+                            Icon(Icons.Default.DateRange, contentDescription = "Pick Start Date", tint = GoldPrimary)
+                        }
+                    }
+
+                    // End Date Picker Field
+                    OutlinedCard(
+                        onClick = { endDatePicker.show() },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text("End Date", fontSize = 11.sp, color = Slate600)
+                                Text(
+                                    text = if (leaveEndDateDisplay.isNotBlank()) leaveEndDateDisplay else "Select End Date",
+                                    fontSize = 14.sp,
+                                    fontWeight = if (leaveEndDateDisplay.isNotBlank()) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (leaveEndDateDisplay.isNotBlank()) DeepNavy else Slate600
+                                )
+                            }
+                            Icon(Icons.Default.DateRange, contentDescription = "Pick End Date", tint = GoldPrimary)
+                        }
+                    }
+
                     OutlinedTextField(
                         value = leaveReason,
                         onValueChange = { leaveReason = it },
                         label = { Text("Reason for Leave") },
+                        placeholder = { Text("e.g. Medical, personal, urgent work") },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -848,13 +1036,21 @@ fun HomeScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        if (leaveStartDate.isNotBlank() && leaveEndDate.isNotBlank() && leaveReason.isNotBlank()) {
-                            showLeaveDialog = false
-                            viewModel.applyLeave(leaveStartDate, leaveEndDate, leaveReason) { success, msg ->
-                                Toast.makeText(context, msg ?: if (success) "Leave Submitted" else "Error", Toast.LENGTH_LONG).show()
-                            }
-                        } else {
-                            Toast.makeText(context, "Please complete all fields", Toast.LENGTH_SHORT).show()
+                        if (leaveStartDateBackend.isBlank() || leaveEndDateBackend.isBlank()) {
+                            Toast.makeText(context, "Please select both start and end dates", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        if (leaveEndDateBackend < leaveStartDateBackend) {
+                            Toast.makeText(context, "End date cannot be earlier than start date", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        if (leaveReason.trim().isBlank()) {
+                            Toast.makeText(context, "Please provide a reason for leave", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        showLeaveDialog = false
+                        viewModel.applyLeave(leaveStartDateBackend, leaveEndDateBackend, leaveReason.trim()) { success, msg ->
+                            Toast.makeText(context, msg ?: if (success) "Leave Submitted" else "Error", Toast.LENGTH_LONG).show()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = DeepNavy)
@@ -868,5 +1064,99 @@ fun HomeScreen(
                 }
             }
         )
+    }
+}
+
+/**
+ * Modern, polished horizontal toggle switch for Duty ON/OFF.
+ * Large, comfortable mobile touch target with smooth animations.
+ */
+@Composable
+fun DutyToggleSwitch(
+    isOnDuty: Boolean,
+    isLoading: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val trackWidth = 126.dp
+    val trackHeight = 34.dp
+    val thumbSize = 26.dp
+    val thumbPadding = 4.dp
+
+    val trackColor by androidx.compose.animation.animateColorAsState(
+        targetValue = if (isOnDuty) Color(0xFF059669) else Color(0xFFE2E8F0),
+        animationSpec = androidx.compose.animation.core.tween(250),
+        label = "trackColor"
+    )
+
+    val thumbOffset by androidx.compose.animation.core.animateDpAsState(
+        targetValue = if (isOnDuty) trackWidth - thumbSize - thumbPadding else thumbPadding,
+        animationSpec = androidx.compose.animation.core.tween(250),
+        label = "thumbOffset"
+    )
+
+    Surface(
+        shape = RoundedCornerShape(17.dp),
+        color = trackColor,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (isOnDuty) Color(0xFF047857) else Color(0xFFCBD5E1)
+        ),
+        modifier = modifier
+            .width(trackWidth)
+            .height(trackHeight)
+            .clip(RoundedCornerShape(17.dp))
+            .clickable(
+                enabled = !isLoading,
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null
+            ) {
+                onToggle()
+            }
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = if (isOnDuty) Arrangement.Start else Arrangement.End
+            ) {
+                Text(
+                    text = if (isOnDuty) "ON DUTY" else "OFF DUTY",
+                    color = if (isOnDuty) Color.White else Color(0xFF475569),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 10.sp,
+                    letterSpacing = 0.5.sp
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .offset(x = thumbOffset)
+                    .size(thumbSize)
+                    .clip(CircleShape)
+                    .background(Color.White),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        color = if (isOnDuty) Color(0xFF059669) else Color(0xFF64748B),
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(14.dp)
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(if (isOnDuty) Color(0xFF059669) else Color(0xFF94A3B8))
+                    )
+                }
+            }
+        }
     }
 }

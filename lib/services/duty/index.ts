@@ -345,7 +345,10 @@ export class DutyService {
       include: {
         dutySessions: {
           where: {
-            startTime: { gte: startOfDayIST, lte: endOfDayIST },
+            OR: [
+              { startTime: { gte: startOfDayIST, lte: endOfDayIST } },
+              { status: "ON_DUTY" },
+            ],
           },
           orderBy: { startTime: "asc" },
         },
@@ -365,10 +368,14 @@ export class DutyService {
     let totalSessionsToday = 0;
 
     const roster = employees.map((emp: any) => {
-      const sessions = emp.dutySessions;
-      totalSessionsToday += sessions.length;
+      // Filter sessions belonging specifically to the requested IST day boundary
+      const daySessions = emp.dutySessions.filter(
+        (s: any) => s.startTime >= startOfDayIST && s.startTime <= endOfDayIST
+      );
+      totalSessionsToday += daySessions.length;
 
-      const activeSession = sessions.find((s: any) => s.status === "ON_DUTY");
+      // Real-time duty status: if employee has ANY active ON_DUTY session, they are ON_DUTY
+      const activeSession = emp.dutySessions.find((s: any) => s.status === "ON_DUTY");
       const isApprovedLeave = emp.leaveRequests.length > 0;
 
       let dutyStatus = "OFF_DUTY";
@@ -382,18 +389,23 @@ export class DutyService {
         offDutyCount++;
       }
 
-      // Calculate accumulated duration
+      // Calculate accumulated duration for today (including active session minutes)
       let totalMinutes = 0;
-      for (const s of sessions) {
+      for (const s of daySessions) {
         if (s.status === "COMPLETED" && s.durationMinutes) {
           totalMinutes += s.durationMinutes;
         } else if (s.status === "ON_DUTY") {
           totalMinutes += Math.max(0, Math.round((now.getTime() - s.startTime.getTime()) / 60000));
         }
       }
+      // If there is an active session started prior to today's boundary, add its active duration
+      if (activeSession && !daySessions.some((s: any) => s.id === activeSession.id)) {
+        totalMinutes += Math.max(0, Math.round((now.getTime() - activeSession.startTime.getTime()) / 60000));
+      }
 
-      const firstSession = sessions[0];
-      const lastSession = sessions[sessions.length - 1];
+      const sessionsToDisplay = daySessions.length > 0 ? daySessions : (activeSession ? [activeSession] : []);
+      const firstSession = sessionsToDisplay[0];
+      const lastSession = sessionsToDisplay[sessionsToDisplay.length - 1];
 
       return {
         id: emp.id,
@@ -405,8 +417,8 @@ export class DutyService {
         dutyEndDisplay: lastSession && lastSession.endTime ? formatTime12HourIST(lastSession.endTime) : (activeSession ? "Ongoing" : "—"),
         totalMinutes,
         totalHoursDisplay: formatDurationHours(totalMinutes),
-        sessionsCount: sessions.length,
-        sessions: sessions.map((s: any) => ({
+        sessionsCount: daySessions.length,
+        sessions: sessionsToDisplay.map((s: any) => ({
           id: s.id,
           startTime: s.startTime.toISOString(),
           endTime: s.endTime ? s.endTime.toISOString() : null,

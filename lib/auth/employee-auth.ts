@@ -4,6 +4,7 @@ import crypto from "crypto";
 export interface AuthenticatedEmployee {
   id: string;
   employeeId: string;
+  userId?: string | null;
   name: string;
   firstName: string;
   lastName: string;
@@ -101,6 +102,7 @@ export async function getAuthenticatedEmployee(req: Request): Promise<{
     employee: {
       id: session.employee.id,
       employeeId: session.employee.employeeId,
+      userId: session.employee.userId,
       name: `${session.employee.firstName} ${session.employee.lastName}`.trim(),
       firstName: session.employee.firstName,
       lastName: session.employee.lastName,

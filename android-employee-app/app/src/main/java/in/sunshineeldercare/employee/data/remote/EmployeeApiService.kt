@@ -105,7 +105,11 @@ interface EmployeeApiService {
     @Headers("Accept: application/json")
     suspend fun getDutyHistory(): Response<DutyHistoryResponse>
 
-    // Employee SOS endpoint
+    // Employee SOS endpoints
+    @GET("api/employee/emergency/sos")
+    @Headers("Accept: application/json")
+    suspend fun getActiveSos(): Response<EmployeeSosResponse>
+
     @POST("api/employee/emergency/sos")
     @Headers("Accept: application/json", "Content-Type: application/json")
     suspend fun triggerSos(
