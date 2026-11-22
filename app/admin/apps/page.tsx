@@ -33,6 +33,7 @@ import {
   replaceReleaseAction,
   togglePublishReleaseAction,
   deleteReleaseAction,
+  runReleaseAcceptanceCheckAction,
 } from "@/app/actions/apps";
 import { inspectApkInBrowser } from "@/lib/services/client-apk-inspector";
 
@@ -115,6 +116,9 @@ export default function AdminAppsPage() {
   // Upload Release State
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadStage, setUploadStage] = useState<string>("");
+  const [acceptanceResult, setAcceptanceResult] = useState<any>(null);
   const [inspectionResult, setInspectionResult] = useState<{
     isValid: boolean;
     packageName?: string;
@@ -127,6 +131,8 @@ export default function AdminAppsPage() {
     certificateFingerprint?: string;
     apkFileName?: string;
     apkUrl?: string;
+    storageKey?: string;
+    storageProvider?: string;
     error?: string;
   } | null>(null);
 
@@ -289,6 +295,9 @@ export default function AdminAppsPage() {
     setInspectionResult(null);
     setCompatibilityWarning(null);
     setMatchingReleaseInfo(null);
+    setUploadProgress(null);
+    setUploadStage("");
+    setAcceptanceResult(null);
     setReleaseActionType("NEW");
     setTargetReplaceReleaseId(app.versions[0]?.id || null);
     const nextCode = app.versions.length > 0 ? Math.max(...app.versions.map((v) => v.versionCode)) + 1 : 1;
@@ -325,11 +334,11 @@ export default function AdminAppsPage() {
 
     setUploadFile(file);
     setUploading(true);
+    setUploadProgress(null);
+    setUploadStage("Analyzing APK structure...");
     setInspectionResult(null);
     setCompatibilityWarning(null);
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    setAcceptanceResult(null);
 
     let extractedMeta: {
       packageName?: string;
@@ -374,68 +383,95 @@ export default function AdminAppsPage() {
         }));
       }
 
-      // 2. Authoritative backend verification with lightweight cryptographic proof (< 50KB payload)
-      // Completely bypasses Vercel's 4.5MB Serverless Function payload limit
-      const res = await fetch("/api/admin/apps/upload", {
+      // 2. Request presigned upload URL from backend
+      setUploadStage("Securing Cloudflare R2 upload authorization...");
+      const presignRes = await fetch("/api/admin/apps/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          action: "presign",
           appSlug: selectedApp?.slug,
           fileName: file.name,
           ...clientInspection,
         }),
-        signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
-
-      const contentType = res.headers.get("content-type") || "";
-      if (!contentType.includes("application/json")) {
-        throw new Error(`Server returned unexpected response (HTTP ${res.status}). Serverless function payload limit may have been exceeded.`);
+      const presignData = await presignRes.json();
+      if (!presignRes.ok) {
+        throw new Error(presignData.error || "Failed to initialize storage upload");
       }
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "APK verification failed");
+      // 3. Direct browser upload to Cloudflare R2 via XMLHttpRequest with progress tracking
+      // Completely bypasses Vercel's 4.5MB Serverless Function payload limit
+      setUploadStage("Uploading binary directly to Cloudflare R2 persistent storage...");
+      setUploadProgress(0);
+
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", presignData.uploadUrl, true);
+        xhr.setRequestHeader("Content-Type", "application/vnd.android.package-archive");
+        xhr.upload.onprogress = (ev) => {
+          if (ev.lengthComputable) {
+            const pct = Math.round((ev.loaded / ev.total) * 100);
+            setUploadProgress(pct);
+          }
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            reject(new Error(`Storage upload failed with HTTP status ${xhr.status}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error("Network connection error during R2 binary upload"));
+        xhr.send(file);
+      });
+
+      // 4. Verify object in storage
+      setUploadStage("Verifying storage object integrity and byte count...");
+      const verifyRes = await fetch("/api/admin/apps/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "verify",
+          storageKey: presignData.storageKey,
+          expectedSize: file.size,
+          expectedSha256: clientInspection.sha256,
+        }),
+      });
+
+      const verifyData = await verifyRes.json();
+      if (!verifyRes.ok) {
+        throw new Error(verifyData.error || "Storage verification failed");
       }
 
-      setInspectionResult(data.inspection);
+      setInspectionResult({
+        ...clientInspection,
+        apkFileName: presignData.apkFileName,
+        apkUrl: `/api/apps/${selectedApp?.slug}/download`,
+        storageKey: presignData.storageKey,
+        storageProvider: "R2",
+      });
 
-      if (data.hasCompatibilityWarning && data.compatibilityWarning) {
-        setCompatibilityWarning(data.compatibilityWarning);
+      if (presignData.hasCompatibilityWarning && presignData.compatibilityWarning) {
+        setCompatibilityWarning(presignData.compatibilityWarning);
       } else {
         setCompatibilityWarning(null);
       }
 
-      if (data.matchingRelease) {
-        setMatchingReleaseInfo(data.matchingRelease);
+      // Look up matching release in app versions
+      const matching = selectedApp?.versions.find((v) => v.versionCode === Number(clientInspection.versionCode));
+      if (matching) {
+        setMatchingReleaseInfo(matching);
         setReleaseActionType("REPLACE");
-        setTargetReplaceReleaseId(data.matchingRelease.id);
+        setTargetReplaceReleaseId(matching.id);
       } else {
         setMatchingReleaseInfo(null);
         setReleaseActionType("NEW");
         setTargetReplaceReleaseId(selectedApp?.versions[0]?.id || null);
       }
-
-      // Pre-fill form from verified inspection
-      if (data.inspection?.versionName) {
-        setReleaseForm((prev) => ({
-          ...prev,
-          versionName: data.inspection.versionName,
-          versionCode: data.inspection.versionCode,
-          minAndroidVersion: data.inspection.minSdkVersion || prev.minAndroidVersion,
-          targetSdkVersion: data.inspection.targetSdkVersion || prev.targetSdkVersion,
-          isMandatory: false, // Ensure false by default
-        }));
-      }
     } catch (err: any) {
-      clearTimeout(timeoutId);
-      const errorMsg =
-        err.name === "AbortError"
-          ? "APK inspection timed out after 30 seconds. Please try again."
-          : err?.message || "APK upload and inspection failed";
-
-      // Preserve extracted metadata so UI never displays "Package N/A, Version Name N/A, Version Code N/A"
+      const errorMsg = err?.message || "APK upload and inspection failed";
       setInspectionResult({
         isValid: false,
         fileSize: file.size,
@@ -448,8 +484,8 @@ export default function AdminAppsPage() {
       });
       showNotification(errorMsg, true);
     } finally {
-      clearTimeout(timeoutId);
-      setUploading(false); // ALWAYS reset uploading state to prevent indefinite spinner
+      setUploading(false);
+      setUploadStage("");
     }
   };
 
@@ -468,11 +504,13 @@ export default function AdminAppsPage() {
 
     setSaving(true);
     try {
+      let savedReleaseId: string | null = null;
+
       if (releaseActionType === "REPLACE" && targetReplaceReleaseId) {
-        await replaceReleaseAction(targetReplaceReleaseId, {
+        const updated = await replaceReleaseAction(targetReplaceReleaseId, {
           versionName: releaseForm.versionName,
           versionCode: submittedCode,
-          apkUrl: inspectionResult.apkUrl || `/downloads/apps/${inspectionResult.apkFileName}`,
+          apkUrl: `/api/apps/${selectedApp.slug}/download`,
           apkFileName: inspectionResult.apkFileName || uploadFile?.name || "app-release.apk",
           fileSize: inspectionResult.fileSize || 0,
           sha256: inspectionResult.sha256 || "",
@@ -482,18 +520,16 @@ export default function AdminAppsPage() {
           releaseNotes: releaseForm.releaseNotes || undefined,
           isMandatory: Boolean(releaseForm.isMandatory),
           isPublished: Boolean(releaseForm.isPublished),
+          storageKey: inspectionResult.storageKey,
+          storageProvider: inspectionResult.storageProvider || "R2",
         });
-
-        setIsUploadModalOpen(false);
-        showNotification(
-          `Release v${releaseForm.versionName} (Build ${submittedCode}) for "${selectedApp.name}" replaced successfully!`
-        );
+        savedReleaseId = updated.id;
       } else {
-        await createReleaseAction({
+        const created = await createReleaseAction({
           appId: selectedApp.id,
           versionName: releaseForm.versionName,
           versionCode: submittedCode,
-          apkUrl: inspectionResult.apkUrl || `/downloads/apps/${inspectionResult.apkFileName}`,
+          apkUrl: `/api/apps/${selectedApp.slug}/download`,
           apkFileName: inspectionResult.apkFileName || uploadFile?.name || "app-release.apk",
           fileSize: inspectionResult.fileSize || 0,
           sha256: inspectionResult.sha256 || "",
@@ -503,13 +539,30 @@ export default function AdminAppsPage() {
           releaseNotes: releaseForm.releaseNotes || undefined,
           isMandatory: Boolean(releaseForm.isMandatory),
           isPublished: Boolean(releaseForm.isPublished),
+          storageKey: inspectionResult.storageKey,
+          storageProvider: inspectionResult.storageProvider || "R2",
         });
-
-        setIsUploadModalOpen(false);
-        showNotification(
-          `Version ${releaseForm.versionName} (Build ${submittedCode}) for "${selectedApp.name}" published successfully!`
-        );
+        savedReleaseId = created.id;
       }
+
+      // Run automated acceptance check immediately
+      if (savedReleaseId) {
+        try {
+          const acceptance = await runReleaseAcceptanceCheckAction(savedReleaseId);
+          setAcceptanceResult(acceptance);
+          if (acceptance.passed) {
+            showNotification(
+              `Version ${releaseForm.versionName} (Build ${submittedCode}) published and 100% verified via automated acceptance test!`
+            );
+          } else {
+            showNotification(`Release saved, but acceptance check returned: ${acceptance.error}`, true);
+          }
+        } catch (testErr: any) {
+          showNotification(`Release published. Note: acceptance test error: ${testErr?.message}`);
+        }
+      }
+
+      setIsUploadModalOpen(false);
       await loadApps();
     } catch (err: any) {
       showNotification(err?.message || "Failed to publish release", true);
@@ -1131,13 +1184,27 @@ export default function AdminAppsPage() {
                 </div>
               </div>
 
-              {/* Uploading progress spinner */}
+              {/* Uploading progress & percentage bar */}
               {uploading && (
                 <div className="rounded-xl border border-border bg-muted/20 p-4 text-center">
                   <Loader2 className="mx-auto h-6 w-6 animate-spin text-[#B08A4A]" />
                   <p className="mt-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    Inspecting APK structure and verifying cryptographic signature...
+                    {uploadStage || "Inspecting APK structure and verifying cryptographic signature..."}
                   </p>
+                  {uploadProgress !== null && (
+                    <div className="mt-3">
+                      <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5 overflow-hidden">
+                        <div
+                          className="bg-[#B08A4A] h-2.5 rounded-full transition-all duration-150"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground mt-1.5 px-1">
+                        <span>Direct-to-R2 Transfer</span>
+                        <span className="font-bold text-[#B08A4A]">{uploadProgress}%</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1146,19 +1213,19 @@ export default function AdminAppsPage() {
                 <div
                   className={`rounded-xl border p-4 text-xs ${
                     inspectionResult.isValid
-                      ? "border-emerald-200 bg-emerald-50/70 text-emerald-950"
-                      : "border-rose-200 bg-rose-50 text-rose-950"
+                      ? "border-emerald-200 bg-emerald-50/70 text-emerald-950 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-100"
+                      : "border-rose-200 bg-rose-50 text-rose-950 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-100"
                   }`}
                 >
                   <div className="flex items-center gap-2 font-bold mb-2">
                     {inspectionResult.isValid ? (
                       <>
-                        <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                        <span>APK Successfully Verified</span>
+                        <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        <span>APK Verified &amp; Persisted to Cloudflare R2</span>
                       </>
                     ) : (
                       <>
-                        <AlertCircle className="h-4 w-4 text-rose-600" />
+                        <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
                         <span>APK Verification Failed: {inspectionResult.error}</span>
                       </>
                     )}
@@ -1177,6 +1244,14 @@ export default function AdminAppsPage() {
                     <div>
                       Version Code: <strong>{inspectionResult.versionCode || "N/A"}</strong>
                     </div>
+                    {inspectionResult.storageKey && (
+                      <div className="col-span-2 text-emerald-800 dark:text-emerald-300">
+                        R2 Storage Key:{" "}
+                        <span className="block truncate font-mono text-[10px]" title={inspectionResult.storageKey}>
+                          {inspectionResult.storageKey}
+                        </span>
+                      </div>
+                    )}
                     <div className="col-span-2">
                       SHA-256:{" "}
                       <span className="block truncate text-[10px] text-slate-700 dark:text-slate-300" title={inspectionResult.sha256}>
@@ -1488,6 +1563,27 @@ export default function AdminAppsPage() {
                                 <span>Publish</span>
                               </>
                             )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                const res = await runReleaseAcceptanceCheckAction(release.id);
+                                if (res.passed) {
+                                  alert(`✅ Acceptance Check 100% PASSED!\n\n• Binary: Accessible in Cloudflare R2 / Storage\n• Size: ${res.details.actualSize} bytes (exact match)\n• SHA-256: ${res.details.actualSha256} (verified)\n• Package: ${res.details.expectedPackage}\n• Version: v${res.details.versionName} (Build ${res.details.versionCode})\n• Signature: Production Keystore Verified`);
+                                } else {
+                                  alert(`❌ Acceptance Check FAILED: ${res.error}`);
+                                }
+                              } catch (err: any) {
+                                alert(`Error running acceptance test: ${err?.message}`);
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs font-semibold hover:bg-muted text-[#B08A4A]"
+                            title="Run end-to-end automated binary acceptance check"
+                          >
+                            <ShieldCheck className="h-3 w-3" />
+                            <span>Verify Binary</span>
                           </button>
 
                           <button

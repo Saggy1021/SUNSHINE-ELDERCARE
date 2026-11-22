@@ -174,3 +174,13 @@ export async function inspectApkBufferAction(bufferBase64: string): Promise<ApkI
     };
   }
 }
+
+export async function runReleaseAcceptanceCheckAction(releaseId: string) {
+  await requireAdminUser();
+  try {
+    return await AppsService.runReleaseAcceptanceCheck(releaseId);
+  } catch (error: any) {
+    console.error("[runReleaseAcceptanceCheckAction] Error:", error);
+    throw new Error(error?.message || "Failed to run release acceptance check");
+  }
+}

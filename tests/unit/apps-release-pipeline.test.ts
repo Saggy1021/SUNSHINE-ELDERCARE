@@ -115,10 +115,14 @@ async function runRegressionTests() {
   assert(manifest.sha256 && manifest.sha256.length === 64, "sha256 must be 64-char hex");
   assert(manifest.fileSize > 10 * 1024 * 1024, "fileSize must be > 10MB");
 
-  // Verify the relative target of the manifest URL actually exists on disk
-  const relativeManifestPath = manifest.apkDownloadUrl.replace(/^https?:\/\/[^\/]+/, "");
-  const manifestDiskPath = path.join(process.cwd(), "public", relativeManifestPath);
-  assert(fs.existsSync(manifestDiskPath), `Manifest download target must exist on disk: ${manifestDiskPath}`);
+  // Verify manifest download URL is authoritative (gateway endpoint or verified disk file)
+  if (manifest.apkDownloadUrl.includes("/api/apps/")) {
+    assert(manifest.apkDownloadUrl.endsWith("/api/apps/member-app/download"), "Gateway URL must be /api/apps/member-app/download");
+  } else {
+    const relativeManifestPath = manifest.apkDownloadUrl.replace(/^https?:\/\/[^\/]+/, "");
+    const manifestDiskPath = path.join(process.cwd(), "public", relativeManifestPath);
+    assert(fs.existsSync(manifestDiskPath), `Manifest download target must exist on disk: ${manifestDiskPath}`);
+  }
   console.log(`  ✓ Manifest apkDownloadUrl points to verified accessible binary: ${manifest.apkDownloadUrl}`);
 
   // -------------------------------------------------------------------------

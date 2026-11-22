@@ -1,0 +1,133 @@
+name: Build and Release Android App
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: "Application to build"
+        required: true
+        type: choice
+        options:
+          - member
+          - employee
+        default: member
+      version_name:
+        description: "Version Name (e.g., 1.0.6)"
+        required: false
+        type: string
+      version_code:
+        description: "Version Code (integer increment)"
+        required: false
+        type: string
+      publish:
+        description: "Publish binary directly to Cloudflare R2 and update catalog"
+        required: true
+        type: boolean
+        default: true
+      replace:
+        description: "Replace existing release record with matching version code"
+        required: false
+        type: boolean
+        default: false
+      is_mandatory:
+        description: "Mark release as mandatory in app updater"
+        required: false
+        type: boolean
+        default: false
+      release_notes:
+        description: "Release notes for this version"
+        required: false
+        type: string
+        default: "Automated production build"
+
+jobs:
+  build-and-release:
+    name: Build & Release Android Binary
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Install web dependencies & generate Prisma client
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm prisma generate
+
+      - name: Run Android Build & Release Pipeline
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || '8d1f83e05a1f402128cb5944942611f9' }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME || 'sunshine-documents-prod' }}
+          MEMBER_STORE_PASSWORD: ${{ secrets.MEMBER_STORE_PASSWORD }}
+          MEMBER_KEY_ALIAS: ${{ secrets.MEMBER_KEY_ALIAS }}
+          MEMBER_KEY_PASSWORD: ${{ secrets.MEMBER_KEY_PASSWORD }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          BUILD_CMD="npx tsx scripts/build-and-release-android.ts --app ${{ github.event.inputs.app }}"
+          if [ -n "${{ github.event.inputs.version_name }}" ]; then
+            BUILD_CMD="$BUILD_CMD --version-name ${{ github.event.inputs.version_name }}"
+          fi
+          if [ -n "${{ github.event.inputs.version_code }}" ]; then
+            BUILD_CMD="$BUILD_CMD --version-code ${{ github.event.inputs.version_code }}"
+          fi
+          if [ "${{ github.event.inputs.publish }}" = "true" ]; then
+            BUILD_CMD="$BUILD_CMD --publish"
+          fi
+          if [ "${{ github.event.inputs.replace }}" = "true" ]; then
+            BUILD_CMD="$BUILD_CMD --replace"
+          fi
+          if [ "${{ github.event.inputs.is_mandatory }}" = "true" ]; then
+            BUILD_CMD="$BUILD_CMD --mandatory"
+          fi
+          if [ -n "${{ github.event.inputs.release_notes }}" ]; then
+            BUILD_CMD="$BUILD_CMD --notes '${{ github.event.inputs.release_notes }}'"
+          fi
+
+          echo "Executing: $BUILD_CMD"
+          eval $BUILD_CMD
+
+      - name: Upload Release Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-${{ github.event.inputs.app }}-release
+          path: |
+            android-${{ github.event.inputs.app }}-app/release/*.apk
+            android-${{ github.event.inputs.app }}-app/release/*.aab
+          if-no-files-found: warn

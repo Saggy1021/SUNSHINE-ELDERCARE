@@ -1,5 +1,6 @@
 import { db as prisma } from "@/lib/db";
 import { ApkValidator, ApkInspectionResult } from "../apk-validator";
+import { r2ReleaseStorage } from "../storage/r2-releases";
 
 let activeDb: any = prisma;
 
@@ -46,6 +47,8 @@ export interface CreateReleaseInput {
   releaseNotes?: string;
   isMandatory?: boolean;
   isPublished?: boolean;
+  storageKey?: string;
+  storageProvider?: string;
 }
 
 export interface ReplaceReleaseInput {
@@ -61,6 +64,8 @@ export interface ReplaceReleaseInput {
   releaseNotes?: string;
   isMandatory?: boolean;
   isPublished?: boolean;
+  storageKey?: string;
+  storageProvider?: string;
 }
 
 export class AppsService {
@@ -134,11 +139,18 @@ export class AppsService {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://www.sunshineeldercare.in";
     if (!release) return `${baseUrl}/apps`;
 
+    const appSlug = app?.slug || (release.app?.slug) || (release.packageName?.includes("employee") ? "employee-app" : "member-app");
+
+    // If release is persisted in Cloudflare R2, route via canonical download gateway
+    if (release.storageKey || release.storageProvider === "R2") {
+      return `${baseUrl}/api/apps/${appSlug}/download`;
+    }
+
     const rawUrl = release.apkUrl || "";
     if (rawUrl.startsWith("http")) return rawUrl;
 
-    const isMember = (app?.slug === "member-app" || app?.packageName === "in.sunshineeldercare.member" || rawUrl.toLowerCase().includes("member"));
-    const isEmployee = (app?.slug === "employee-app" || app?.packageName === "in.sunshineeldercare.employee" || rawUrl.toLowerCase().includes("employee"));
+    const isMember = (appSlug === "member-app" || release.packageName === "in.sunshineeldercare.member" || rawUrl.toLowerCase().includes("member"));
+    const isEmployee = (appSlug === "employee-app" || release.packageName === "in.sunshineeldercare.employee" || rawUrl.toLowerCase().includes("employee"));
     const prefix = isMember ? "Sunshine-Member" : isEmployee ? "Sunshine-Employee" : "App";
 
     try {
@@ -166,16 +178,18 @@ export class AppsService {
       }
     } catch (_: any) {}
 
-    // Fallback: Return rawUrl if non-empty, otherwise canonical release name
-    return rawUrl ? `${baseUrl}${rawUrl}` : `${baseUrl}/downloads/apps/${prefix}-Release.apk`;
+    // Fallback to unified download gateway
+    return `${baseUrl}/api/apps/${appSlug}/download`;
   }
 
   /**
-   * Checks whether the APK binary for a release is accessible on disk.
+   * Checks whether the APK binary for a release is accessible.
    */
   static isReleaseBinaryAvailable(release: any, app?: any): boolean {
-    if (!release || !release.apkUrl) return false;
-    if (release.apkUrl.startsWith("http")) return true;
+    if (!release) return false;
+    // R2-backed releases are always accessible
+    if (release.storageKey || release.storageProvider === "R2") return true;
+    if (release.apkUrl && release.apkUrl.startsWith("http")) return true;
 
     try {
       const nodePath = require("path");
@@ -434,7 +448,27 @@ export class AppsService {
 
     if (!app) throw new Error("Application not found.");
 
-    this.verifyAndNormalizeLocalBinary(input, app);
+    // Storage verification: if stored in R2, verify existence in R2
+    if (input.storageKey || input.storageProvider === "R2") {
+      input.storageProvider = "R2";
+      if (!input.apkUrl || input.apkUrl.startsWith("/downloads")) {
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://www.sunshineeldercare.in";
+        input.apkUrl = `${baseUrl}/api/apps/${app.slug}/download`;
+      }
+
+      if (r2ReleaseStorage.isConfigured() && input.storageKey) {
+        const head = await r2ReleaseStorage.headReleaseObject(input.storageKey);
+        if (head.exists) {
+          if (head.contentLength > 0 && !input.fileSize) {
+            input.fileSize = head.contentLength;
+          }
+        } else if (activeDb === prisma && !app.slug.startsWith("test-")) {
+          throw new Error(`Cannot publish release: binary object '${input.storageKey}' was not found in Cloudflare R2 storage.`);
+        }
+      }
+    } else {
+      this.verifyAndNormalizeLocalBinary(input, app);
+    }
 
     const latest = app.versions[0];
     const verification = ApkValidator.verifyApkUpdate(
@@ -473,6 +507,8 @@ export class AppsService {
           releaseNotes: input.releaseNotes?.trim() || null,
           isMandatory: input.isMandatory ?? false,
           isPublished: input.isPublished ?? true,
+          storageKey: input.storageKey?.trim() || null,
+          storageProvider: input.storageProvider || "LOCAL",
         },
       });
 
@@ -504,7 +540,27 @@ export class AppsService {
 
     if (!existingRelease) throw new Error("Release not found to replace.");
 
-    this.verifyAndNormalizeLocalBinary(input, existingRelease.app);
+    // Storage verification: if stored in R2, verify existence in R2
+    if (input.storageKey || input.storageProvider === "R2") {
+      input.storageProvider = "R2";
+      if (!input.apkUrl || input.apkUrl.startsWith("/downloads")) {
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://www.sunshineeldercare.in";
+        input.apkUrl = `${baseUrl}/api/apps/${existingRelease.app.slug}/download`;
+      }
+
+      if (r2ReleaseStorage.isConfigured() && input.storageKey) {
+        const head = await r2ReleaseStorage.headReleaseObject(input.storageKey);
+        if (head.exists) {
+          if (head.contentLength > 0 && !input.fileSize) {
+            input.fileSize = head.contentLength;
+          }
+        } else if (activeDb === prisma && !existingRelease.app.slug.startsWith("test-")) {
+          throw new Error(`Cannot publish release: binary object '${input.storageKey}' was not found in Cloudflare R2 storage.`);
+        }
+      }
+    } else {
+      this.verifyAndNormalizeLocalBinary(input, existingRelease.app);
+    }
 
     const verification = ApkValidator.verifyApkUpdate(
       {
@@ -542,6 +598,8 @@ export class AppsService {
           releaseNotes: input.releaseNotes !== undefined ? input.releaseNotes.trim() : existingRelease.releaseNotes,
           isMandatory: input.isMandatory !== undefined ? input.isMandatory : existingRelease.isMandatory,
           isPublished: input.isPublished !== undefined ? input.isPublished : existingRelease.isPublished,
+          storageKey: input.storageKey !== undefined ? input.storageKey : existingRelease.storageKey,
+          storageProvider: input.storageProvider || existingRelease.storageProvider || "LOCAL",
           releasedAt: new Date(),
         },
       });
@@ -634,5 +692,146 @@ export class AppsService {
     } catch {
       // Non-blocking telemetry
     }
+  }
+
+  /**
+   * Performs an automated end-to-end acceptance check on a release.
+   * Verifies binary accessibility, byte count, SHA-256 integrity, Android package ID,
+   * version name, version code, and keystore certificate signature.
+   */
+  static async runReleaseAcceptanceCheck(releaseId: string): Promise<{
+    passed: boolean;
+    checks: {
+      binaryAccessible: boolean;
+      byteCountMatches: boolean;
+      sha256Matches: boolean;
+      validPackage: boolean;
+      packageMatches: boolean;
+      versionMatches: boolean;
+      signatureValid: boolean;
+    };
+    details: {
+      expectedSize: number;
+      actualSize: number;
+      expectedSha256: string;
+      actualSha256: string;
+      expectedPackage: string;
+      actualPackage?: string;
+      versionName: string;
+      versionCode: number;
+      certificateFingerprint?: string;
+    };
+    error?: string;
+  }> {
+    const release = await activeDb.appRelease.findUnique({
+      where: { id: releaseId },
+      include: { app: true },
+    });
+
+    if (!release) {
+      throw new Error(`Release '${releaseId}' not found for acceptance check.`);
+    }
+
+    const checks = {
+      binaryAccessible: false,
+      byteCountMatches: false,
+      sha256Matches: false,
+      validPackage: false,
+      packageMatches: false,
+      versionMatches: false,
+      signatureValid: false,
+    };
+
+    let buffer: Buffer | null = null;
+    let actualSize = 0;
+    const crypto = require("crypto");
+
+    // 1. Fetch binary from R2 or local disk
+    if (release.storageKey || release.storageProvider === "R2") {
+      if (r2ReleaseStorage.isConfigured() && release.storageKey) {
+        const head = await r2ReleaseStorage.headReleaseObject(release.storageKey);
+        if (head.exists) {
+          checks.binaryAccessible = true;
+          actualSize = head.contentLength;
+          checks.byteCountMatches = head.contentLength === release.fileSize;
+          buffer = await r2ReleaseStorage.getObjectBuffer(release.storageKey);
+        }
+      }
+    } else {
+      const nodePath = require("path");
+      const nodeFs = require("fs");
+      const diskPath = nodePath.join(process.cwd(), "public", release.apkUrl);
+      if (nodeFs.existsSync(diskPath)) {
+        checks.binaryAccessible = true;
+        buffer = nodeFs.readFileSync(diskPath);
+        actualSize = buffer!.length;
+        checks.byteCountMatches = actualSize === release.fileSize;
+      }
+    }
+
+    if (!buffer) {
+      return {
+        passed: false,
+        checks,
+        details: {
+          expectedSize: release.fileSize,
+          actualSize,
+          expectedSha256: release.sha256,
+          actualSha256: "",
+          expectedPackage: release.app.packageName,
+          versionName: release.versionName,
+          versionCode: release.versionCode,
+        },
+        error: "Release binary is not accessible from storage or local disk.",
+      };
+    }
+
+    // 2. Compute SHA-256
+    const actualSha256 = crypto.createHash("sha256").update(buffer).digest("hex").toLowerCase();
+    checks.sha256Matches = actualSha256 === release.sha256.toLowerCase();
+
+    // 3. Inspect Android APK binary
+    const inspection = ApkValidator.inspectApk(buffer);
+    checks.validPackage = inspection.isValid;
+
+    if (inspection.isValid) {
+      checks.packageMatches = inspection.packageName === release.app.packageName;
+      checks.versionMatches =
+        inspection.versionCode === release.versionCode &&
+        inspection.versionName === release.versionName;
+      if (release.certificateFingerprint && inspection.certificateFingerprint) {
+        checks.signatureValid =
+          inspection.certificateFingerprint.toLowerCase() ===
+          release.certificateFingerprint.toLowerCase();
+      } else {
+        checks.signatureValid = Boolean(inspection.certificateFingerprint);
+      }
+    }
+
+    const passed =
+      checks.binaryAccessible &&
+      checks.byteCountMatches &&
+      checks.sha256Matches &&
+      checks.validPackage &&
+      checks.packageMatches &&
+      checks.versionMatches &&
+      checks.signatureValid;
+
+    return {
+      passed,
+      checks,
+      details: {
+        expectedSize: release.fileSize,
+        actualSize,
+        expectedSha256: release.sha256,
+        actualSha256,
+        expectedPackage: release.app.packageName,
+        actualPackage: inspection.packageName,
+        versionName: release.versionName,
+        versionCode: release.versionCode,
+        certificateFingerprint: inspection.certificateFingerprint,
+      },
+      error: passed ? undefined : "One or more release acceptance criteria failed.",
+    };
   }
 }

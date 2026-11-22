@@ -1303,6 +1303,8 @@ model AppRelease {
   certificateFingerprint String?      // SHA-256 certificate fingerprint
   minAndroidVersion      String       @default("Android 10 (API 29)")
   targetSdkVersion       Int?         @default(36)
+  storageKey             String?      // Cloudflare R2 object key (e.g. "releases/apps/member-app/v1.0.5-b6.apk")
+  storageProvider        String       @default("LOCAL") // R2, LOCAL, etc.
   releaseNotes           String?      @db.Text
   isMandatory            Boolean      @default(false)
   isPublished            Boolean      @default(true)

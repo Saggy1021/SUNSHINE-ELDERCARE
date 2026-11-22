@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db as prisma } from "@/lib/db";
+import { r2ReleaseStorage } from "@/lib/services/storage/r2-releases";
 import fs from "fs";
 import path from "path";
 
@@ -15,12 +16,12 @@ interface RouteParams {
  * Provides resilient, self-healing delivery for Sunshine application APKs:
  * 1. If the exact file exists on disk in public/downloads/apps/, serves it with correct
  *    Android package headers and content-length.
- * 2. If the requested file is a historical, suffixed (e.g. -d3f31e56.apk), or aliased filename,
+ * 2. If the requested file is stored in Cloudflare R2 persistent storage, generates a presigned
+ *    CDN download URL and performs an immediate HTTP 307 redirect.
+ * 3. If the requested file is a historical, suffixed (e.g. -d3f31e56.apk), or aliased filename,
  *    identifies the associated release in PostgreSQL and automatically resolves to the
- *    authoritative binary matching its cryptographic SHA-256 and version.
- * 3. Performs an immediate HTTP 307 redirect to the accessible canonical static binary,
- *    eliminating broken 404 links while preserving CDN caching.
- * 4. Returns a structured JSON diagnostic if no matching binary exists anywhere.
+ *    authoritative binary.
+ * 4. Eliminates broken 404 links while preserving CDN caching.
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
@@ -62,6 +63,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         OR: [
           { apkFileName: cleanFileName },
           { apkUrl: { contains: cleanFileName } },
+          { storageKey: { contains: cleanFileName } },
           { apkFileName: { contains: cleanFileName.replace(/-[a-f0-9]{8}\.apk$/, "") } },
         ],
       },
@@ -72,7 +74,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const isMember = cleanFileName.toLowerCase().includes("member") || release?.app.slug === "member-app";
     const isEmployee = cleanFileName.toLowerCase().includes("employee") || release?.app.slug === "employee-app";
 
-    // 3. Candidate filenames to check on disk in order of specificity
+    // 3. Persistent Cloudflare R2 delivery: if release is stored in R2, redirect to presigned URL
+    if (release && (release.storageKey || release.storageProvider === "R2")) {
+      const storageKey = release.storageKey || `releases/apps/${release.app.slug}/${release.apkFileName}`;
+      const presignedUrl = await r2ReleaseStorage.getPresignedDownloadUrl(
+        storageKey,
+        release.apkFileName,
+        3600
+      );
+
+      return NextResponse.redirect(presignedUrl, {
+        status: 307,
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          "Content-Type": "application/vnd.android.package-archive",
+          "Content-Disposition": `attachment; filename="${release.apkFileName}"`,
+        },
+      });
+    }
+
+    // 4. Candidate filenames to check on disk in order of specificity
     const candidateFiles: string[] = [];
 
     if (release) {
@@ -83,16 +104,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     if (isMember) {
       candidateFiles.push("Sunshine-Member-Release.apk");
+      candidateFiles.push("Sunshine-Member-v1.0.5-b6.apk");
       candidateFiles.push("Sunshine-Member-v1.0.2-b3.apk");
     } else if (isEmployee) {
       candidateFiles.push("Sunshine-Employee-Release.apk");
       candidateFiles.push("Sunshine-Employee-v1.0.0-b1.apk");
     }
 
-    // Deduplicate candidate list
     const uniqueCandidates = Array.from(new Set(candidateFiles));
 
-    // 4. Resolve against candidate files on disk
     for (const candidate of uniqueCandidates) {
       const candidatePath = path.join(publicDownloadsDir, candidate);
       if (fs.existsSync(candidatePath)) {
@@ -109,15 +129,29 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // 5. If release has an alternate apkUrl that is different from requested file, redirect to it
+    // 5. Alternate URL fallback or redirect to canonical app download endpoint
+    const origin = new URL(request.url).origin;
     if (release && release.apkUrl && !release.apkUrl.includes(cleanFileName)) {
-      const origin = new URL(request.url).origin;
       const target = release.apkUrl.startsWith("http") ? release.apkUrl : `${origin}${release.apkUrl}`;
       return NextResponse.redirect(target, {
         status: 307,
         headers: {
           "Cache-Control": "no-cache, no-store, must-revalidate",
         },
+      });
+    }
+
+    if (isMember) {
+      return NextResponse.redirect(`${origin}/api/apps/member-app/download`, {
+        status: 307,
+        headers: { "Cache-Control": "no-cache, no-store, must-revalidate" },
+      });
+    }
+
+    if (isEmployee) {
+      return NextResponse.redirect(`${origin}/api/apps/employee-app/download`, {
+        status: 307,
+        headers: { "Cache-Control": "no-cache, no-store, must-revalidate" },
       });
     }
 
@@ -148,5 +182,39 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 export async function HEAD(request: NextRequest, { params }: RouteParams) {
-  return GET(request, { params });
+  try {
+    const { file } = await params;
+    if (!file) return new NextResponse(null, { status: 400 });
+
+    const cleanFileName = file.replace(/[^a-zA-Z0-9._-]/g, "");
+    const release = await prisma.appRelease.findFirst({
+      where: {
+        OR: [
+          { apkFileName: cleanFileName },
+          { apkUrl: { contains: cleanFileName } },
+          { storageKey: { contains: cleanFileName } },
+        ],
+      },
+      include: { app: true },
+      orderBy: { versionCode: "desc" },
+    });
+
+    if (release) {
+      return new NextResponse(null, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/vnd.android.package-archive",
+          "Content-Length": release.fileSize.toString(),
+          "Content-Disposition": `attachment; filename="${release.apkFileName}"`,
+          "Accept-Ranges": "bytes",
+          "ETag": `"${release.sha256}"`,
+          "Cache-Control": "public, max-age=3600",
+        },
+      });
+    }
+
+    return GET(request, { params });
+  } catch {
+    return new NextResponse(null, { status: 500 });
+  }
 }

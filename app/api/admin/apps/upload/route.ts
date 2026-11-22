@@ -3,6 +3,8 @@ import { auth } from "@/auth";
 import { AuthorizationService } from "@/lib/services/authorization";
 import { ApkValidator, parseAxml, ApkInspectionResult } from "@/lib/services/apk-validator";
 import { db as prisma } from "@/lib/db";
+import { r2ReleaseStorage } from "@/lib/services/storage/r2-releases";
+import { AppsService } from "@/lib/services/apps";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
@@ -10,12 +12,13 @@ import path from "path";
 export const dynamic = "force-dynamic";
 
 /**
- * Admin-only API endpoint to inspect and verify an APK release.
+ * Admin-only API endpoint to inspect, upload, and verify an APK release.
  * Supports:
- * 1. Fast, lightweight JSON inspection verification (< 50KB payload) containing
- *    client-extracted metadata and cryptographic proof slices, completely bypassing
- *    Vercel's 4.5MB Serverless Function payload limit.
- * 2. Multipart form upload fallback for small files (< 4MB) or local development.
+ * 1. Direct Presigned Upload (Browser -> Cloudflare R2): Bypasses Vercel 4.5MB limit,
+ *    supports 50MB+ APKs with real-time percentage progress bar.
+ * 2. R2 Post-Upload Verification: Confirms binary presence and byte count before DB release record creation.
+ * 3. Release Acceptance Check: Automated end-to-end verification of binary, manifest, and signature.
+ * 4. Multipart form upload fallback for local testing or small files.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -43,10 +46,177 @@ export async function POST(request: NextRequest) {
     const contentType = request.headers.get("content-type") || "";
 
     // =========================================================================
-    // MODE A: LIGHTWEIGHT JSON VERIFICATION (Preferred & Vercel-Safe)
+    // JSON ACTION DISPATCHER
     // =========================================================================
     if (contentType.includes("application/json")) {
       const body = await request.json();
+
+      // -----------------------------------------------------------------------
+      // ACTION: PRESIGN (Direct-to-R2 Browser Upload)
+      // -----------------------------------------------------------------------
+      if (body.action === "presign") {
+        const {
+          appSlug,
+          fileName,
+          fileSize,
+          sha256,
+          packageName,
+          versionName,
+          versionCode,
+          certificateFingerprint,
+        } = body;
+
+        if (!appSlug || !fileName || !fileSize || !sha256 || !packageName || !versionCode) {
+          return NextResponse.json(
+            { error: "Missing required fields for presigned upload request" },
+            { status: 400 }
+          );
+        }
+
+        if (fileSize < 1024 * 1024) {
+          return NextResponse.json(
+            { error: "File is too small to be a valid Android APK (less than 1 MB)" },
+            { status: 400 }
+          );
+        }
+        if (fileSize > 200 * 1024 * 1024) {
+          return NextResponse.json(
+            { error: "File exceeds maximum supported APK size (200 MB)" },
+            { status: 400 }
+          );
+        }
+
+        const app = await prisma.publishedApp.findFirst({
+          where: { OR: [{ slug: appSlug }, { packageName }] },
+          include: {
+            versions: {
+              where: { isPublished: true },
+              orderBy: { versionCode: "desc" },
+            },
+          },
+        });
+
+        if (!app) {
+          return NextResponse.json(
+            { error: `Application '${appSlug}' not found` },
+            { status: 404 }
+          );
+        }
+
+        if (app.packageName !== packageName) {
+          return NextResponse.json(
+            { error: `Package name mismatch: uploaded APK is '${packageName}', but expected '${app.packageName}'` },
+            { status: 400 }
+          );
+        }
+
+        // Verify update integrity
+        const latestRelease = app.versions[0];
+        const updateCheck = ApkValidator.verifyApkUpdate(
+          {
+            packageName: app.packageName,
+            latestCertFingerprint: latestRelease?.certificateFingerprint || null,
+            latestVersionCode: latestRelease?.versionCode ?? null,
+          },
+          {
+            isValid: true,
+            fileSize,
+            sha256,
+            packageName,
+            versionName,
+            versionCode: Number(versionCode),
+            certificateFingerprint,
+          }
+        );
+
+        if (!updateCheck.valid) {
+          return NextResponse.json(
+            { error: updateCheck.reason || "APK security verification failed" },
+            { status: 400 }
+          );
+        }
+
+        // Generate canonical R2 object key
+        const storageKey = r2ReleaseStorage.generateReleaseObjectKey(
+          app.slug,
+          versionName,
+          Number(versionCode),
+          sha256,
+          fileName
+        );
+        const apkFileName = path.basename(storageKey);
+
+        const uploadUrl = await r2ReleaseStorage.getPresignedUploadUrl(
+          storageKey,
+          "application/vnd.android.package-archive",
+          3600
+        );
+
+        return NextResponse.json({
+          success: true,
+          action: "presign",
+          uploadUrl,
+          storageKey,
+          apkFileName,
+          appSlug: app.slug,
+          compatibilityWarning: updateCheck.warning || null,
+          hasCompatibilityWarning: Boolean(updateCheck.hasCompatibilityWarning),
+        });
+      }
+
+      // -----------------------------------------------------------------------
+      // ACTION: VERIFY (Confirm binary uploaded to R2)
+      // -----------------------------------------------------------------------
+      if (body.action === "verify") {
+        const { storageKey, expectedSize, expectedSha256 } = body;
+
+        if (!storageKey) {
+          return NextResponse.json({ error: "Missing storageKey for verification" }, { status: 400 });
+        }
+
+        const head = await r2ReleaseStorage.headReleaseObject(storageKey);
+        if (!head.exists) {
+          return NextResponse.json(
+            { error: "Binary not found in Cloudflare R2 storage. Upload may still be in progress." },
+            { status: 400 }
+          );
+        }
+
+        if (expectedSize && head.contentLength !== Number(expectedSize)) {
+          return NextResponse.json(
+            {
+              error: `Uploaded binary size mismatch. Expected ${expectedSize} bytes, got ${head.contentLength} bytes.`,
+            },
+            { status: 400 }
+          );
+        }
+
+        return NextResponse.json({
+          success: true,
+          action: "verify",
+          verified: true,
+          storageKey,
+          contentLength: head.contentLength,
+          storageProvider: "R2",
+        });
+      }
+
+      // -----------------------------------------------------------------------
+      // ACTION: ACCEPTANCE_CHECK (Automated test of binary and release record)
+      // -----------------------------------------------------------------------
+      if (body.action === "acceptance_check") {
+        const { releaseId } = body;
+        if (!releaseId) {
+          return NextResponse.json({ error: "Missing releaseId for acceptance check" }, { status: 400 });
+        }
+
+        const result = await AppsService.runReleaseAcceptanceCheck(releaseId);
+        return NextResponse.json(result);
+      }
+
+      // -----------------------------------------------------------------------
+      // MODE A: STANDARD LIGHTWEIGHT JSON INSPECTION VERIFICATION
+      // -----------------------------------------------------------------------
       const {
         appSlug,
         fileName,
@@ -60,6 +230,7 @@ export async function POST(request: NextRequest) {
         certificateFingerprint,
         manifestBase64,
         certificateBase64,
+        storageKey: providedStorageKey,
       } = body;
 
       if (!fileName || !fileSize || !sha256 || !packageName || !versionCode) {
@@ -127,6 +298,7 @@ export async function POST(request: NextRequest) {
       let matchingRelease: any = null;
 
       // Verify against database invariants if target application is specified
+      let resolvedAppSlug = appSlug || "member-app";
       if (appSlug || packageName) {
         const app = await prisma.publishedApp.findFirst({
           where: {
@@ -144,6 +316,7 @@ export async function POST(request: NextRequest) {
         });
 
         if (app) {
+          resolvedAppSlug = app.slug;
           const latestRelease = app.versions[0];
           matchingRelease = app.versions.find((v) => v.versionCode === Number(versionCode)) || null;
 
@@ -173,17 +346,18 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Generate a unique, immutable release-specific filename to prevent CDN cache collisions and stale downloads
-      let prefix = appSlug || "app";
-      if (fileName && fileName.toLowerCase().includes("member")) {
-        prefix = "Sunshine-Member";
-      } else if (fileName && fileName.toLowerCase().includes("employee")) {
-        prefix = "Sunshine-Employee";
-      }
-      const safeVersion = (versionName || "1.0.0").replace(/[^a-zA-Z0-9._-]/g, "_");
-      const shortSha = sha256.substring(0, 8);
-      const uniqueFileName = `${prefix}-v${safeVersion}-b${versionCode}-${shortSha}.apk`;
-      const relativeUrl = `/downloads/apps/${uniqueFileName}`;
+      // Generate canonical R2 storage key and filename
+      const storageKey =
+        providedStorageKey ||
+        r2ReleaseStorage.generateReleaseObjectKey(
+          resolvedAppSlug,
+          versionName,
+          Number(versionCode),
+          sha256,
+          fileName
+        );
+      const uniqueFileName = path.basename(storageKey);
+      const downloadEndpointUrl = `/api/apps/${resolvedAppSlug}/download`;
 
       return NextResponse.json({
         success: true,
@@ -198,7 +372,9 @@ export async function POST(request: NextRequest) {
           targetSdkVersion: targetSdkVersion || 36,
           certificateFingerprint,
           apkFileName: uniqueFileName,
-          apkUrl: relativeUrl,
+          apkUrl: downloadEndpointUrl,
+          storageKey,
+          storageProvider: "R2",
         },
         compatibilityWarning: updateVerification?.warning || null,
         hasCompatibilityWarning: Boolean(updateVerification?.hasCompatibilityWarning),
@@ -216,7 +392,7 @@ export async function POST(request: NextRequest) {
     }
 
     // =========================================================================
-    // MODE B: MULTIPART FORM UPLOAD (For smaller files or direct local testing)
+    // MODE B: MULTIPART FORM UPLOAD (With Persistent R2 Upload)
     // =========================================================================
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
@@ -248,6 +424,7 @@ export async function POST(request: NextRequest) {
 
     let updateCheck: { valid: boolean; reason?: string; hasCompatibilityWarning?: boolean; warning?: string } | null = null;
     let matchingRelease: any = null;
+    let resolvedSlug = targetAppSlug || (inspection.packageName?.includes("employee") ? "employee-app" : "member-app");
 
     // Verify against target app invariants if slug provided
     if (targetAppSlug || inspection.packageName) {
@@ -267,6 +444,7 @@ export async function POST(request: NextRequest) {
       });
 
       if (app) {
+        resolvedSlug = app.slug;
         const latest = app.versions[0];
         matchingRelease = app.versions.find((v) => v.versionCode === Number(inspection.versionCode)) || null;
 
@@ -288,11 +466,34 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Sanitize filename and append shortSha to prevent CDN caching collisions
-    const shortSha = inspection.sha256 ? inspection.sha256.substring(0, 8) : Date.now().toString(36);
-    const baseName = originalName.replace(/\.apk$/i, "").replace(/[^a-zA-Z0-9._-]/g, "_");
-    const safeName = `${baseName}-${shortSha}.apk`;
-    const relativeUrl = `/downloads/apps/${safeName}`;
+    // Generate canonical R2 object key
+    const storageKey = r2ReleaseStorage.generateReleaseObjectKey(
+      resolvedSlug,
+      inspection.versionName || "1.0.0",
+      Number(inspection.versionCode || 1),
+      inspection.sha256,
+      originalName
+    );
+    const safeName = path.basename(storageKey);
+    const downloadEndpointUrl = `/api/apps/${resolvedSlug}/download`;
+
+    // Upload to Cloudflare R2 persistent storage
+    if (r2ReleaseStorage.isConfigured()) {
+      try {
+        await r2ReleaseStorage.putReleaseObject(storageKey, buffer, {
+          sha256: inspection.sha256,
+          packageName: inspection.packageName || "",
+          versionCode: String(inspection.versionCode || 1),
+          versionName: inspection.versionName || "",
+        });
+      } catch (r2Err: any) {
+        console.error("[Upload Route] Failed to upload to Cloudflare R2:", r2Err);
+        return NextResponse.json(
+          { error: `Failed to persist binary to Cloudflare R2 storage: ${r2Err.message}` },
+          { status: 500 }
+        );
+      }
+    }
 
     // Safely attempt to write to disk if filesystem is writable (catch read-only errors on serverless)
     try {
@@ -303,7 +504,6 @@ export async function POST(request: NextRequest) {
       const filePath = path.join(downloadsDir, safeName);
       fs.writeFileSync(/*turbopackIgnore: true*/ filePath, buffer);
     } catch (fsErr: any) {
-      // On serverless read-only filesystems (Vercel), ignore EROFS; the binary is already served or managed via release catalog
       console.warn("[Upload Route] Safe fallback: local disk write skipped on read-only runtime:", fsErr?.message);
     }
 
@@ -312,7 +512,9 @@ export async function POST(request: NextRequest) {
       inspection: {
         ...inspection,
         apkFileName: safeName,
-        apkUrl: relativeUrl,
+        apkUrl: downloadEndpointUrl,
+        storageKey,
+        storageProvider: "R2",
       },
       compatibilityWarning: updateCheck?.warning || null,
       hasCompatibilityWarning: Boolean(updateCheck?.hasCompatibilityWarning),
