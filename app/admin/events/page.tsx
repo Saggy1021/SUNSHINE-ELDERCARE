@@ -28,6 +28,7 @@ interface CommunityEventItem {
   venue: string;
   imageUrl: string | null;
   visibleToAll: boolean;
+  audience?: "EVERYONE" | "MEMBERS_ONLY" | "EMPLOYEES_ONLY";
   status: "DRAFT" | "PUBLISHED" | "CANCELLED";
   createdAt: string;
   updatedAt: string;
@@ -53,6 +54,7 @@ export default function AdminEventsPage() {
     venue: "",
     imageUrl: "",
     visibleToAll: true,
+    audience: "EVERYONE" as "EVERYONE" | "MEMBERS_ONLY" | "EMPLOYEES_ONLY",
     status: "PUBLISHED" as "DRAFT" | "PUBLISHED" | "CANCELLED",
   });
 
@@ -86,6 +88,7 @@ export default function AdminEventsPage() {
       venue: "",
       imageUrl: "",
       visibleToAll: true,
+      audience: "EVERYONE",
       status: "PUBLISHED",
     });
     setIsModalOpen(true);
@@ -102,6 +105,7 @@ export default function AdminEventsPage() {
       venue: ev.venue,
       imageUrl: ev.imageUrl || "",
       visibleToAll: ev.visibleToAll,
+      audience: ev.audience || "EVERYONE",
       status: ev.status,
     });
     setIsModalOpen(true);
@@ -323,17 +327,34 @@ export default function AdminEventsPage() {
                       </div>
                     </div>
 
-                    <span
-                      className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider ${
-                        ev.status === "PUBLISHED"
-                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                          : ev.status === "DRAFT"
-                          ? "bg-amber-50 text-amber-700 border border-amber-200"
-                          : "bg-red-50 text-red-700 border border-red-200"
-                      }`}
-                    >
-                      {ev.status}
-                    </span>
+                    <div className="flex flex-col items-end gap-1.5">
+                      <span
+                        className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider ${
+                          ev.status === "PUBLISHED"
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : ev.status === "DRAFT"
+                            ? "bg-amber-50 text-amber-700 border border-amber-200"
+                            : "bg-red-50 text-red-700 border border-red-200"
+                        }`}
+                      >
+                        {ev.status}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 text-[9px] font-semibold rounded-full border ${
+                          ev.audience === "EMPLOYEES_ONLY"
+                            ? "bg-blue-50 text-blue-700 border-blue-200"
+                            : ev.audience === "MEMBERS_ONLY"
+                            ? "bg-purple-50 text-purple-700 border-purple-200"
+                            : "bg-slate-50 text-slate-600 border-slate-200"
+                        }`}
+                      >
+                        {ev.audience === "EMPLOYEES_ONLY"
+                          ? "Staff Only"
+                          : ev.audience === "MEMBERS_ONLY"
+                          ? "Members Only"
+                          : "Universal"}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Title & Description */}
@@ -518,26 +539,43 @@ export default function AdminEventsPage() {
                         }
                         className="w-full px-3 py-2 text-sm rounded-lg border border-border/80 bg-background focus:outline-none focus:ring-2 focus:ring-[#B08A4A]"
                       >
-                        <option value="PUBLISHED">Published (Visible to Seniors)</option>
+                        <option value="PUBLISHED">Published (Active)</option>
                         <option value="DRAFT">Draft (Admin Only)</option>
                         <option value="CANCELLED">Cancelled</option>
                       </select>
                     </div>
 
-                    <div className="flex items-center gap-2 pt-6">
-                      <input
-                        type="checkbox"
-                        id="visibleToAll"
-                        checked={formData.visibleToAll}
-                        onChange={(e) =>
-                          setFormData({ ...formData, visibleToAll: e.target.checked })
-                        }
-                        className="w-4 h-4 text-[#B08A4A] rounded border-border"
-                      />
-                      <label htmlFor="visibleToAll" className="text-xs font-semibold text-slate-700">
-                        Visible to all active members (Default)
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Audience Reach
                       </label>
+                      <select
+                        value={formData.audience}
+                        onChange={(e) =>
+                          setFormData({ ...formData, audience: e.target.value as any })
+                        }
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-border/80 bg-background focus:outline-none focus:ring-2 focus:ring-[#B08A4A]"
+                      >
+                        <option value="EVERYONE">Universal (Members & Staff)</option>
+                        <option value="MEMBERS_ONLY">Members Only</option>
+                        <option value="EMPLOYEES_ONLY">Employees Only (Staff)</option>
+                      </select>
                     </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-2">
+                    <input
+                      type="checkbox"
+                      id="visibleToAll"
+                      checked={formData.visibleToAll}
+                      onChange={(e) =>
+                        setFormData({ ...formData, visibleToAll: e.target.checked })
+                      }
+                      className="w-4 h-4 text-[#B08A4A] rounded border-border"
+                    />
+                    <label htmlFor="visibleToAll" className="text-xs font-semibold text-slate-700">
+                      Visible in feeds without membership restriction
+                    </label>
                   </div>
                 </div>
 

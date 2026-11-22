@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
             status: "PUBLISHED",
             visibleToAll: true,
             eventDate: { gte: todayStart },
+            audience: { in: ["EVERYONE", "MEMBERS_ONLY"] },
           },
           orderBy: { eventDate: "asc" },
           take: 10,

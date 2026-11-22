@@ -85,6 +85,8 @@ export function formatEmployeeVisit(v: any) {
     workDescription: v.workDescription || null,
     status: v.status,
     completedAt: v.completedAt ? v.completedAt.toISOString() : null,
+    isEmergency: false,
+    emergencyClassification: null as string | null,
 
     // Nested structures for full backward compatibility:
     member: {
@@ -111,5 +113,82 @@ export function formatEmployeeVisit(v: any) {
       departureDateDisplay: v.actualEnd ? formatDateIST(v.actualEnd) : null,
     },
     operationalNotes: v.operationalNotes || null,
+  };
+}
+
+export function formatEmergencyIncidentAsVisit(incident: any) {
+  const profile = incident.user?.memberProfile;
+  const name =
+    incident.callerName ||
+    (profile ? `${profile.firstName || ""} ${profile.lastName || ""}`.trim() : "Member");
+  const phone = incident.callerPhone || profile?.mobileNumber || "";
+  const address =
+    incident.fallbackAddress || profile?.serviceAddress || "Emergency Location Provided";
+  const start = incident.dispatchedAt || incident.triggeredAt || new Date();
+
+  return {
+    id: incident.id,
+    memberId: incident.memberId || profile?.memberId || "EMERGENCY",
+    primaryMemberName: name,
+    spouseName: null,
+    primaryMobile: phone,
+    serviceAddress: address,
+    scheduledDate: formatDateIST(start),
+    scheduledStartTime: formatTime12HourIST(start),
+    scheduledEndTime: "IMMEDIATE",
+    scheduledWindowDisplay: "EMERGENCY DISPATCH",
+    actualArrivalDisplay: incident.responderArrivedAt
+      ? formatTime12HourIST(incident.responderArrivedAt)
+      : null,
+    actualDepartureDisplay: incident.resolvedAt
+      ? formatTime12HourIST(incident.resolvedAt)
+      : null,
+    workDescription: `🚨 CODE RED EMERGENCY DISPATCH: ${incident.incidentNumber}${
+      incident.dispatchNotes ? " - " + incident.dispatchNotes : ""
+    }`,
+    status:
+      incident.status === "RESOLVED"
+        ? "COMPLETED"
+        : incident.status === "CANCELLED"
+        ? "CANCELLED"
+        : "IN_PROGRESS",
+    completedAt: incident.resolvedAt ? incident.resolvedAt.toISOString() : null,
+    isEmergency: true,
+    emergencyClassification: incident.classification || "CODE_RED",
+    incidentNumber: incident.incidentNumber,
+    member: {
+      primaryName: name,
+      spouseName: "—",
+      memberId: incident.memberId || profile?.memberId || "EMERGENCY",
+      mobileNumber: phone,
+      serviceAddress: address,
+    },
+    scheduled: {
+      start: start.toISOString(),
+      end: start.toISOString(),
+      dateDisplay: formatDateIST(start),
+      timeDisplay: "EMERGENCY DISPATCH",
+      startTimeDisplay: formatTime12HourIST(start),
+      endTimeDisplay: "IMMEDIATE",
+    },
+    actual: {
+      arrival: incident.responderArrivedAt
+        ? incident.responderArrivedAt.toISOString()
+        : null,
+      departure: incident.resolvedAt ? incident.resolvedAt.toISOString() : null,
+      arrivalDisplay: incident.responderArrivedAt
+        ? formatTime12HourIST(incident.responderArrivedAt)
+        : null,
+      departureDisplay: incident.resolvedAt
+        ? formatTime12HourIST(incident.resolvedAt)
+        : null,
+      arrivalDateDisplay: incident.responderArrivedAt
+        ? formatDateIST(incident.responderArrivedAt)
+        : null,
+      departureDateDisplay: incident.resolvedAt
+        ? formatDateIST(incident.resolvedAt)
+        : null,
+    },
+    operationalNotes: incident.dispatchNotes || incident.triggerNotes || null,
   };
 }

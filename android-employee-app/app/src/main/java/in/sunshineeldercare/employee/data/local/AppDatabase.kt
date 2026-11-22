@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import `in`.sunshineeldercare.employee.data.local.dao.VisitDao
 import `in`.sunshineeldercare.employee.data.local.entity.VisitEntity
 
-@Database(entities = [VisitEntity::class], version = 2, exportSchema = false)
+@Database(entities = [VisitEntity::class], version = 3, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun visitDao(): VisitDao

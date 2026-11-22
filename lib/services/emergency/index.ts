@@ -14,7 +14,8 @@ export type EmergencyTriggerSource =
   | "MEMBER_APP_SOS"
   | "WEB_SOS"
   | "HELPLINE_CALL"
-  | "MANUAL_ENTRY";
+  | "MANUAL_ENTRY"
+  | "EMPLOYEE_APP_SOS";
 
 export interface CreateIncidentParams {
   idempotencyKey?: string | null;

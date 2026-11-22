@@ -43,7 +43,9 @@ data class EmployeeVisitDto(
     val actualDepartureDisplay: String? = null,
     val workDescription: String? = null,
     val status: String = "SCHEDULED",
-    val completedAt: String? = null
+    val completedAt: String? = null,
+    val isEmergency: Boolean = false,
+    val emergencyClassification: String? = null
 )
 
 // Auth Models
@@ -233,5 +235,116 @@ data class RecordArrivalResponse(
     val message: String? = null,
     val status: String? = null,
     val responderArrivedAt: String? = null,
+    val error: String? = null
+)
+
+// Duty Tracking Models
+@Serializable
+data class DutyStatusResponse(
+    val success: Boolean,
+    val isOnDuty: Boolean = false,
+    val activeSession: DutySessionDto? = null,
+    val todayDurationMinutes: Int = 0,
+    val todaySessionsCount: Int = 0,
+    val error: String? = null
+)
+
+@Serializable
+data class DutySessionDto(
+    val id: String = "",
+    val employeeId: String = "",
+    val startTime: String = "",
+    val endTime: String? = null,
+    val durationMinutes: Int? = null,
+    val status: String = "ON_DUTY",
+    val notes: String? = null
+)
+
+@Serializable
+data class StartDutyRequest(
+    val notes: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null
+)
+
+@Serializable
+data class EndDutyRequest(
+    val notes: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null
+)
+
+@Serializable
+data class DutyHistoryResponse(
+    val success: Boolean,
+    val count: Int = 0,
+    val totalMinutes: Int = 0,
+    val sessions: List<DutySessionDto> = emptyList(),
+    val error: String? = null
+)
+
+// Employee SOS Models
+@Serializable
+data class EmployeeSosRequest(
+    val notes: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null
+)
+
+@Serializable
+data class EmployeeSosResponse(
+    val success: Boolean,
+    val incidentId: String? = null,
+    val incidentNumber: String? = null,
+    val message: String? = null,
+    val error: String? = null
+)
+
+// Community Events Models
+@Serializable
+data class CommunityEventDto(
+    val id: String = "",
+    val title: String = "",
+    val description: String = "",
+    val eventDate: String = "",
+    val startTime: String = "",
+    val endTime: String? = null,
+    val venue: String = "",
+    val imageUrl: String? = null,
+    val audience: String = "EVERYONE"
+)
+
+@Serializable
+data class EmployeeEventsResponse(
+    val success: Boolean,
+    val events: List<CommunityEventDto> = emptyList(),
+    val error: String? = null
+)
+
+// Leave Models
+@Serializable
+data class ApplyLeaveRequest(
+    val startDate: String,
+    val endDate: String,
+    val reason: String
+)
+
+@Serializable
+data class LeaveRequestDto(
+    val id: String = "",
+    val employeeId: String = "",
+    val startDate: String = "",
+    val endDate: String = "",
+    val totalDays: Int = 1,
+    val reason: String = "",
+    val status: String = "PENDING",
+    val adminRemarks: String? = null,
+    val createdAt: String = ""
+)
+
+@Serializable
+data class LeaveListResponse(
+    val success: Boolean,
+    val requests: List<LeaveRequestDto> = emptyList(),
     val error: String? = null
 )

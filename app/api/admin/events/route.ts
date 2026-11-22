@@ -69,6 +69,7 @@ export async function POST(req: NextRequest) {
       venue,
       imageUrl,
       visibleToAll = true,
+      audience = "EVERYONE",
       status = "PUBLISHED",
     } = body;
 
@@ -78,6 +79,10 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    const validAudience = ["EVERYONE", "MEMBERS_ONLY", "EMPLOYEES_ONLY"].includes(audience)
+      ? audience
+      : "EVERYONE";
 
     const newEvent = await db.communityEvent.create({
       data: {
@@ -89,6 +94,7 @@ export async function POST(req: NextRequest) {
         venue: venue.trim(),
         imageUrl: imageUrl ? imageUrl.trim() : null,
         visibleToAll: Boolean(visibleToAll),
+        audience: validAudience,
         status: status || "PUBLISHED",
       },
     });

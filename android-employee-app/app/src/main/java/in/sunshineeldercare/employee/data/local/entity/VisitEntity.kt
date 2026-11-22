@@ -22,6 +22,8 @@ data class VisitEntity(
     val workDescription: String? = null,
     val status: String,
     val completedAt: String? = null,
+    val isEmergency: Boolean = false,
+    val emergencyClassification: String? = null,
     val lastSyncedAt: Long = System.currentTimeMillis()
 ) {
     fun toDto(): EmployeeVisitDto {
@@ -40,7 +42,9 @@ data class VisitEntity(
             actualDepartureDisplay = actualDepartureDisplay,
             workDescription = workDescription,
             status = status,
-            completedAt = completedAt
+            completedAt = completedAt,
+            isEmergency = isEmergency,
+            emergencyClassification = emergencyClassification
         )
     }
 
@@ -62,6 +66,8 @@ data class VisitEntity(
                 workDescription = dto.workDescription,
                 status = dto.status,
                 completedAt = dto.completedAt,
+                isEmergency = dto.isEmergency,
+                emergencyClassification = dto.emergencyClassification,
                 lastSyncedAt = timestamp
             )
         }
