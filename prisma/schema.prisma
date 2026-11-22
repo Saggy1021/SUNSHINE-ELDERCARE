@@ -689,6 +689,9 @@ model Employee {
   visits      CareVisit[]
   tasks       CareTask[]
   sessions    EmployeeSession[]
+  dutySessions DutySession[]
+  leaveRequests EmployeeLeaveRequest[]
+  attendanceCorrections AttendanceCorrectionLog[]
   emergencyIncidents EmergencyIncident[] @relation("EmergencyResponder")
 
   // Authentication Fields for Native Android Employee App
@@ -1227,11 +1230,13 @@ model CommunityEvent {
   venue        String
   imageUrl     String?
   visibleToAll Boolean   @default(true)
+  audience     String    @default("EVERYONE") // EVERYONE, MEMBERS_ONLY, EMPLOYEES_ONLY
   status       String    @default("PUBLISHED") // DRAFT, PUBLISHED, CANCELLED
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
   @@index([status, eventDate])
+  @@index([audience])
 }
 
 // --- Member Complaints & Redressal ---
@@ -1315,5 +1320,65 @@ model AppRelease {
 
   @@unique([appId, versionCode])
   @@index([appId, isPublished, releasedAt(sort: Desc)])
+}
+
+// --- Employee Duty, Attendance & Leave Management ---
+
+model DutySession {
+  id              String                    @id @default(cuid())
+  employeeId      String
+  employee        Employee                  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  startTime       DateTime                  @default(now())
+  endTime         DateTime?
+  durationMinutes Int?
+  status          String                    @default("ON_DUTY") // ON_DUTY, COMPLETED, CANCELLED
+  startLatitude   Float?
+  startLongitude  Float?
+  endLatitude     Float?
+  endLongitude    Float?
+  notes           String?                   @db.Text
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  corrections     AttendanceCorrectionLog[]
+
+  @@index([employeeId, startTime])
+  @@index([status])
+}
+
+model EmployeeLeaveRequest {
+  id           String    @id @default(cuid())
+  employeeId   String
+  employee     Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  startDate    DateTime
+  endDate      DateTime
+  totalDays    Int       @default(1)
+  reason       String    @db.Text
+  status       String    @default("PENDING") // PENDING, APPROVED, REJECTED, CANCELLED
+  adminRemarks String?   @db.Text
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([employeeId, status])
+  @@index([startDate, endDate])
+}
+
+model AttendanceCorrectionLog {
+  id            String       @id @default(cuid())
+  dutySessionId String?
+  dutySession   DutySession? @relation(fields: [dutySessionId], references: [id], onDelete: SetNull)
+  employeeId    String
+  employee      Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  adminUserId   String
+  adminEmail    String
+  reason        String       @db.Text
+  previousState String       @db.Text // JSON snapshot
+  newState      String       @db.Text // JSON snapshot
+  createdAt     DateTime     @default(now())
+
+  @@index([employeeId])
+  @@index([dutySessionId])
 }
 

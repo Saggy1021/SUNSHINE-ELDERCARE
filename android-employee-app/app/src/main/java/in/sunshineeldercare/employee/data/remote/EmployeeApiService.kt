@@ -83,4 +83,48 @@ interface EmployeeApiService {
     suspend fun recordEmergencyArrival(
         @Body request: RecordArrivalRequest
     ): Response<RecordArrivalResponse>
+
+    // Duty Management endpoints
+    @GET("api/employee/duty/status")
+    @Headers("Accept: application/json")
+    suspend fun getDutyStatus(): Response<DutyStatusResponse>
+
+    @POST("api/employee/duty/start")
+    @Headers("Accept: application/json", "Content-Type: application/json")
+    suspend fun startDuty(
+        @Body request: StartDutyRequest = StartDutyRequest()
+    ): Response<DutyStatusResponse>
+
+    @POST("api/employee/duty/end")
+    @Headers("Accept: application/json", "Content-Type: application/json")
+    suspend fun endDuty(
+        @Body request: EndDutyRequest = EndDutyRequest()
+    ): Response<DutyStatusResponse>
+
+    @GET("api/employee/duty/history")
+    @Headers("Accept: application/json")
+    suspend fun getDutyHistory(): Response<DutyHistoryResponse>
+
+    // Employee SOS endpoint
+    @POST("api/employee/emergency/sos")
+    @Headers("Accept: application/json", "Content-Type: application/json")
+    suspend fun triggerSos(
+        @Body request: EmployeeSosRequest = EmployeeSosRequest()
+    ): Response<EmployeeSosResponse>
+
+    // Universal Events endpoint
+    @GET("api/employee/events")
+    @Headers("Accept: application/json")
+    suspend fun getEvents(): Response<EmployeeEventsResponse>
+
+    // Leave Application endpoints
+    @POST("api/employee/leave")
+    @Headers("Accept: application/json", "Content-Type: application/json")
+    suspend fun applyLeave(
+        @Body request: ApplyLeaveRequest
+    ): Response<GenericApiResponse>
+
+    @GET("api/employee/leave")
+    @Headers("Accept: application/json")
+    suspend fun getLeaveHistory(): Response<LeaveListResponse>
 }

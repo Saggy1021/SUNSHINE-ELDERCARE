@@ -4,6 +4,7 @@ import { getAuthenticatedEmployee } from "@/lib/auth/employee-auth";
 import {
   careVisitEmployeeIncludes,
   formatEmployeeVisit,
+  formatEmergencyIncidentAsVisit,
 } from "@/lib/services/employee-visit-formatter";
 
 // Get Asia/Kolkata today boundary
@@ -65,20 +66,49 @@ export async function GET(req: Request) {
       where.status = "CANCELLED";
     }
 
-    const visits = await db.careVisit.findMany({
-      where,
-      orderBy: { scheduledStart: "asc" }, // Ascending chronological priority
-      include: careVisitEmployeeIncludes,
-    });
+    // Query active emergency incidents assigned to this employee
+    const emgWhere: any = {
+      assignedEmployeeId: employee.id,
+    };
+    if (filter === "today" || filter === "upcoming" || filter === "all") {
+      emgWhere.status = { in: ["TRIGGERED", "ACKNOWLEDGED", "DISPATCHED", "RESPONDER_ON_SCENE"] };
+    } else if (filter === "completed") {
+      emgWhere.status = "RESOLVED";
+    } else if (filter === "cancelled") {
+      emgWhere.status = "CANCELLED";
+    }
+
+    const [visits, assignedIncidents] = await Promise.all([
+      db.careVisit.findMany({
+        where,
+        orderBy: { scheduledStart: "asc" }, // Ascending chronological priority
+        include: careVisitEmployeeIncludes,
+      }),
+      db.emergencyIncident.findMany({
+        where: emgWhere,
+        include: {
+          user: {
+            include: {
+              memberProfile: true,
+            },
+          },
+        },
+        orderBy: { triggeredAt: "desc" },
+      }),
+    ]);
 
     const formattedVisits = visits.map((v) => formatEmployeeVisit(v));
+    const formattedIncidents = assignedIncidents.map((inc) => formatEmergencyIncidentAsVisit(inc));
+
+    // Emergency visits always take top operational priority
+    const allVisits = [...formattedIncidents, ...formattedVisits];
 
     return NextResponse.json({
       success: true,
       filter,
-      total: formattedVisits.length,
-      count: formattedVisits.length,
-      visits: formattedVisits,
+      total: allVisits.length,
+      count: allVisits.length,
+      visits: allVisits,
     });
   } catch (error: any) {
     console.error("[get-employee-visits] Error:", error);

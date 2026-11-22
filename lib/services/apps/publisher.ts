@@ -60,7 +60,7 @@ export class ReleasePublishingService {
    */
   public static readonly AUTHORIZED_FINGERPRINTS: Record<string, string> = {
     "member-app": "370b03fd0c87a9a4620e41fac3859ceeb81ab98752c7673f272548793c4f3394",
-    "employee-app": "370b03fd0c87a9a4620e41fac3859ceeb81ab98752c7673f272548793c4f3394",
+    "employee-app": "843d8e746bd6604b61f4284131556a948ad6b70b8720842a38fec3e2e09af8cd",
   };
 
   /**

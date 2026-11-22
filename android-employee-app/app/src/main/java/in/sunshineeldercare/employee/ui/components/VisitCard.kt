@@ -28,14 +28,17 @@ fun VisitCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isEmergency = visit.isEmergency
+
     Card(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White
+            containerColor = if (isEmergency) Color(0xFFFEF2F2) else Color.White
         ),
+        border = if (isEmergency) androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFDC2626)) else null,
         elevation = CardDefaults.cardElevation(
             defaultElevation = 2.dp
         )
@@ -45,7 +48,7 @@ fun VisitCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // Header: Member ID & Status Badge
+            // Header: Member ID / Emergency Badge & Status Badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -55,17 +58,34 @@ fun VisitCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    if (isEmergency) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0xFFDC2626))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "🚨 CODE RED",
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 10.sp
+                                )
+                            )
+                        }
+                    }
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(4.dp))
-                            .background(Slate100)
+                            .background(if (isEmergency) Color(0xFFFEE2E2) else Slate100)
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text(
                             text = visit.memberId,
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontWeight = FontWeight.SemiBold,
-                                color = Slate700
+                                color = if (isEmergency) Color(0xFFDC2626) else Slate700
                             )
                         )
                     }

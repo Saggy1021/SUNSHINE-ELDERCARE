@@ -43,6 +43,7 @@ export async function PUT(
       venue,
       imageUrl,
       visibleToAll,
+      audience,
       status,
     } = body;
 
@@ -60,6 +61,11 @@ export async function PUT(
     if (venue !== undefined) updateData.venue = venue.trim();
     if (imageUrl !== undefined) updateData.imageUrl = imageUrl ? imageUrl.trim() : null;
     if (visibleToAll !== undefined) updateData.visibleToAll = Boolean(visibleToAll);
+    if (audience !== undefined) {
+      updateData.audience = ["EVERYONE", "MEMBERS_ONLY", "EMPLOYEES_ONLY"].includes(audience)
+        ? audience
+        : "EVERYONE";
+    }
     if (status !== undefined) updateData.status = status;
 
     const updated = await db.communityEvent.update({
