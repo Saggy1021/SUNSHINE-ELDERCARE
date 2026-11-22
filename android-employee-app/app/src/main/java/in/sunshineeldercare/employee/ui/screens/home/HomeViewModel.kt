@@ -9,10 +9,9 @@ import `in`.sunshineeldercare.employee.data.remote.EmployeeApiService
 import `in`.sunshineeldercare.employee.data.remote.model.*
 import `in`.sunshineeldercare.employee.data.repository.AuthRepository
 import `in`.sunshineeldercare.employee.data.repository.VisitsRepository
-import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 data class HomeUiState(
     val profile: EmployeeProfile? = null,
@@ -36,12 +35,15 @@ data class HomeUiState(
 
     // SOS State
     val isSosSending: Boolean = false,
+    val isResolvingSos: Boolean = false,
     val activeSosIncident: EmployeeSosIncidentDto? = null,
     val sosAlertMessage: String? = null,
 
-    // Leave Application State
+    // Leave Application & History State
     val isSubmittingLeave: Boolean = false,
-    val leaveMessage: String? = null
+    val leaveMessage: String? = null,
+    val leaveRequests: List<LeaveRequestDto> = emptyList(),
+    val isLoadingLeaves: Boolean = false
 ) {
     val formattedTodayDuty: String
         get() {
@@ -60,6 +62,9 @@ class HomeViewModel(
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
+    // Concurrency guard to eliminate overlapping polling requests
+    private val isPollingActive = AtomicBoolean(false)
+
     private val coroutineExceptionHandler = CoroutineExceptionHandler { _, throwable ->
         Log.e("HomeViewModel", "Uncaught coroutine exception handled", throwable)
         _uiState.update {
@@ -67,7 +72,10 @@ class HomeViewModel(
                 isRefreshing = false,
                 isDutyLoading = false,
                 isSosSending = false,
+                isResolvingSos = false,
                 isSubmittingLeave = false,
+                isLoadingEvents = false,
+                isLoadingLeaves = false,
                 errorMessage = throwable.message ?: "An unexpected error occurred"
             )
         }
@@ -77,12 +85,23 @@ class HomeViewModel(
         observeData()
         refresh()
 
-        // Background silent polling every 3 seconds for live duty status and emergency sync
-        viewModelScope.launch {
+        // Background silent polling loop (3-second interval)
+        // High-performance: IO dispatcher, non-overlapping guard, concurrent duty and SOS checks
+        viewModelScope.launch(Dispatchers.IO) {
             while (isActive) {
-                kotlinx.coroutines.delay(3000L)
-                refreshDutyStatusInternal()
-                refreshActiveSosInternal()
+                delay(3000L)
+                if (isPollingActive.compareAndSet(false, true)) {
+                    try {
+                        coroutineScope {
+                            launch { refreshDutyStatusInternal() }
+                            launch { refreshActiveSosInternal() }
+                        }
+                    } catch (e: Throwable) {
+                        Log.e("HomeViewModel", "Silent background sync tick failed", e)
+                    } finally {
+                        isPollingActive.set(false)
+                    }
+                }
             }
         }
     }
@@ -117,25 +136,40 @@ class HomeViewModel(
         }
     }
 
+    /**
+     * High-speed parallel dashboard refresh.
+     * Executes all non-dependent network requests concurrently on Dispatchers.IO.
+     */
     fun refresh() {
         viewModelScope.launch(coroutineExceptionHandler) {
             _uiState.update { it.copy(isRefreshing = true, errorMessage = null) }
-            runCatching { authRepository.refreshProfile() }
-            val syncResult = visitsRepository.syncVisits()
-            refreshDutyStatusInternal()
-            refreshActiveSosInternal()
-            fetchEventsInternal()
-            _uiState.update {
-                it.copy(
-                    isRefreshing = false,
-                    errorMessage = syncResult.exceptionOrNull()?.message
-                )
+            withContext(Dispatchers.IO) {
+                val profileDeferred = async { runCatching { authRepository.refreshProfile() } }
+                val syncDeferred = async { visitsRepository.syncVisits() }
+                val dutyDeferred = async { refreshDutyStatusInternal() }
+                val sosDeferred = async { refreshActiveSosInternal() }
+                val eventsDeferred = async { fetchEventsInternal() }
+                val leavesDeferred = async { fetchLeaveHistoryInternal() }
+
+                profileDeferred.await()
+                val syncResult = syncDeferred.await()
+                dutyDeferred.await()
+                sosDeferred.await()
+                eventsDeferred.await()
+                leavesDeferred.await()
+
+                _uiState.update {
+                    it.copy(
+                        isRefreshing = false,
+                        errorMessage = syncResult.exceptionOrNull()?.message
+                    )
+                }
             }
         }
     }
 
     fun refreshDutyStatus() {
-        viewModelScope.launch(coroutineExceptionHandler) {
+        viewModelScope.launch(Dispatchers.IO + coroutineExceptionHandler) {
             refreshDutyStatusInternal()
         }
     }
@@ -186,7 +220,7 @@ class HomeViewModel(
         viewModelScope.launch(coroutineExceptionHandler) {
             _uiState.update { it.copy(isDutyLoading = true, errorMessage = null) }
             try {
-                val response = apiService.startDuty(StartDutyRequest())
+                val response = withContext(Dispatchers.IO) { apiService.startDuty(StartDutyRequest()) }
                 if (response.isSuccessful && response.body() != null) {
                     val body = response.body()!!
                     _uiState.update {
@@ -198,11 +232,14 @@ class HomeViewModel(
                             todaySessionsCount = body.todaySessionsCount
                         )
                     }
+                    // Immediate silent background reconciliation
+                    withContext(Dispatchers.IO) { refreshDutyStatusInternal() }
                 } else {
+                    val err = response.errorBody()?.string() ?: "Failed to start duty"
                     _uiState.update {
                         it.copy(
                             isDutyLoading = false,
-                            errorMessage = response.errorBody()?.string() ?: "Failed to start duty"
+                            errorMessage = err
                         )
                     }
                 }
@@ -222,7 +259,7 @@ class HomeViewModel(
         viewModelScope.launch(coroutineExceptionHandler) {
             _uiState.update { it.copy(isDutyLoading = true, errorMessage = null) }
             try {
-                val response = apiService.endDuty(EndDutyRequest())
+                val response = withContext(Dispatchers.IO) { apiService.endDuty(EndDutyRequest()) }
                 if (response.isSuccessful && response.body() != null) {
                     val body = response.body()!!
                     _uiState.update {
@@ -234,11 +271,14 @@ class HomeViewModel(
                             todaySessionsCount = body.todaySessionsCount
                         )
                     }
+                    // Immediate silent background reconciliation
+                    withContext(Dispatchers.IO) { refreshDutyStatusInternal() }
                 } else {
+                    val err = response.errorBody()?.string() ?: "Failed to end duty"
                     _uiState.update {
                         it.copy(
                             isDutyLoading = false,
-                            errorMessage = response.errorBody()?.string() ?: "Failed to end duty"
+                            errorMessage = err
                         )
                     }
                 }
@@ -258,7 +298,9 @@ class HomeViewModel(
         viewModelScope.launch(coroutineExceptionHandler) {
             _uiState.update { it.copy(isSosSending = true) }
             try {
-                val response = apiService.triggerSos(EmployeeSosRequest(notes = notes))
+                val response = withContext(Dispatchers.IO) {
+                    apiService.triggerSos(EmployeeSosRequest(notes = notes))
+                }
                 if (response.isSuccessful && response.body()?.success == true) {
                     val res = response.body()!!
                     val incident = res.incident ?: (if (res.incidentNumber != null) {
@@ -292,8 +334,42 @@ class HomeViewModel(
         }
     }
 
-    fun fetchEvents() {
+    /**
+     * Resolves the active SOS incident ("I Am Safe / End Emergency").
+     * Calls authoritative EmergencyOS resolution workflow on server.
+     */
+    fun resolveSos(incidentId: String? = null, onComplete: (Boolean, String?) -> Unit) {
         viewModelScope.launch(coroutineExceptionHandler) {
+            _uiState.update { it.copy(isResolvingSos = true) }
+            try {
+                val response = withContext(Dispatchers.IO) {
+                    apiService.resolveSos(ResolveSosRequest(incidentId = incidentId))
+                }
+                if (response.isSuccessful && response.body()?.success == true) {
+                    _uiState.update {
+                        it.copy(
+                            isResolvingSos = false,
+                            activeSosIncident = null,
+                            sosAlertMessage = "Emergency marked safe & closed."
+                        )
+                    }
+                    onComplete(true, "Emergency marked safe and closed in EmergencyOS.")
+                    withContext(Dispatchers.IO) { refreshActiveSosInternal() }
+                } else {
+                    val err = response.errorBody()?.string() ?: "Failed to end emergency"
+                    _uiState.update { it.copy(isResolvingSos = false) }
+                    onComplete(false, err)
+                }
+            } catch (e: Throwable) {
+                Log.e("HomeViewModel", "Error resolving SOS", e)
+                _uiState.update { it.copy(isResolvingSos = false) }
+                onComplete(false, e.message ?: "Network error ending emergency")
+            }
+        }
+    }
+
+    fun fetchEvents() {
+        viewModelScope.launch(Dispatchers.IO + coroutineExceptionHandler) {
             fetchEventsInternal()
         }
     }
@@ -319,6 +395,33 @@ class HomeViewModel(
         }
     }
 
+    fun fetchLeaveHistory() {
+        viewModelScope.launch(Dispatchers.IO + coroutineExceptionHandler) {
+            fetchLeaveHistoryInternal()
+        }
+    }
+
+    private suspend fun fetchLeaveHistoryInternal() {
+        _uiState.update { it.copy(isLoadingLeaves = true) }
+        try {
+            val response = apiService.getLeaveHistory()
+            if (response.isSuccessful && response.body() != null) {
+                val requests = response.body()!!.requests
+                _uiState.update {
+                    it.copy(
+                        leaveRequests = requests,
+                        isLoadingLeaves = false
+                    )
+                }
+            } else {
+                _uiState.update { it.copy(isLoadingLeaves = false) }
+            }
+        } catch (e: Throwable) {
+            Log.e("HomeViewModel", "Error fetching leave history", e)
+            _uiState.update { it.copy(isLoadingLeaves = false) }
+        }
+    }
+
     fun applyLeave(
         startDate: String,
         endDate: String,
@@ -328,13 +431,15 @@ class HomeViewModel(
         viewModelScope.launch(coroutineExceptionHandler) {
             _uiState.update { it.copy(isSubmittingLeave = true) }
             try {
-                val response = apiService.applyLeave(
-                    ApplyLeaveRequest(
-                        startDate = startDate,
-                        endDate = endDate,
-                        reason = reason
+                val response = withContext(Dispatchers.IO) {
+                    apiService.applyLeave(
+                        ApplyLeaveRequest(
+                            startDate = startDate,
+                            endDate = endDate,
+                            reason = reason
+                        )
                     )
-                )
+                }
                 if (response.isSuccessful && response.body()?.success == true) {
                     _uiState.update {
                         it.copy(
@@ -342,6 +447,8 @@ class HomeViewModel(
                             leaveMessage = "Leave application submitted successfully."
                         )
                     }
+                    // Immediately refresh leave history
+                    withContext(Dispatchers.IO) { fetchLeaveHistoryInternal() }
                     onComplete(true, "Leave application submitted successfully.")
                 } else {
                     val error = response.errorBody()?.string() ?: "Failed to submit leave application"

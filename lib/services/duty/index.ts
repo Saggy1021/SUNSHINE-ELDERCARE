@@ -45,6 +45,15 @@ export function formatDateIST(date: Date): string {
   }).format(date);
 }
 
+export function formatDateDMY_IST(date: Date): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+}
+
 export function formatDurationHours(durationMinutes: number): string {
   const hrs = Math.floor(durationMinutes / 60);
   const mins = durationMinutes % 60;
@@ -222,7 +231,7 @@ export class DutyService {
 
     const status = await this.getDutyStatus(params.employeeId);
     return {
-      success: true,
+      ...status,
       alreadyActive: false,
       session: newSession,
       status,
@@ -232,6 +241,7 @@ export class DutyService {
   /**
    * Ends the currently active duty session.
    * Calculates duration in minutes and stores completion details.
+   * Safe & Idempotent: If no active session exists, returns current duty status gracefully.
    */
   static async endDuty(params: EndDutyParams) {
     const activeSession = await activeDb.dutySession.findFirst({
@@ -243,7 +253,13 @@ export class DutyService {
     });
 
     if (!activeSession) {
-      throw new Error("No active ON DUTY session found for this employee.");
+      const status = await this.getDutyStatus(params.employeeId);
+      return {
+        ...status,
+        alreadyEnded: true,
+        session: null,
+        status,
+      };
     }
 
     const now = new Date();
@@ -264,7 +280,7 @@ export class DutyService {
 
     const status = await this.getDutyStatus(params.employeeId);
     return {
-      success: true,
+      ...status,
       session: updated,
       status,
     };

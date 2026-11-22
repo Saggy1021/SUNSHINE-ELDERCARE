@@ -1,5 +1,5 @@
 import { db as prisma } from "@/lib/db";
-import { formatDateIST } from "../duty";
+import { formatDateIST, formatDateDMY_IST } from "../duty";
 
 let activeDb: any = prisma;
 
@@ -106,15 +106,16 @@ export class LeaveService {
         id: r.id,
         startDate: r.startDate.toISOString(),
         endDate: r.endDate.toISOString(),
-        startDateDisplay: formatDateIST(r.startDate),
-        endDateDisplay: formatDateIST(r.endDate),
+        startDateDisplay: formatDateDMY_IST(r.startDate),
+        endDateDisplay: formatDateDMY_IST(r.endDate),
         totalDays: r.totalDays,
         reason: r.reason,
         status: r.status,
         adminRemarks: r.adminRemarks,
         appliedAt: r.createdAt.toISOString(),
-        appliedAtDisplay: formatDateIST(r.createdAt),
+        appliedAtDisplay: formatDateDMY_IST(r.createdAt),
         reviewedAt: r.reviewedAt ? r.reviewedAt.toISOString() : null,
+        reviewedAtDisplay: r.reviewedAt ? formatDateDMY_IST(r.reviewedAt) : null,
       })),
     };
   }
@@ -164,14 +165,14 @@ export class LeaveService {
         designation: r.employee.designation,
         startDate: r.startDate.toISOString(),
         endDate: r.endDate.toISOString(),
-        startDateDisplay: formatDateIST(r.startDate),
-        endDateDisplay: formatDateIST(r.endDate),
+        startDateDisplay: formatDateDMY_IST(r.startDate),
+        endDateDisplay: formatDateDMY_IST(r.endDate),
         totalDays: r.totalDays,
         reason: r.reason,
         status: r.status,
         adminRemarks: r.adminRemarks,
         appliedAt: r.createdAt.toISOString(),
-        appliedAtDisplay: formatDateIST(r.createdAt),
+        appliedAtDisplay: formatDateDMY_IST(r.createdAt),
         reviewedAt: r.reviewedAt ? r.reviewedAt.toISOString() : null,
       })),
     };

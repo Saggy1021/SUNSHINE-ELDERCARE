@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { DutyService, setDutyDb } from "../../lib/services/duty";
+import { DutyService, setDutyDb, formatDateDMY_IST } from "../../lib/services/duty";
 import { LeaveService, setLeaveDb } from "../../lib/services/leave";
 import { ReleasePublishingService } from "../../lib/services/apps/publisher";
 import {
@@ -463,8 +463,35 @@ async function runTests() {
   assert.equal(expectedPkg, "in.sunshineeldercare.employee");
   console.log("✅ TEST 12 PASSED: Authorized signing certificate and package ID verified.\n");
 
+  // -------------------------------------------------------------
+  // TEST 13: STRICT DD/MM/YYYY DATE FORMATTING (ZERO TIMESTAMPS)
+  // -------------------------------------------------------------
+  console.log("TEST 13: Strict DD/MM/YYYY Date Formatting Verification...");
+  const sampleDate = new Date("2026-11-23T14:30:00.000Z");
+  const formattedDmy = formatDateDMY_IST(sampleDate);
+  assert.equal(formattedDmy, "23/11/2026", "Must match DD/MM/YYYY in IST");
+  assert.ok(/^\d{2}\/\d{2}\/\d{4}$/.test(formattedDmy), "Must strictly follow DD/MM/YYYY pattern");
+  assert.ok(!formattedDmy.includes("T"), "Must contain zero ISO timestamps");
+  assert.ok(!formattedDmy.includes("Z"), "Must contain zero raw UTC indicators");
+  console.log("✅ TEST 13 PASSED: Strict DD/MM/YYYY date formatting verified.\n");
+
+  // -------------------------------------------------------------
+  // TEST 14: DUTY SERVICE END DUTY IDEMPOTENCY
+  // -------------------------------------------------------------
+  console.log("TEST 14: Duty Service endDuty Idempotency...");
+  // End active duty for emp-test-002 (active from Test 8)
+  const firstEnd = await DutyService.endDuty({ employeeId: "emp-test-002" });
+  assert.equal(firstEnd.isOnDuty, false, "First endDuty must transition to OFF DUTY");
+
+  // Repeated call when already OFF (idempotent check)
+  const idempotentEnd = await DutyService.endDuty({ employeeId: "emp-test-002" });
+  assert.equal(idempotentEnd.success, true, "endDuty should succeed gracefully");
+  assert.equal(idempotentEnd.alreadyEnded, true, "Should report alreadyEnded: true");
+  assert.equal(idempotentEnd.isOnDuty, false, "Must confirm isOnDuty is false");
+  console.log("✅ TEST 14 PASSED: endDuty idempotency when already OFF verified.\n");
+
   console.log("================================================================");
-  console.log("🎉 ALL 12 EMPLOYEE OPERATIONS SYSTEM UNIT TESTS PASSED!");
+  console.log("🎉 ALL 14 EMPLOYEE OPERATIONS SYSTEM UNIT TESTS PASSED!");
   console.log("================================================================");
 }
 

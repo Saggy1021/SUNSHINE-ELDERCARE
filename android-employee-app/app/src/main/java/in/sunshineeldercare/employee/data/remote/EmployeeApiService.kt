@@ -116,6 +116,12 @@ interface EmployeeApiService {
         @Body request: EmployeeSosRequest = EmployeeSosRequest()
     ): Response<EmployeeSosResponse>
 
+    @POST("api/employee/emergency/sos/resolve")
+    @Headers("Accept: application/json", "Content-Type: application/json")
+    suspend fun resolveSos(
+        @Body request: ResolveSosRequest = ResolveSosRequest()
+    ): Response<ResolveSosResponse>
+
     // Universal Events endpoint
     @GET("api/employee/events")
     @Headers("Accept: application/json")

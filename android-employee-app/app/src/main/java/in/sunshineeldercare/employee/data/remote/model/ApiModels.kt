@@ -301,6 +301,24 @@ data class EmployeeSosRequest(
 )
 
 @Serializable
+data class ResolveSosRequest(
+    val incidentId: String? = null,
+    val notes: String? = null
+)
+
+@Serializable
+data class ResolveSosResponse(
+    val success: Boolean,
+    val resolved: Boolean = false,
+    val incidentId: String? = null,
+    val incidentNumber: String? = null,
+    val status: String? = null,
+    val message: String? = null,
+    val alreadyResolved: Boolean = false,
+    val error: String? = null
+)
+
+@Serializable
 data class EmployeeSosResponse(
     val success: Boolean,
     val incidentId: String? = null,
@@ -349,10 +367,14 @@ data class LeaveRequestDto(
     val employeeId: String = "",
     val startDate: String = "",
     val endDate: String = "",
+    val startDateDisplay: String? = null,
+    val endDateDisplay: String? = null,
     val totalDays: Int = 1,
     val reason: String = "",
     val status: String = "PENDING",
     val adminRemarks: String? = null,
+    val appliedAt: String? = null,
+    val appliedAtDisplay: String? = null,
     val createdAt: String = ""
 )
 

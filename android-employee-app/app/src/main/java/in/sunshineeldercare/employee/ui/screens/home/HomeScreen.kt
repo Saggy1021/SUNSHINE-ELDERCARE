@@ -1,11 +1,12 @@
 package `in`.sunshineeldercare.employee.ui.screens.home
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,6 +25,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -36,9 +39,46 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import `in`.sunshineeldercare.employee.R
+import `in`.sunshineeldercare.employee.data.remote.model.CommunityEventDto
+import `in`.sunshineeldercare.employee.data.remote.model.EmployeeSosIncidentDto
+import `in`.sunshineeldercare.employee.data.remote.model.LeaveRequestDto
 import `in`.sunshineeldercare.employee.ui.components.StatusBadge
 import `in`.sunshineeldercare.employee.ui.theme.*
 import `in`.sunshineeldercare.employee.util.EmergencyDispatchMonitor
+
+private const val EMERGENCY_HELPLINE = "03340585515"
+private const val DISPLAY_HELPLINE = "033-40585515"
+
+/**
+ * Normalizes any date string into strict DD/MM/YYYY format.
+ * Guarantees zero raw timestamps, ISO strings, or milliseconds are exposed to employees.
+ */
+fun formatDisplayDmy(dateStr: String?): String {
+    if (dateStr.isNullOrBlank()) return ""
+    val trimmed = dateStr.trim()
+    // Already DD/MM/YYYY
+    if (Regex("^\\d{2}/\\d{2}/\\d{4}$").matches(trimmed)) return trimmed
+    // YYYY-MM-DD
+    if (Regex("^\\d{4}-\\d{2}-\\d{2}").containsMatchIn(trimmed)) {
+        val parts = trimmed.substring(0, 10).split("-")
+        if (parts.size == 3) {
+            return "${parts[2]}/${parts[1]}/${parts[0]}"
+        }
+    }
+    // Parse ISO or Instant
+    return try {
+        val instant = java.time.Instant.parse(trimmed)
+        val zdt = instant.atZone(java.time.ZoneId.of("Asia/Kolkata"))
+        String.format(java.util.Locale.US, "%02d/%02d/%04d", zdt.dayOfMonth, zdt.monthValue, zdt.year)
+    } catch (_: Exception) {
+        try {
+            val ld = java.time.LocalDate.parse(trimmed.substring(0, 10))
+            String.format(java.util.Locale.US, "%02d/%02d/%04d", ld.dayOfMonth, ld.monthValue, ld.year)
+        } catch (_: Exception) {
+            trimmed
+        }
+    }
+}
 
 @Composable
 fun HomeScreen(
@@ -55,7 +95,11 @@ fun HomeScreen(
     // Dialog state
     var showEndDutyDialog by remember { mutableStateOf(false) }
     var showSosConfirmDialog by remember { mutableStateOf(false) }
+    var showSafetyConfirmDialog by remember { mutableStateOf(false) }
     var showLeaveDialog by remember { mutableStateOf(false) }
+
+    // Leave list expansion state
+    var showAllLeaves by remember { mutableStateOf(false) }
 
     // Leave form state with formatted display (DD/MM/YYYY) and normalized backend (YYYY-MM-DD)
     var leaveStartDateDisplay by remember { mutableStateOf("") }
@@ -70,7 +114,7 @@ fun HomeScreen(
             .background(Slate50)
             .verticalScroll(rememberScrollState())
     ) {
-        // Official Header with Duty Controller
+        // Official Header: Logo on left, compact Duty switch on far right (Zero refresh button)
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = Color.White,
@@ -89,55 +133,28 @@ fun HomeScreen(
                         contentDescription = "Sunshine Eldercare",
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
-                            .height(44.dp)
+                            .height(40.dp)
                             .weight(1f, fill = false)
                     )
 
-                    // Duty ON/OFF Switch & Refresh
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        DutyToggleSwitch(
-                            isOnDuty = uiState.isOnDuty,
-                            isLoading = uiState.isDutyLoading,
-                            onToggle = {
-                                if (uiState.isOnDuty) {
-                                    showEndDutyDialog = true
-                                } else {
-                                    viewModel.startDuty()
-                                }
-                            }
-                        )
-
-                        // Refresh Button
-                        IconButton(
-                            onClick = { viewModel.refresh() },
-                            enabled = !uiState.isRefreshing,
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            if (uiState.isRefreshing) {
-                                CircularProgressIndicator(
-                                    color = GoldPrimary,
-                                    strokeWidth = 2.dp,
-                                    modifier = Modifier.size(18.dp)
-                                )
+                    // Compact Duty ON/OFF Switch (Replaces previous refresh button location)
+                    DutyToggleSwitch(
+                        isOnDuty = uiState.isOnDuty,
+                        isLoading = uiState.isDutyLoading,
+                        onToggle = {
+                            if (uiState.isOnDuty) {
+                                showEndDutyDialog = true
                             } else {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = "Refresh Visits",
-                                    tint = DeepNavy,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                                viewModel.startDuty()
                             }
                         }
-                    }
+                    )
                 }
                 HorizontalDivider(color = Slate100, thickness = 1.dp)
             }
         }
 
-        // Active Emergency Dispatch Banner (From EmergencyOS)
+        // Active Emergency Dispatch Banner (From EmergencyOS dispatching this staff member)
         activeEmergency?.let { emg ->
             Surface(
                 modifier = Modifier
@@ -146,7 +163,7 @@ fun HomeScreen(
                     .clickable { onEmergencyClick(emg.id) },
                 shape = RoundedCornerShape(12.dp),
                 color = Color(0xFFFEF2F2),
-                border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFDC2626)),
+                border = BorderStroke(1.5.dp, Color(0xFFDC2626)),
                 shadowElevation = 4.dp
             ) {
                 Row(
@@ -188,159 +205,36 @@ fun HomeScreen(
             }
         }
 
-        // Dedicated Employee SOS Emergency Section (Matching Member App Design & State)
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // -------------------------------------------------------------
+        // SECTION 1: EMPLOYEE EMERGENCY SOS (VISUALLY & FUNCTIONALLY IDENTICAL TO MEMBER APP)
+        // -------------------------------------------------------------
         if (uiState.activeSosIncident != null) {
-            val incident = uiState.activeSosIncident!!
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                shape = RoundedCornerShape(20.dp),
-                color = Color(0xFFFEF2F2),
-                border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFFECACA))
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(18.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(Color(0xFFFEE2E2))
-                            .border(1.dp, Color(0xFFFCA5A5), RoundedCornerShape(50))
-                            .padding(horizontal = 12.dp, vertical = 5.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Sensors,
-                            contentDescription = null,
-                            tint = Color(0xFFDC2626),
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "EMERGENCY ACTIVE • COMMAND CENTER CONNECTED",
-                            color = Color(0xFF991B1B),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 0.5.sp
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Text(
-                        text = "Incident #${incident.incidentNumber}",
-                        color = Color(0xFFDC2626),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontFamily = FontFamily.Monospace
-                    )
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Text(
-                        text = "Your field emergency has been registered with Sunshine EmergencyOS. Care coordinators and response teams are actively responding.",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = Slate600,
-                            textAlign = TextAlign.Center,
-                            lineHeight = 18.sp
-                        )
-                    )
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    Button(
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:03340585515"))
-                            context.startActivity(intent)
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFDC2626),
-                            contentColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(44.dp)
-                    ) {
-                        Icon(Icons.Default.PhoneInTalk, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Call Helpline: 033-40585515", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    }
-                }
-            }
+            // Active Emergency Incident Panel (Emergency Active • Command Center Connected)
+            ActiveSosIncidentCard(
+                incident = uiState.activeSosIncident!!,
+                isResolving = uiState.isResolvingSos,
+                onCallHelpline = {
+                    launchEmergencyDialer(context, EMERGENCY_HELPLINE)
+                },
+                onEndEmergency = {
+                    showSafetyConfirmDialog = true
+                },
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
         } else {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFECACA)),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFDC2626))
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "24/7 FIELD EMERGENCY ASSISTANCE",
-                                color = Color(0xFFDC2626),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 10.sp,
-                                letterSpacing = 0.5.sp
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "Field Operations SOS",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = DeepNavy
-                        )
-                        Text(
-                            text = "Instant Code Red dispatch & safety alert",
-                            fontSize = 11.sp,
-                            color = Slate600
-                        )
-                    }
-
-                    Button(
-                        onClick = { showSosConfirmDialog = true },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFDC2626),
-                            contentColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                        modifier = Modifier.height(40.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PhoneInTalk,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("SOS", fontWeight = FontWeight.Black, fontSize = 13.sp)
-                    }
-                }
-            }
+            // Standard Idle SOS Presentation (Large Circular Red Button with Concentric Rings)
+            CircularSosCard(
+                isSending = uiState.isSosSending,
+                onSosClick = {
+                    showSosConfirmDialog = true
+                },
+                onHelplineClick = {
+                    launchEmergencyDialer(context, EMERGENCY_HELPLINE)
+                },
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
         }
 
         Column(
@@ -448,18 +342,19 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            if (uiState.nextVisit != null) {
-                val next = uiState.nextVisit!!
-                val isEmergency = next.isEmergency
+            val nextVisit = uiState.nextVisit
+            if (nextVisit != null) {
+                val isEmergency = nextVisit.isEmergency
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onVisitClick(next.id) },
-                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = if (isEmergency) Color(0xFFFEF2F2) else Color.White
                     ),
-                    border = if (isEmergency) androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFDC2626)) else null,
+                    border = BorderStroke(
+                        1.dp,
+                        if (isEmergency) Color(0xFFFCA5A5) else Slate100
+                    ),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
@@ -468,85 +363,38 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (isEmergency) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(Color(0xFFDC2626))
-                                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                                    ) {
-                                        Text(
-                                            text = "🚨 CODE RED",
-                                            color = Color.White,
-                                            fontWeight = FontWeight.Black,
-                                            fontSize = 10.sp
-                                        )
-                                    }
-                                    Text(
-                                        text = next.memberId,
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFFDC2626)
-                                        )
-                                    )
-                                }
-                            } else {
-                                Text(
-                                    text = next.memberId,
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        color = DeepNavy
-                                    )
-                                )
-                            }
-                            StatusBadge(status = next.status)
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Text(
-                            text = next.primaryMemberName,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = DeepNavy,
-                                fontSize = 17.sp
-                            )
-                        )
-
-                        if (!next.spouseName.isNullOrBlank() && next.spouseName != "—") {
                             Text(
-                                text = "Spouse: ${next.spouseName}",
-                                style = MaterialTheme.typography.bodySmall.copy(color = Slate600),
-                                modifier = Modifier.padding(top = 2.dp)
+                                text = nextVisit.primaryMemberName,
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isEmergency) Color(0xFF991B1B) else DeepNavy
+                                )
                             )
+                            StatusBadge(status = nextVisit.status)
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
 
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.AccessTime,
+                                imageVector = Icons.Default.Schedule,
                                 contentDescription = null,
-                                tint = if (isEmergency) Color(0xFFDC2626) else GoldPrimary,
+                                tint = if (isEmergency) Color(0xFFDC2626) else Slate400,
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
-                                text = "${next.scheduledDate} • ${next.scheduledWindowDisplay}",
+                                text = "${nextVisit.scheduledDate} • ${nextVisit.scheduledStartTime} - ${nextVisit.scheduledEndTime}",
                                 style = MaterialTheme.typography.bodySmall.copy(
-                                    color = if (isEmergency) Color(0xFFDC2626) else Slate700,
-                                    fontWeight = FontWeight.SemiBold
+                                    color = if (isEmergency) Color(0xFF991B1B) else Slate600,
+                                    fontWeight = if (isEmergency) FontWeight.Bold else FontWeight.Normal
                                 )
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
 
                         Row(
                             verticalAlignment = Alignment.Top,
@@ -559,7 +407,7 @@ fun HomeScreen(
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
-                                text = next.serviceAddress,
+                                text = nextVisit.serviceAddress,
                                 style = MaterialTheme.typography.bodySmall.copy(color = Slate600),
                                 maxLines = 2
                             )
@@ -568,7 +416,7 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.height(14.dp))
 
                         Button(
-                            onClick = { onVisitClick(next.id) },
+                            onClick = { onVisitClick(nextVisit.id) },
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = if (isEmergency) Color(0xFFDC2626) else DeepNavy
@@ -620,7 +468,7 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Quick Navigation & Action Buttons
+            // Operations & Leaves Section
             Text(
                 text = "Operations & Leaves",
                 style = MaterialTheme.typography.titleMedium.copy(
@@ -684,6 +532,94 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            // -------------------------------------------------------------
+            // SECTION 4: MY LEAVE REQUESTS (DIRECTLY BELOW OPERATIONS & LEAVES)
+            // -------------------------------------------------------------
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "My Leave Requests",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = DeepNavy
+                    )
+                )
+                if (uiState.leaveRequests.isNotEmpty()) {
+                    Text(
+                        text = "${uiState.leaveRequests.size} total",
+                        style = MaterialTheme.typography.bodySmall.copy(color = Slate500)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            val displayedLeaves = if (showAllLeaves) {
+                uiState.leaveRequests
+            } else {
+                uiState.leaveRequests.take(3)
+            }
+
+            if (uiState.leaveRequests.isEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color.White,
+                    border = BorderStroke(1.dp, Slate100),
+                    shadowElevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(18.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.EventNote,
+                            contentDescription = null,
+                            tint = Slate400,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "No leave requests submitted yet",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                color = Slate700
+                            )
+                        )
+                        Text(
+                            text = "Tap 'Leave' above to submit an application using the calendar.",
+                            style = MaterialTheme.typography.bodySmall.copy(color = Slate500),
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    for (leave in displayedLeaves) {
+                        LeaveRequestCard(request = leave)
+                    }
+
+                    if (uiState.leaveRequests.size > 3) {
+                        TextButton(
+                            onClick = { showAllLeaves = !showAllLeaves },
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                        ) {
+                            Text(
+                                text = if (showAllLeaves) "Show less" else "View older leave requests (${uiState.leaveRequests.size - 3} more)",
+                                color = DeepNavy,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             // Universal Upcoming Events Section
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -709,7 +645,7 @@ fun HomeScreen(
                 Surface(
                     shape = RoundedCornerShape(10.dp),
                     color = Color.White,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Slate100),
+                    border = BorderStroke(1.dp, Slate100),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
@@ -736,7 +672,6 @@ fun HomeScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                // Event Icon Pill
                                 Box(
                                     modifier = Modifier
                                         .size(44.dp)
@@ -748,7 +683,7 @@ fun HomeScreen(
                                         imageVector = Icons.Default.Event,
                                         contentDescription = null,
                                         tint = GoldPrimary,
-                                        modifier = Modifier.size(20.dp)
+                                        modifier = Modifier.size(24.dp)
                                     )
                                 }
 
@@ -760,31 +695,38 @@ fun HomeScreen(
                                         Text(
                                             text = ev.title,
                                             fontWeight = FontWeight.Bold,
-                                            color = DeepNavy,
-                                            fontSize = 14.sp
+                                            fontSize = 13.sp,
+                                            color = DeepNavy
                                         )
                                         if (ev.audience == "EMPLOYEES_ONLY") {
-                                            Box(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(4.dp))
-                                                    .background(Color(0xFFEFF6FF))
-                                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                                            Surface(
+                                                shape = RoundedCornerShape(4.dp),
+                                                color = Color(0xFFFEF3C7)
                                             ) {
                                                 Text(
-                                                    text = "Staff Only",
-                                                    color = Color(0xFF1D4ED8),
+                                                    text = "STAFF",
+                                                    color = Color(0xFFB45309),
                                                     fontSize = 9.sp,
-                                                    fontWeight = FontWeight.Bold
+                                                    fontWeight = FontWeight.Black,
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                                                 )
                                             }
                                         }
                                     }
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "${ev.eventDate} • ${ev.startTime} • ${ev.venue}",
-                                        color = Slate600,
-                                        fontSize = 11.sp
+                                        text = "${formatDisplayDmy(ev.eventDate)} • ${ev.startTime}${if (!ev.endTime.isNullOrBlank()) " - ${ev.endTime}" else ""}",
+                                        fontSize = 11.sp,
+                                        color = Slate600
                                     )
+                                    if (ev.venue.isNotBlank()) {
+                                        Text(
+                                            text = ev.venue,
+                                            fontSize = 10.sp,
+                                            color = Slate400,
+                                            maxLines = 1
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -794,14 +736,33 @@ fun HomeScreen(
         }
     }
 
-    // End Duty Dialog
+    // -------------------------------------------------------------
+    // DIALOGS & CONFIRMATIONS
+    // -------------------------------------------------------------
+
+    // End Duty Shift Confirmation Dialog
     if (showEndDutyDialog) {
         AlertDialog(
             onDismissRequest = { showEndDutyDialog = false },
-            title = { Text("End Duty Shift?", fontWeight = FontWeight.Bold) },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Schedule,
+                    contentDescription = null,
+                    tint = GoldPrimary,
+                    modifier = Modifier.size(36.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "End Duty Shift?",
+                    fontWeight = FontWeight.Bold,
+                    color = DeepNavy
+                )
+            },
             text = {
                 Text(
-                    "You have been on duty for ${uiState.formattedTodayDuty} today. Are you sure you want to end your shift?"
+                    text = "Are you sure you want to end your current duty shift?\n\nYour active session duration will be recorded on the server and synchronized with the Admin Attendance roster.",
+                    style = MaterialTheme.typography.bodyMedium.copy(color = Slate600)
                 )
             },
             confirmButton = {
@@ -810,20 +771,20 @@ fun HomeScreen(
                         showEndDutyDialog = false
                         viewModel.endDuty()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+                    colors = ButtonDefaults.buttonColors(containerColor = DeepNavy)
                 ) {
-                    Text("End Duty")
+                    Text("Confirm End Duty", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 OutlinedButton(onClick = { showEndDutyDialog = false }) {
-                    Text("Continue Shift")
+                    Text("Cancel")
                 }
             }
         )
     }
 
-    // Emergency SOS Confirmation Dialog (Exact Member App Visual Quality & Safety Dialog)
+    // Trigger SOS Confirmation Dialog (Explicit user confirmation before sending)
     if (showSosConfirmDialog) {
         Dialog(onDismissRequest = { showSosConfirmDialog = false }) {
             Card(
@@ -867,7 +828,7 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.height(10.dp))
 
                     Text(
-                        text = "Are you sure you want to trigger an emergency SOS?\n\nThis will immediately notify the Sunshine Emergency Command Center, transmit your live location, and initiate Code Red emergency dispatch assistance.",
+                        text = "Are you sure you want to trigger an emergency SOS?\n\nThis will immediately notify the Sunshine Emergency Command Center, transmit your field location, and dispatch emergency response assistance.",
                         style = MaterialTheme.typography.bodyMedium.copy(
                             color = Slate600,
                             textAlign = TextAlign.Center,
@@ -916,7 +877,7 @@ fun HomeScreen(
                     OutlinedButton(
                         onClick = { showSosConfirmDialog = false },
                         shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp)
@@ -926,6 +887,103 @@ fun HomeScreen(
                             color = Slate600,
                             fontWeight = FontWeight.SemiBold
                         )
+                    }
+                }
+            }
+        }
+    }
+
+    // Safety Confirmation Dialog ("I Am Safe / End Emergency")
+    if (showSafetyConfirmDialog && uiState.activeSosIncident != null) {
+        val incident = uiState.activeSosIncident!!
+        Dialog(onDismissRequest = { showSafetyConfirmDialog = false }) {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFDEF7EC)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = "Confirm Safe",
+                            tint = Color(0xFF059669),
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = "Confirm Safety & End Emergency",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Black,
+                            color = DeepNavy,
+                            textAlign = TextAlign.Center
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "Are you sure you want to end this active emergency?\n\nThis will communicate to Sunshine EmergencyOS that you are safe and close Incident #${incident.incidentNumber}. The incident record and response history will be preserved in audit records.",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = Slate600,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 22.sp
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Button(
+                        onClick = {
+                            showSafetyConfirmDialog = false
+                            viewModel.resolveSos(incident.id) { success, msg ->
+                                Toast.makeText(
+                                    context,
+                                    msg ?: if (success) "Emergency closed successfully" else "Failed to close emergency",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF059669),
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Confirm Safety & Close Emergency", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedButton(
+                        onClick = { showSafetyConfirmDialog = false },
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                    ) {
+                        Text("Cancel", color = Slate700, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -942,8 +1000,8 @@ fun HomeScreen(
         val startDatePicker = android.app.DatePickerDialog(
             context,
             { _, year, month, dayOfMonth ->
-                leaveStartDateDisplay = String.format("%02d/%02d/%04d", dayOfMonth, month + 1, year)
-                leaveStartDateBackend = String.format("%04d-%02d-%02d", year, month + 1, dayOfMonth)
+                leaveStartDateDisplay = String.format(java.util.Locale.US, "%02d/%02d/%04d", dayOfMonth, month + 1, year)
+                leaveStartDateBackend = String.format(java.util.Locale.US, "%04d-%02d-%02d", year, month + 1, dayOfMonth)
             },
             currYear,
             currMonth,
@@ -953,8 +1011,8 @@ fun HomeScreen(
         val endDatePicker = android.app.DatePickerDialog(
             context,
             { _, year, month, dayOfMonth ->
-                leaveEndDateDisplay = String.format("%02d/%02d/%04d", dayOfMonth, month + 1, year)
-                leaveEndDateBackend = String.format("%04d-%02d-%02d", year, month + 1, dayOfMonth)
+                leaveEndDateDisplay = String.format(java.util.Locale.US, "%02d/%02d/%04d", dayOfMonth, month + 1, year)
+                leaveEndDateBackend = String.format(java.util.Locale.US, "%04d-%02d-%02d", year, month + 1, dayOfMonth)
             },
             currYear,
             currMonth,
@@ -1068,8 +1126,440 @@ fun HomeScreen(
 }
 
 /**
- * Modern, polished horizontal toggle switch for Duty ON/OFF.
- * Large, comfortable mobile touch target with smooth animations.
+ * Standard Idle SOS Presentation — Identical to Member App.
+ * Clean white card, rounded corners (24.dp), 24/7 Assistance heading,
+ * large circular red SOS button with concentric translucent ambient pulse rings,
+ * action text, and Helpline phone badge.
+ */
+@Composable
+fun CircularSosCard(
+    isSending: Boolean,
+    onSosClick: () -> Unit,
+    onHelplineClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // Ambient pulse ring animation matching Member App
+    val infiniteTransition = rememberInfiniteTransition(label = "SosPulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = if (isSending) 1.25f else 1.12f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(if (isSending) 600 else 1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "PulseScale"
+    )
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 20.dp, horizontal = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Header Pill: 24/7 EMERGENCY ASSISTANCE
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(Color(0xFFFEE2E2))
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Shield,
+                        contentDescription = null,
+                        tint = Color(0xFFDC2626),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.size(6.dp))
+                    Text(
+                        text = if (isSending) "EMERGENCY SOS • DISPATCHING NOW" else "24/7 EMERGENCY ASSISTANCE",
+                        color = Color(0xFFDC2626),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Large Circular Button with Subtle Concentric Pulse Rings
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(120.dp)
+            ) {
+                // Outer soft pulse ring
+                Box(
+                    modifier = Modifier
+                        .size(120.dp)
+                        .scale(pulseScale)
+                        .clip(CircleShape)
+                        .background(Color(0x33DC2626))
+                )
+
+                // Outer border ring
+                Box(
+                    modifier = Modifier
+                        .size(106.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x22DC2626))
+                        .border(2.dp, Color(0x66DC2626), CircleShape)
+                )
+
+                // Inner Main Circular SOS Button
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(94.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(listOf(Color(0xFFDC2626), Color(0xFF991B1B)))
+                        )
+                        .border(4.dp, Color(0xFFFDFBF7), CircleShape)
+                        .clickable(enabled = !isSending) {
+                            onSosClick()
+                        }
+                ) {
+                    if (isSending) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                modifier = Modifier.size(28.dp),
+                                strokeWidth = 3.dp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "SENDING",
+                                color = Color.White,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+                        }
+                    } else {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.PhoneInTalk,
+                                contentDescription = "Emergency SOS",
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Text(
+                                text = "SOS",
+                                color = Color.White,
+                                fontSize = 21.sp,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 2.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Action Label
+            Text(
+                text = if (isSending) "CONNECTING TO EMERGENCY COMMAND CENTER..." else "TAP FOR IMMEDIATE EMERGENCY ASSISTANCE",
+                color = if (isSending) Color(0xFF991B1B) else DeepNavy,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 0.5.sp,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Phone Number Badge
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFFEF2F2))
+                    .border(1.dp, Color(0xFFFECACA), RoundedCornerShape(8.dp))
+                    .clickable { onHelplineClick() }
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Phone,
+                        contentDescription = null,
+                        tint = Color(0xFFDC2626),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.size(6.dp))
+                    Text(
+                        text = "Helpline: $DISPLAY_HELPLINE",
+                        color = Color(0xFFDC2626),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Prominent Active Emergency Panel — Identical to Member App.
+ * Displays live incident status, incident number, helpline call button,
+ * and "I Am Safe / End Emergency" button.
+ */
+@Composable
+fun ActiveSosIncidentCard(
+    incident: EmployeeSosIncidentDto,
+    isResolving: Boolean,
+    onCallHelpline: () -> Unit,
+    onEndEmergency: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = Color(0xFFFEF2F2),
+        border = BorderStroke(1.5.dp, Color(0xFFFECACA)),
+        shadowElevation = 2.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Header badge: EMERGENCY ACTIVE • COMMAND CENTER CONNECTED
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(Color(0xFFFEE2E2))
+                    .border(1.dp, Color(0xFFFCA5A5), RoundedCornerShape(50))
+                    .padding(horizontal = 12.dp, vertical = 5.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Sensors,
+                    contentDescription = null,
+                    tint = Color(0xFFDC2626),
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "EMERGENCY ACTIVE • COMMAND CENTER CONNECTED",
+                    color = Color(0xFF991B1B),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 0.5.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Incident number
+            Text(
+                text = "Incident #${incident.incidentNumber}",
+                color = Color(0xFFDC2626),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+                fontFamily = FontFamily.Monospace
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "Your field emergency has been registered with Sunshine EmergencyOS. Care coordinators and response teams are actively responding.",
+                style = MaterialTheme.typography.bodySmall.copy(
+                    color = Slate600,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 18.sp
+                ),
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Primary Action: Call Helpline
+            Button(
+                onClick = onCallHelpline,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFDC2626),
+                    contentColor = Color.White
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+            ) {
+                Icon(Icons.Default.PhoneInTalk, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Call Helpline: $DISPLAY_HELPLINE", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Secondary Action: "I Am Safe / End Emergency"
+            OutlinedButton(
+                onClick = onEndEmergency,
+                enabled = !isResolving,
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
+                colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+            ) {
+                if (isResolving) {
+                    CircularProgressIndicator(
+                        color = Color(0xFF059669),
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Closing Emergency...", color = Slate700, fontSize = 13.sp)
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = Color(0xFF059669),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "I Am Safe / End Emergency",
+                        color = DeepNavy,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Clean Leave Request Card for the Home Dashboard.
+ * Strictly formats all dates as DD/MM/YYYY with zero raw timestamps.
+ */
+@Composable
+fun LeaveRequestCard(
+    request: LeaveRequestDto,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, Slate100),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 1. Leave status badge
+                val (badgeBg, badgeTextColor) = when (request.status.uppercase()) {
+                    "APPROVED" -> Color(0xFFDEF7EC) to Color(0xFF03543F)
+                    "REJECTED" -> Color(0xFFFDE8E8) to Color(0xFF9B1C1C)
+                    "CANCELLED" -> Color(0xFFF1F5F9) to Color(0xFF475569)
+                    else -> Color(0xFFFEF08A) to Color(0xFF713F12) // PENDING amber
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = badgeBg
+                ) {
+                    Text(
+                        text = request.status.uppercase(),
+                        color = badgeTextColor,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 11.sp,
+                        letterSpacing = 0.5.sp,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+
+                if (request.totalDays > 0) {
+                    Text(
+                        text = "${request.totalDays} ${if (request.totalDays == 1) "day" else "days"}",
+                        color = Slate500,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 2. From date
+            Text(
+                text = "From: ${formatDisplayDmy(request.startDateDisplay ?: request.startDate)}",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = DeepNavy
+            )
+
+            // 3. To date
+            Text(
+                text = "To: ${formatDisplayDmy(request.endDateDisplay ?: request.endDate)}",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = DeepNavy
+            )
+
+            // 4. Applied date
+            Text(
+                text = "Applied: ${formatDisplayDmy(request.appliedAtDisplay ?: request.appliedAt ?: request.createdAt)}",
+                fontSize = 12.sp,
+                color = Slate500,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+
+            // 5. Reason if present
+            if (request.reason.isNotBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = Slate50,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Reason: ${request.reason}",
+                        fontSize = 11.sp,
+                        color = Slate700,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                    )
+                }
+            }
+
+            if (!request.adminRemarks.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Admin Note: ${request.adminRemarks}",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (request.status.uppercase() == "REJECTED") Color(0xFFDC2626) else Color(0xFF059669)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Compact, modern horizontal toggle switch for Duty ON/OFF.
+ * Positioned on the right of the header bar.
  */
 @Composable
 fun DutyToggleSwitch(
@@ -1078,37 +1568,37 @@ fun DutyToggleSwitch(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val trackWidth = 126.dp
-    val trackHeight = 34.dp
-    val thumbSize = 26.dp
+    val trackWidth = 88.dp
+    val trackHeight = 30.dp
+    val thumbSize = 22.dp
     val thumbPadding = 4.dp
 
-    val trackColor by androidx.compose.animation.animateColorAsState(
+    val trackColor by animateColorAsState(
         targetValue = if (isOnDuty) Color(0xFF059669) else Color(0xFFE2E8F0),
-        animationSpec = androidx.compose.animation.core.tween(250),
+        animationSpec = tween(250),
         label = "trackColor"
     )
 
-    val thumbOffset by androidx.compose.animation.core.animateDpAsState(
+    val thumbOffset by animateDpAsState(
         targetValue = if (isOnDuty) trackWidth - thumbSize - thumbPadding else thumbPadding,
-        animationSpec = androidx.compose.animation.core.tween(250),
+        animationSpec = tween(250),
         label = "thumbOffset"
     )
 
     Surface(
-        shape = RoundedCornerShape(17.dp),
+        shape = RoundedCornerShape(15.dp),
         color = trackColor,
-        border = androidx.compose.foundation.BorderStroke(
+        border = BorderStroke(
             1.dp,
             if (isOnDuty) Color(0xFF047857) else Color(0xFFCBD5E1)
         ),
         modifier = modifier
             .width(trackWidth)
             .height(trackHeight)
-            .clip(RoundedCornerShape(17.dp))
+            .clip(RoundedCornerShape(15.dp))
             .clickable(
                 enabled = !isLoading,
-                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                interactionSource = remember { MutableInteractionSource() },
                 indication = null
             ) {
                 onToggle()
@@ -1121,7 +1611,7 @@ fun DutyToggleSwitch(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 10.dp),
+                    .padding(horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = if (isOnDuty) Arrangement.Start else Arrangement.End
             ) {
@@ -1129,7 +1619,7 @@ fun DutyToggleSwitch(
                     text = if (isOnDuty) "ON DUTY" else "OFF DUTY",
                     color = if (isOnDuty) Color.White else Color(0xFF475569),
                     fontWeight = FontWeight.Bold,
-                    fontSize = 10.sp,
+                    fontSize = 9.sp,
                     letterSpacing = 0.5.sp
                 )
             }
@@ -1146,12 +1636,12 @@ fun DutyToggleSwitch(
                     CircularProgressIndicator(
                         color = if (isOnDuty) Color(0xFF059669) else Color(0xFF64748B),
                         strokeWidth = 2.dp,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(12.dp)
                     )
                 } else {
                     Box(
                         modifier = Modifier
-                            .size(8.dp)
+                            .size(7.dp)
                             .clip(CircleShape)
                             .background(if (isOnDuty) Color(0xFF059669) else Color(0xFF94A3B8))
                     )
@@ -1159,4 +1649,14 @@ fun DutyToggleSwitch(
             }
         }
     }
+}
+
+private fun launchEmergencyDialer(context: Context, phoneNumber: String) {
+    try {
+        val intent = Intent(Intent.ACTION_DIAL).apply {
+            data = Uri.parse("tel:$phoneNumber")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        context.startActivity(intent)
+    } catch (_: Exception) {}
 }
