@@ -281,6 +281,7 @@ export class DutyService {
     const status = await this.getDutyStatus(params.employeeId);
     return {
       ...status,
+      alreadyEnded: false,
       session: updated,
       status,
     };
