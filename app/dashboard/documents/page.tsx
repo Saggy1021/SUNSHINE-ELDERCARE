@@ -1,9 +1,25 @@
 import { getMemberDocuments } from "@/app/actions/membership"
 import { auth } from "@/auth"
 import { FileText, Download } from "lucide-react"
+import { AppsService } from "@/lib/services/apps"
+import { OfficialMemberAppSection } from "@/components/documents/official-member-app-section"
 
 export default async function FinancialDocumentsPage() {
-  const docs = await getMemberDocuments()
+  const [docs, memberApp] = await Promise.all([
+    getMemberDocuments(),
+    AppsService.getPublishedAppBySlug("member-app").catch(() => null),
+  ]);
+
+  const latestRelease = memberApp?.latestRelease;
+  const appData = latestRelease ? {
+    versionName: latestRelease.versionName,
+    versionCode: latestRelease.versionCode,
+    fileSize: latestRelease.fileSize,
+    sha256: latestRelease.sha256,
+    apkUrl: "/downloads/apps/Sunshine-Member-Release.apk",
+    apkFileName: "Sunshine-Member-Release.apk",
+    releasedAt: latestRelease.releasedAt,
+  } : undefined;
 
   return (
     <div className="space-y-6">
@@ -18,6 +34,9 @@ export default async function FinancialDocumentsPage() {
           <p className="text-sm text-muted-foreground mt-0.5">Securely view and download your invoices, payment receipts, and member contracts.</p>
         </div>
       </div>
+
+      {/* Official Sunshine Member App Installation Package */}
+      <OfficialMemberAppSection app={appData} />
 
       <div className="grid md:grid-cols-2 gap-6">
         {/* Private Documents */}

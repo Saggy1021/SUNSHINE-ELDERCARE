@@ -53,6 +53,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 }
 
+export async function POST(request: NextRequest, { params }: RouteParams) {
+  try {
+    const { slug } = await params;
+    if (!slug) {
+      return NextResponse.json({ error: "Application slug required" }, { status: 400 });
+    }
+    const app = await AppsService.getPublishedAppBySlug(slug);
+    if (!app || !app.latestRelease) {
+      return NextResponse.json({ error: "App not found" }, { status: 404 });
+    }
+    await AppsService.recordDownload(app.latestRelease.id);
+    return NextResponse.json({ success: true, recorded: true });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
 export async function HEAD(request: NextRequest, { params }: RouteParams) {
   return GET(request, { params });
 }

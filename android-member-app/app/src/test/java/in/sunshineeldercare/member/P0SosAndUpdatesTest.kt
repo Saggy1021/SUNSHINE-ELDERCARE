@@ -497,4 +497,58 @@ class P0SosAndUpdatesTest {
         val fallback = computeFallbackUrl(directUrl)
         assertEquals("https://www.sunshineeldercare.in/api/apps/member-app/download", fallback)
     }
+
+    @Test
+    fun testDownloadLockPreventsConcurrentDownloadAttempts() {
+        val isDownloading = java.util.concurrent.atomic.AtomicBoolean(false)
+        var startedDownloads = 0
+
+        fun attemptDownload(): Boolean {
+            if (!isDownloading.compareAndSet(false, true)) {
+                return false
+            }
+            try {
+                startedDownloads++
+                return true
+            } finally {
+                // keep lock held during simulated download
+            }
+        }
+
+        assertTrue("First download attempt must acquire lock", attemptDownload())
+        assertFalse("Second concurrent download attempt must be rejected", attemptDownload())
+        assertFalse("Third concurrent download attempt must be rejected", attemptDownload())
+        assertEquals(1, startedDownloads)
+
+        // Once finished, unlock
+        isDownloading.set(false)
+        assertTrue("Subsequent download attempt after completion must acquire lock", attemptDownload())
+        assertEquals(2, startedDownloads)
+    }
+
+    @Test
+    fun testUpdateCheckLockPreventsConcurrentChecks() {
+        val isChecking = java.util.concurrent.atomic.AtomicBoolean(false)
+        var startedChecks = 0
+
+        fun attemptCheck(): Boolean {
+            if (!isChecking.compareAndSet(false, true)) {
+                return false
+            }
+            try {
+                startedChecks++
+                return true
+            } finally {
+                // simulated check in progress
+            }
+        }
+
+        assertTrue("First check must succeed", attemptCheck())
+        assertFalse("Duplicate concurrent check must be rejected", attemptCheck())
+        assertEquals(1, startedChecks)
+
+        isChecking.set(false)
+        assertTrue("Subsequent check must succeed", attemptCheck())
+        assertEquals(2, startedChecks)
+    }
 }

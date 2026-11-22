@@ -217,8 +217,14 @@ export function AppDownloadCard({ app }: PublishedAppCardProps) {
             href={directDownloadUrl}
             download={release.apkFileName}
             onClick={() => {
-              // Record download telemetry asynchronously without blocking user navigation
-              fetch(`/api/apps/${app.slug}/download`, { method: "GET" }).catch(() => {});
+              // Record download telemetry asynchronously without initiating a duplicate download stream
+              try {
+                if (typeof navigator !== "undefined" && navigator.sendBeacon) {
+                  navigator.sendBeacon(`/api/apps/${app.slug}/download`);
+                } else {
+                  fetch(`/api/apps/${app.slug}/download`, { method: "POST" }).catch(() => {});
+                }
+              } catch (_) {}
             }}
             className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-[#B08A4A] px-5 py-3.5 text-center text-sm font-bold text-white shadow-md shadow-amber-900/20 transition-all duration-200 hover:bg-[#977338] hover:shadow-lg active:scale-[0.99]"
           >
