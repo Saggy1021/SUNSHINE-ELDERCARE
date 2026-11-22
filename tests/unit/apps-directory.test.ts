@@ -15,6 +15,10 @@ if (fs.existsSync(sessionFile) && (!process.env.DATABASE_URL || process.env.DATA
   } catch {}
 }
 
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = "postgresql://mock:mock@localhost:5432/mock_db?schema=public";
+}
+
 import { ApkValidator } from "@/lib/services/apk-validator";
 import { AppsService, setAppsDb } from "@/lib/services/apps";
 
