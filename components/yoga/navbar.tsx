@@ -13,6 +13,7 @@ const links = [
   { label: 'Services', href: '/services' },
   { label: 'Moments of Care', href: '/moments-of-care' },
   { label: 'Membership', href: '/membership' },
+  { label: 'Apps', href: '/apps' },
   { label: 'FAQs', href: '/faqs' },
 ]
 

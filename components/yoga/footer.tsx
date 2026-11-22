@@ -10,6 +10,7 @@ const columns = [
       { label: 'About Us', href: '/about-us' },
       { label: 'Services', href: '/services' },
       { label: 'Moments of Care', href: '/moments-of-care' },
+      { label: 'Download Apps', href: '/apps' },
     ],
   },
   {

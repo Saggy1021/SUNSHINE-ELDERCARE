@@ -1263,3 +1263,54 @@ model ComplaintSequence {
   id      String @id @default("CMP_SEQ")
   current Int    @default(1001)
 }
+
+// --- Sunshine Applications Distribution Directory ---
+
+model PublishedApp {
+  id               String       @id @default(cuid())
+  slug             String       @unique // e.g. "member-app", "employee-app"
+  packageName      String       @unique // e.g. "in.sunshineeldercare.member"
+  name             String       // e.g. "Sunshine Member App"
+  tagline          String?      // e.g. "Elder Care & One-Tap Emergency Support"
+  description      String       @db.Text
+  iconUrl          String?      // e.g. "/images/apps/member-app-icon.png"
+  platform         String       @default("ANDROID") // ANDROID, IOS
+  category         String       @default("HEALTH_AND_FITNESS")
+  isPublished      Boolean      @default(true)
+  isArchived       Boolean      @default(false)
+  currentVersionId String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  versions         AppRelease[]
+
+  @@index([isPublished, isArchived])
+  @@index([packageName])
+}
+
+model AppRelease {
+  id                     String       @id @default(cuid())
+  appId                  String
+  app                    PublishedApp @relation(fields: [appId], references: [id], onDelete: Cascade)
+  
+  versionName            String       // e.g. "1.0.0"
+  versionCode            Int          // e.g. 1
+  apkUrl                 String       // e.g. "/downloads/apps/Sunshine-Member-Release.apk"
+  apkFileName            String       // e.g. "Sunshine-Member-Release.apk"
+  fileSize               Int          // size in bytes
+  sha256                 String       // SHA-256 checksum of the APK file
+  certificateFingerprint String?      // SHA-256 certificate fingerprint
+  minAndroidVersion      String       @default("Android 10 (API 29)")
+  targetSdkVersion       Int?         @default(36)
+  releaseNotes           String?      @db.Text
+  isMandatory            Boolean      @default(false)
+  isPublished            Boolean      @default(true)
+  downloadCount          Int          @default(0)
+  releasedAt             DateTime     @default(now())
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+
+  @@unique([appId, versionCode])
+  @@index([appId, isPublished, releasedAt(sort: Desc)])
+}
+

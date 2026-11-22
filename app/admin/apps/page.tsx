@@ -1,0 +1,1291 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
+import {
+  Smartphone,
+  PlusCircle,
+  UploadCloud,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  Loader2,
+  Edit2,
+  Trash2,
+  History,
+  Eye,
+  EyeOff,
+  Archive,
+  RotateCcw,
+  ShieldCheck,
+  HardDrive,
+  Calendar,
+  ExternalLink,
+  Copy,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
+import {
+  getAllAppsAdminAction,
+  createAppAction,
+  updateAppAction,
+  createReleaseAction,
+  togglePublishReleaseAction,
+  deleteReleaseAction,
+} from "@/app/actions/apps";
+
+interface AppReleaseItem {
+  id: string;
+  versionName: string;
+  versionCode: number;
+  apkUrl: string;
+  apkFileName: string;
+  fileSize: number;
+  sha256: string;
+  certificateFingerprint: string | null;
+  minAndroidVersion: string;
+  targetSdkVersion: number | null;
+  releaseNotes: string | null;
+  isMandatory: boolean;
+  isPublished: boolean;
+  downloadCount: number;
+  releasedAt: string | Date;
+  createdAt: string | Date;
+}
+
+interface PublishedAppItem {
+  id: string;
+  slug: string;
+  packageName: string;
+  name: string;
+  tagline: string | null;
+  description: string;
+  iconUrl: string | null;
+  platform: string;
+  category: string;
+  isPublished: boolean;
+  isArchived: boolean;
+  currentVersionId: string | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  versions: AppReleaseItem[];
+}
+
+export default function AdminAppsPage() {
+  const [apps, setApps] = useState<PublishedAppItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Modals state
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+
+  // Active items for modals
+  const [selectedApp, setSelectedApp] = useState<PublishedAppItem | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Add App Form State
+  const [newAppForm, setNewAppForm] = useState({
+    name: "",
+    slug: "",
+    packageName: "",
+    tagline: "",
+    description: "",
+    iconUrl: "",
+    category: "HEALTH_AND_FITNESS",
+    isPublished: true,
+  });
+
+  // Edit App Form State
+  const [editAppForm, setEditAppForm] = useState({
+    name: "",
+    tagline: "",
+    description: "",
+    iconUrl: "",
+    category: "HEALTH_AND_FITNESS",
+    isPublished: true,
+    isArchived: false,
+  });
+
+  // Upload Release State
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [inspectionResult, setInspectionResult] = useState<{
+    isValid: boolean;
+    packageName?: string;
+    versionName?: string;
+    versionCode?: number;
+    minSdkVersion?: string;
+    targetSdkVersion?: number;
+    fileSize?: number;
+    sha256?: string;
+    certificateFingerprint?: string;
+    apkFileName?: string;
+    apkUrl?: string;
+    error?: string;
+  } | null>(null);
+
+  const [releaseForm, setReleaseForm] = useState({
+    versionName: "",
+    versionCode: 1,
+    minAndroidVersion: "Android 10 (API 29)",
+    targetSdkVersion: 36,
+    releaseNotes: "",
+    isMandatory: false,
+    isPublished: true,
+  });
+
+  const loadApps = async () => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const data = await getAllAppsAdminAction();
+      setApps(data as unknown as PublishedAppItem[]);
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Failed to load applications");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadApps();
+  }, []);
+
+  const showNotification = (msg: string, isError = false) => {
+    if (isError) {
+      setErrorMsg(msg);
+      setTimeout(() => setErrorMsg(null), 5000);
+    } else {
+      setSuccessMsg(msg);
+      setTimeout(() => setSuccessMsg(null), 4000);
+    }
+  };
+
+  // ==========================================
+  // ADD APP HANDLERS
+  // ==========================================
+  const handleOpenAddModal = () => {
+    setNewAppForm({
+      name: "",
+      slug: "",
+      packageName: "",
+      tagline: "",
+      description: "",
+      iconUrl: "",
+      category: "HEALTH_AND_FITNESS",
+      isPublished: true,
+    });
+    setIsAddModalOpen(true);
+  };
+
+  const handleCreateApp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setErrorMsg(null);
+    try {
+      await createAppAction({
+        name: newAppForm.name,
+        slug: newAppForm.slug,
+        packageName: newAppForm.packageName,
+        tagline: newAppForm.tagline || undefined,
+        description: newAppForm.description,
+        iconUrl: newAppForm.iconUrl || undefined,
+        category: newAppForm.category,
+        isPublished: newAppForm.isPublished,
+      });
+      setIsAddModalOpen(false);
+      showNotification(`Application "${newAppForm.name}" created successfully.`);
+      await loadApps();
+    } catch (err: any) {
+      showNotification(err?.message || "Failed to create application", true);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ==========================================
+  // EDIT APP HANDLERS
+  // ==========================================
+  const handleOpenEditModal = (app: PublishedAppItem) => {
+    setSelectedApp(app);
+    setEditAppForm({
+      name: app.name,
+      tagline: app.tagline || "",
+      description: app.description,
+      iconUrl: app.iconUrl || "",
+      category: app.category,
+      isPublished: app.isPublished,
+      isArchived: app.isArchived,
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdateApp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedApp) return;
+    setSaving(true);
+    setErrorMsg(null);
+    try {
+      await updateAppAction(selectedApp.id, editAppForm);
+      setIsEditModalOpen(false);
+      showNotification(`Application "${editAppForm.name}" updated successfully.`);
+      await loadApps();
+    } catch (err: any) {
+      showNotification(err?.message || "Failed to update application", true);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Quick toggle published
+  const handleToggleAppPublished = async (app: PublishedAppItem) => {
+    try {
+      await updateAppAction(app.id, { isPublished: !app.isPublished });
+      showNotification(
+        `Application "${app.name}" is now ${!app.isPublished ? "Published" : "Unpublished"}.`
+      );
+      await loadApps();
+    } catch (err: any) {
+      showNotification(err?.message || "Failed to toggle status", true);
+    }
+  };
+
+  // Quick toggle archive
+  const handleToggleAppArchived = async (app: PublishedAppItem) => {
+    try {
+      await updateAppAction(app.id, { isArchived: !app.isArchived });
+      showNotification(
+        `Application "${app.name}" ${!app.isArchived ? "archived" : "restored"}.`
+      );
+      await loadApps();
+    } catch (err: any) {
+      showNotification(err?.message || "Failed to update archive status", true);
+    }
+  };
+
+  // ==========================================
+  // UPLOAD RELEASE HANDLERS
+  // ==========================================
+  const handleOpenUploadModal = (app: PublishedAppItem) => {
+    setSelectedApp(app);
+    setUploadFile(null);
+    setInspectionResult(null);
+    const nextCode = app.versions.length > 0 ? Math.max(...app.versions.map((v) => v.versionCode)) + 1 : 1;
+    setReleaseForm({
+      versionName: "1.0.0",
+      versionCode: nextCode,
+      minAndroidVersion: "Android 10 (API 29)",
+      targetSdkVersion: 36,
+      releaseNotes: "",
+      isMandatory: false,
+      isPublished: true,
+    });
+    setIsUploadModalOpen(true);
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith(".apk")) {
+      showNotification("Please select a valid Android APK file (.apk)", true);
+      return;
+    }
+
+    setUploadFile(file);
+    setUploading(true);
+    setInspectionResult(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      if (selectedApp) {
+        formData.append("appSlug", selectedApp.slug);
+      }
+
+      const res = await fetch("/api/admin/apps/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to upload and inspect APK");
+      }
+
+      setInspectionResult(data.inspection);
+
+      // Pre-fill form from inspection if values detected
+      if (data.inspection?.versionName) {
+        setReleaseForm((prev) => ({
+          ...prev,
+          versionName: data.inspection.versionName,
+          versionCode: data.inspection.versionCode || prev.versionCode,
+          minAndroidVersion: data.inspection.minSdkVersion
+            ? `Android (API ${data.inspection.minSdkVersion})`
+            : prev.minAndroidVersion,
+          targetSdkVersion: data.inspection.targetSdkVersion || prev.targetSdkVersion,
+        }));
+      }
+    } catch (err: any) {
+      showNotification(err?.message || "APK upload failed", true);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handlePublishRelease = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedApp || !inspectionResult || !inspectionResult.isValid) {
+      showNotification("Please upload and validate a valid APK file first", true);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await createReleaseAction({
+        appId: selectedApp.id,
+        versionName: releaseForm.versionName,
+        versionCode: Number(releaseForm.versionCode),
+        apkUrl: inspectionResult.apkUrl || `/downloads/apps/${inspectionResult.apkFileName}`,
+        apkFileName: inspectionResult.apkFileName || uploadFile?.name || "app-release.apk",
+        fileSize: inspectionResult.fileSize || 0,
+        sha256: inspectionResult.sha256 || "",
+        certificateFingerprint: inspectionResult.certificateFingerprint,
+        minAndroidVersion: releaseForm.minAndroidVersion,
+        targetSdkVersion: Number(releaseForm.targetSdkVersion),
+        releaseNotes: releaseForm.releaseNotes || undefined,
+        isMandatory: releaseForm.isMandatory,
+        isPublished: releaseForm.isPublished,
+      });
+
+      setIsUploadModalOpen(false);
+      showNotification(
+        `Version ${releaseForm.versionName} for "${selectedApp.name}" published successfully!`
+      );
+      await loadApps();
+    } catch (err: any) {
+      showNotification(err?.message || "Failed to publish release", true);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ==========================================
+  // VERSION HISTORY & WITHDRAW HANDLERS
+  // ==========================================
+  const handleOpenHistoryModal = (app: PublishedAppItem) => {
+    setSelectedApp(app);
+    setIsHistoryModalOpen(true);
+  };
+
+  const handleToggleReleasePublished = async (release: AppReleaseItem) => {
+    try {
+      await togglePublishReleaseAction(release.id, !release.isPublished);
+      showNotification(
+        `Release v${release.versionName} is now ${!release.isPublished ? "published" : "withdrawn/unpublished"}.`
+      );
+      await loadApps();
+      // Update selectedApp in history view
+      if (selectedApp) {
+        const updated = await getAllAppsAdminAction();
+        const found = (updated as unknown as PublishedAppItem[]).find(
+          (a) => a.id === selectedApp.id
+        );
+        if (found) setSelectedApp(found);
+      }
+    } catch (err: any) {
+      showNotification(err?.message || "Failed to toggle release status", true);
+    }
+  };
+
+  const handleDeleteRelease = async (release: AppReleaseItem) => {
+    if (!confirm(`Are you sure you want to permanently delete release v${release.versionName}?`)) {
+      return;
+    }
+
+    try {
+      await deleteReleaseAction(release.id);
+      showNotification(`Release v${release.versionName} has been deleted.`);
+      await loadApps();
+      if (selectedApp) {
+        const updated = await getAllAppsAdminAction();
+        const found = (updated as unknown as PublishedAppItem[]).find(
+          (a) => a.id === selectedApp.id
+        );
+        if (found) setSelectedApp(found);
+      }
+    } catch (err: any) {
+      showNotification(err?.message || "Failed to delete release", true);
+    }
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (!bytes || bytes <= 0) return "0 MB";
+    const mb = bytes / (1024 * 1024);
+    return `${mb.toFixed(1)} MB`;
+  };
+
+  const formatDate = (date: Date | string): string => {
+    try {
+      const d = typeof date === "string" ? new Date(date) : date;
+      return d.toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return "Unknown";
+    }
+  };
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-5">
+        <div>
+          <div className="flex items-center gap-2">
+            <Smartphone className="h-6 w-6 text-[#B08A4A]" />
+            <h1 className="text-2xl font-bold tracking-tight text-[#091329] dark:text-white">
+              Sunshine Applications Directory
+            </h1>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Manage official mobile applications, publish new APK releases, verify cryptographic signing continuity, and inspect downloads.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <a
+            href="/apps"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-muted transition-colors"
+          >
+            <span>Public Page</span>
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+
+          <button
+            type="button"
+            onClick={handleOpenAddModal}
+            className="inline-flex items-center gap-2 rounded-lg bg-[#B08A4A] px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-[#977338] transition-colors"
+          >
+            <PlusCircle className="h-4 w-4" />
+            <span>Add Application</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Notifications */}
+      {errorMsg && (
+        <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-800">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
+
+      {successMsg && (
+        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-semibold text-emerald-800">
+          <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+          <span>{successMsg}</span>
+        </div>
+      )}
+
+      {/* Apps Table */}
+      <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-border bg-muted/20 flex items-center justify-between">
+          <h2 className="text-sm font-bold text-[#091329] dark:text-white">
+            Configured Mobile Applications ({apps.length})
+          </h2>
+          <span className="text-xs text-muted-foreground">
+            Centralized Database Catalog
+          </span>
+        </div>
+
+        {loading ? (
+          <div className="p-12 text-center text-muted-foreground flex flex-col items-center justify-center gap-2">
+            <Loader2 className="h-6 w-6 animate-spin text-[#B08A4A]" />
+            <span className="text-xs">Loading application catalog...</span>
+          </div>
+        ) : apps.length === 0 ? (
+          <div className="p-12 text-center text-muted-foreground">
+            <Smartphone className="mx-auto h-10 w-10 text-muted-foreground/40 mb-2" />
+            <p className="text-sm font-semibold">No applications configured</p>
+            <p className="text-xs mt-1">Click &quot;Add Application&quot; to configure your first mobile app.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {apps.map((app) => {
+              const latest = app.versions.find((v) => v.isPublished) || app.versions[0];
+              const totalDownloads = app.versions.reduce((acc, v) => acc + (v.downloadCount || 0), 0);
+
+              return (
+                <div key={app.id} className="p-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 hover:bg-muted/10 transition-colors">
+                  {/* Left: App Info */}
+                  <div className="flex items-start gap-4">
+                    <div className="relative h-14 w-14 flex-shrink-0 rounded-xl border border-border bg-muted/30 p-1.5 overflow-hidden flex items-center justify-center">
+                      {app.iconUrl ? (
+                        <img src={app.iconUrl} alt={app.name} className="h-full w-full object-contain" />
+                      ) : (
+                        <Smartphone className="h-8 w-8 text-[#B08A4A]" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-base font-bold text-[#091329] dark:text-white">
+                          {app.name}
+                        </h3>
+                        <span className="font-mono text-[10px] rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-slate-600 dark:text-slate-400">
+                          {app.slug}
+                        </span>
+                        {app.isPublished ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                            <CheckCircle2 className="h-3 w-3" /> Published
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-700">
+                            <EyeOff className="h-3 w-3" /> Draft
+                          </span>
+                        )}
+                        {app.isArchived && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                            <Archive className="h-3 w-3" /> Archived
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="mt-0.5 text-xs text-muted-foreground line-clamp-1">
+                        {app.description}
+                      </p>
+
+                      <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-slate-500">
+                        <span>Package: <strong className="font-mono text-slate-700 dark:text-slate-300">{app.packageName}</strong></span>
+                        <span>
+                          Current Version:{" "}
+                          <strong className="text-slate-700 dark:text-slate-300">
+                            {latest ? `v${latest.versionName} (code ${latest.versionCode})` : "None"}
+                          </strong>
+                        </span>
+                        <span>Releases: <strong>{app.versions.length}</strong></span>
+                        <span>Downloads: <strong>{totalDownloads}</strong></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Actions */}
+                  <div className="flex flex-wrap items-center gap-2 self-start lg:self-center">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenUploadModal(app)}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-[#B08A4A] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#977338] transition-colors"
+                    >
+                      <UploadCloud className="h-3.5 w-3.5" />
+                      <span>Upload Release</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenHistoryModal(app)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-muted transition-colors"
+                    >
+                      <History className="h-3.5 w-3.5 text-slate-500" />
+                      <span>Releases ({app.versions.length})</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditModal(app)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-muted transition-colors"
+                    >
+                      <Edit2 className="h-3.5 w-3.5 text-slate-500" />
+                      <span>Edit</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleToggleAppPublished(app)}
+                      className="p-1.5 rounded-lg border border-border text-slate-600 hover:bg-muted transition-colors"
+                      title={app.isPublished ? "Unpublish application" : "Publish application"}
+                    >
+                      {app.isPublished ? <EyeOff className="h-4 w-4 text-amber-600" /> : <Eye className="h-4 w-4 text-emerald-600" />}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleToggleAppArchived(app)}
+                      className="p-1.5 rounded-lg border border-border text-slate-600 hover:bg-muted transition-colors"
+                      title={app.isArchived ? "Unarchive application" : "Archive application"}
+                    >
+                      <Archive className="h-4 w-4 text-slate-500" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ======================================================== */}
+      {/* MODAL 1: ADD APPLICATION                                  */}
+      {/* ======================================================== */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-card border border-border rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden my-8">
+            <div className="p-5 border-b border-border flex items-center justify-between bg-muted/20">
+              <div className="flex items-center gap-2">
+                <Smartphone className="h-5 w-5 text-[#B08A4A]" />
+                <h2 className="text-base font-bold text-[#091329] dark:text-white">
+                  Add New Mobile Application
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <XCircle className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateApp} className="p-6 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Application Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Sunshine Member App"
+                    value={newAppForm.name}
+                    onChange={(e) => {
+                      const name = e.target.value;
+                      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+                      setNewAppForm({ ...newAppForm, name, slug: newAppForm.slug || slug });
+                    }}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    URL Slug *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. member-app"
+                    value={newAppForm.slug}
+                    onChange={(e) => setNewAppForm({ ...newAppForm, slug: e.target.value })}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Android Package Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. in.sunshineeldercare.member"
+                    value={newAppForm.packageName}
+                    onChange={(e) => setNewAppForm({ ...newAppForm, packageName: e.target.value })}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Tagline
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Elder Care & One-Tap Emergency Support"
+                    value={newAppForm.tagline}
+                    onChange={(e) => setNewAppForm({ ...newAppForm, tagline: e.target.value })}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Description *
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="Detailed purpose and features of this application..."
+                  value={newAppForm.description}
+                  onChange={(e) => setNewAppForm({ ...newAppForm, description: e.target.value })}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Icon URL (relative or CDN)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. /images/apps/member-app-icon.png"
+                    value={newAppForm.iconUrl}
+                    onChange={(e) => setNewAppForm({ ...newAppForm, iconUrl: e.target.value })}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Category
+                  </label>
+                  <select
+                    value={newAppForm.category}
+                    onChange={(e) => setNewAppForm({ ...newAppForm, category: e.target.value })}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs"
+                  >
+                    <option value="HEALTH_AND_FITNESS">Health & Fitness</option>
+                    <option value="MEDICAL">Medical</option>
+                    <option value="PRODUCTIVITY">Productivity</option>
+                    <option value="TOOLS">Tools</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <input
+                  type="checkbox"
+                  id="add-app-published"
+                  checked={newAppForm.isPublished}
+                  onChange={(e) => setNewAppForm({ ...newAppForm, isPublished: e.target.checked })}
+                  className="rounded border-border text-[#B08A4A]"
+                />
+                <label htmlFor="add-app-published" className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                  Publish immediately in Public Directory
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="rounded-lg border border-border px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#B08A4A] px-4 py-2 text-xs font-bold text-white hover:bg-[#977338] disabled:opacity-50"
+                >
+                  {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  <span>Save Application</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 2: EDIT APPLICATION                                 */}
+      {/* ======================================================== */}
+      {isEditModalOpen && selectedApp && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-card border border-border rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden my-8">
+            <div className="p-5 border-b border-border flex items-center justify-between bg-muted/20">
+              <div className="flex items-center gap-2">
+                <Edit2 className="h-5 w-5 text-[#B08A4A]" />
+                <h2 className="text-base font-bold text-[#091329] dark:text-white">
+                  Edit Application: {selectedApp.name}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <XCircle className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateApp} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Application Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editAppForm.name}
+                  onChange={(e) => setEditAppForm({ ...editAppForm, name: e.target.value })}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Tagline
+                </label>
+                <input
+                  type="text"
+                  value={editAppForm.tagline}
+                  onChange={(e) => setEditAppForm({ ...editAppForm, tagline: e.target.value })}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Description *
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={editAppForm.description}
+                  onChange={(e) => setEditAppForm({ ...editAppForm, description: e.target.value })}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Icon URL
+                  </label>
+                  <input
+                    type="text"
+                    value={editAppForm.iconUrl}
+                    onChange={(e) => setEditAppForm({ ...editAppForm, iconUrl: e.target.value })}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Category
+                  </label>
+                  <select
+                    value={editAppForm.category}
+                    onChange={(e) => setEditAppForm({ ...editAppForm, category: e.target.value })}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs"
+                  >
+                    <option value="HEALTH_AND_FITNESS">Health & Fitness</option>
+                    <option value="MEDICAL">Medical</option>
+                    <option value="PRODUCTIVITY">Productivity</option>
+                    <option value="TOOLS">Tools</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-6 pt-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editAppForm.isPublished}
+                    onChange={(e) => setEditAppForm({ ...editAppForm, isPublished: e.target.checked })}
+                    className="rounded border-border text-[#B08A4A]"
+                  />
+                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Published in Public Directory
+                  </span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editAppForm.isArchived}
+                    onChange={(e) => setEditAppForm({ ...editAppForm, isArchived: e.target.checked })}
+                    className="rounded border-border text-amber-600"
+                  />
+                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Archived
+                  </span>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="rounded-lg border border-border px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#B08A4A] px-4 py-2 text-xs font-bold text-white hover:bg-[#977338] disabled:opacity-50"
+                >
+                  {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  <span>Save Changes</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 3: UPLOAD NEW RELEASE                               */}
+      {/* ======================================================== */}
+      {isUploadModalOpen && selectedApp && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-card border border-border rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden my-8">
+            <div className="p-5 border-b border-border flex items-center justify-between bg-muted/20">
+              <div className="flex items-center gap-2">
+                <UploadCloud className="h-5 w-5 text-[#B08A4A]" />
+                <div>
+                  <h2 className="text-base font-bold text-[#091329] dark:text-white">
+                    Upload &amp; Publish New APK: {selectedApp.name}
+                  </h2>
+                  <p className="text-[11px] text-muted-foreground">
+                    Required package ID: <span className="font-mono text-slate-700 dark:text-slate-300">{selectedApp.packageName}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsUploadModalOpen(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <XCircle className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handlePublishRelease} className="p-6 space-y-4">
+              {/* File Dropzone */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Android APK File (.apk) *
+                </label>
+                <div className="relative rounded-xl border-2 border-dashed border-border p-6 text-center hover:border-[#B08A4A]/50 bg-muted/10 transition-colors">
+                  <input
+                    type="file"
+                    accept=".apk,application/vnd.android.package-archive"
+                    onChange={handleFileChange}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <UploadCloud className="h-8 w-8 text-[#B08A4A]" />
+                    <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                      {uploadFile ? uploadFile.name : "Click or drag & drop an APK release"}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Maximum file size: 100MB. APK is analyzed automatically upon selection.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Uploading progress spinner */}
+              {uploading && (
+                <div className="rounded-xl border border-border bg-muted/20 p-4 text-center">
+                  <Loader2 className="mx-auto h-6 w-6 animate-spin text-[#B08A4A]" />
+                  <p className="mt-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Inspecting APK structure and verifying cryptographic signature...
+                  </p>
+                </div>
+              )}
+
+              {/* Inspection Feedback Box */}
+              {inspectionResult && (
+                <div
+                  className={`rounded-xl border p-4 text-xs ${
+                    inspectionResult.isValid
+                      ? "border-emerald-200 bg-emerald-50/70 text-emerald-950"
+                      : "border-rose-200 bg-rose-50 text-rose-950"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 font-bold mb-2">
+                    {inspectionResult.isValid ? (
+                      <>
+                        <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                        <span>APK Successfully Verified</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-4 w-4 text-rose-600" />
+                        <span>APK Verification Failed: {inspectionResult.error}</span>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11px] font-mono mt-2">
+                    <div>
+                      Package: <strong>{inspectionResult.packageName || "N/A"}</strong>
+                    </div>
+                    <div>
+                      Size: <strong>{formatFileSize(inspectionResult.fileSize || 0)}</strong>
+                    </div>
+                    <div>
+                      Version Name: <strong>{inspectionResult.versionName || "N/A"}</strong>
+                    </div>
+                    <div>
+                      Version Code: <strong>{inspectionResult.versionCode || "N/A"}</strong>
+                    </div>
+                    <div className="col-span-2">
+                      SHA-256:{" "}
+                      <span className="block truncate text-[10px] text-slate-700" title={inspectionResult.sha256}>
+                        {inspectionResult.sha256}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Version & Metadata Fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Version Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 1.0.0"
+                    value={releaseForm.versionName}
+                    onChange={(e) => setReleaseForm({ ...releaseForm, versionName: e.target.value })}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Version Code (Integer) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    value={releaseForm.versionCode}
+                    onChange={(e) =>
+                      setReleaseForm({ ...releaseForm, versionCode: parseInt(e.target.value) || 1 })
+                    }
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  What&apos;s New / Release Notes
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Key features, bug fixes, or enhancements in this version..."
+                  value={releaseForm.releaseNotes}
+                  onChange={(e) => setReleaseForm({ ...releaseForm, releaseNotes: e.target.value })}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Minimum Android Version
+                  </label>
+                  <input
+                    type="text"
+                    value={releaseForm.minAndroidVersion}
+                    onChange={(e) => setReleaseForm({ ...releaseForm, minAndroidVersion: e.target.value })}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs"
+                  />
+                </div>
+
+                <div className="flex flex-col justify-center gap-2 pt-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={releaseForm.isMandatory}
+                      onChange={(e) => setReleaseForm({ ...releaseForm, isMandatory: e.target.checked })}
+                      className="rounded border-border text-rose-600"
+                    />
+                    <span className="text-xs font-semibold text-rose-700">
+                      Mandatory Update (force in-app update)
+                    </span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={releaseForm.isPublished}
+                      onChange={(e) => setReleaseForm({ ...releaseForm, isPublished: e.target.checked })}
+                      className="rounded border-border text-[#B08A4A]"
+                    />
+                    <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                      Publish Immediately
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setIsUploadModalOpen(false)}
+                  className="rounded-lg border border-border px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || uploading || !inspectionResult || !inspectionResult.isValid}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#B08A4A] px-4 py-2 text-xs font-bold text-white hover:bg-[#977338] disabled:opacity-50"
+                >
+                  {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  <span>Publish Release</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 4: VERSION HISTORY & WITHDRAW                       */}
+      {/* ======================================================== */}
+      {isHistoryModalOpen && selectedApp && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-card border border-border rounded-2xl max-w-4xl w-full shadow-2xl overflow-hidden my-8">
+            <div className="p-5 border-b border-border flex items-center justify-between bg-muted/20">
+              <div className="flex items-center gap-2">
+                <History className="h-5 w-5 text-[#B08A4A]" />
+                <div>
+                  <h2 className="text-base font-bold text-[#091329] dark:text-white">
+                    Version History: {selectedApp.name}
+                  </h2>
+                  <p className="text-[11px] text-muted-foreground">
+                    Audit log of all uploaded APK releases, download metrics, and publication controls.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsHistoryModalOpen(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <XCircle className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-6 max-h-[70vh] overflow-y-auto">
+              {selectedApp.versions.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground">
+                  <p className="text-sm font-semibold">No releases recorded yet</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {selectedApp.versions.map((release) => (
+                    <div
+                      key={release.id}
+                      className="rounded-xl border border-border p-4 hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-display text-base font-bold text-[#091329] dark:text-white">
+                            v{release.versionName}
+                          </span>
+                          <span className="rounded bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
+                            code {release.versionCode}
+                          </span>
+                          {release.isPublished ? (
+                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                              Published
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                              Withdrawn / Unpublished
+                            </span>
+                          )}
+                          {release.isMandatory && (
+                            <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-800">
+                              Mandatory
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleReleasePublished(release)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs font-semibold hover:bg-muted text-slate-700 dark:text-slate-200"
+                          >
+                            {release.isPublished ? (
+                              <>
+                                <EyeOff className="h-3 w-3 text-amber-600" />
+                                <span>Withdraw</span>
+                              </>
+                            ) : (
+                              <>
+                                <Eye className="h-3 w-3 text-emerald-600" />
+                                <span>Publish</span>
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteRelease(release)}
+                            className="p-1 rounded-lg border border-border text-rose-600 hover:bg-rose-50"
+                            title="Delete this release"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {release.releaseNotes && (
+                        <p className="mt-2 text-xs text-slate-600 dark:text-slate-400 whitespace-pre-line">
+                          {release.releaseNotes}
+                        </p>
+                      )}
+
+                      <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-muted-foreground pt-3 border-t border-border">
+                        <div>
+                          Released: <strong className="text-slate-700 dark:text-slate-300">{formatDate(release.releasedAt)}</strong>
+                        </div>
+                        <div>
+                          Size: <strong className="text-slate-700 dark:text-slate-300">{formatFileSize(release.fileSize)}</strong>
+                        </div>
+                        <div>
+                          Downloads: <strong className="text-slate-700 dark:text-slate-300">{release.downloadCount}</strong>
+                        </div>
+                        <div>
+                          OS: <strong className="text-slate-700 dark:text-slate-300">{release.minAndroidVersion}</strong>
+                        </div>
+                      </div>
+
+                      <div className="mt-2 rounded bg-muted/30 p-2 font-mono text-[10px] text-muted-foreground truncate" title={release.sha256}>
+                        SHA-256: {release.sha256}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-border bg-muted/10 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsHistoryModalOpen(false)}
+                className="rounded-lg border border-border px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-muted"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

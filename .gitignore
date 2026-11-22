@@ -35,6 +35,8 @@ test-results/
 *.keystore
 *.apk
 *.aab
+!public/downloads/apps/*.apk
+!public/downloads/apps/*.aab
 local.properties
 .gradle/
 **/build/

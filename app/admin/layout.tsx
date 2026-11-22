@@ -1,7 +1,7 @@
 import { ReactNode } from "react"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
-import { Shield, Users, RefreshCw, MessageSquare, ClipboardList, Package, Activity, Receipt, CalendarDays, Siren } from "lucide-react"
+import { Shield, Users, RefreshCw, MessageSquare, ClipboardList, Package, Activity, Receipt, CalendarDays, Siren, Smartphone } from "lucide-react"
 import { AuthorizationService } from "@/lib/services/authorization"
 import { WorkspaceShell } from "@/components/workspace/workspace-shell"
 import { WorkspaceNavLink } from "@/components/workspace/workspace-nav-link"
@@ -60,6 +60,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     { name: "Add-ons", href: "/admin/add-ons", icon: <Package className="h-4 w-4" /> },
     { name: "Care Operations", href: "/admin/care", icon: <Activity className="h-4 w-4" /> },
     { name: "Visit Schedule", href: "/admin/schedule", icon: <CalendarDays className="h-4 w-4" /> },
+    { name: "Apps", href: "/admin/apps", icon: <Smartphone className="h-4 w-4 text-[#B08A4A]" /> },
     { name: "Audit Log", href: "/admin/audit-log", icon: <Shield className="h-4 w-4" /> },
   ]
 
