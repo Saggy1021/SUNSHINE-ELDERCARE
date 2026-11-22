@@ -3,6 +3,7 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '4mb',
     },
+    agentUpgrade: false,
   },
   images: {
     unoptimized: true,
