@@ -1,8 +1,6 @@
 import crypto from "crypto";
 import fs from "fs";
-import path from "path";
 import zlib from "zlib";
-import { execSync } from "child_process";
 
 export interface ApkInspectionResult {
   isValid: boolean;
@@ -23,9 +21,9 @@ export interface UpdateVerificationResult {
 }
 
 /**
- * Extracts a specific uncompressed or deflate-compressed file from a ZIP/APK buffer.
+ * Extracts a specific uncompressed or deflate-compressed file from a ZIP/APK buffer in memory.
  */
-function extractFromZip(buf: Buffer, targetPath: string): Buffer | null {
+export function extractFromZip(buf: Buffer, targetPath: string): Buffer | null {
   try {
     let eocdOffset = -1;
     for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65536); i--) {
@@ -41,7 +39,7 @@ function extractFromZip(buf: Buffer, targetPath: string): Buffer | null {
 
     let offset = cdOffset;
     for (let i = 0; i < totalEntries; i++) {
-      if (buf.readUInt32LE(offset) !== 0x02014b50) break;
+      if (offset + 46 > buf.length || buf.readUInt32LE(offset) !== 0x02014b50) break;
 
       const compressionMethod = buf.readUInt16LE(offset + 10);
       const compressedSize = buf.readUInt32LE(offset + 20);
@@ -53,6 +51,7 @@ function extractFromZip(buf: Buffer, targetPath: string): Buffer | null {
       const fileName = buf.toString("utf8", offset + 46, offset + 46 + fileNameLen);
 
       if (fileName === targetPath || fileName.endsWith("/" + targetPath)) {
+        if (localHeaderOffset + 30 > buf.length) return null;
         const localFileNameLen = buf.readUInt16LE(localHeaderOffset + 26);
         const localExtraLen = buf.readUInt16LE(localHeaderOffset + 28);
         const dataStart = localHeaderOffset + 30 + localFileNameLen + localExtraLen;
@@ -74,68 +73,189 @@ function extractFromZip(buf: Buffer, targetPath: string): Buffer | null {
 }
 
 /**
- * Extracts the string pool from Android Binary XML (AXML).
+ * Pure TypeScript parser for Android Binary XML (AXML) AndroidManifest.xml.
+ * Parses the string pool and element attributes to extract package, versionCode,
+ * versionName, minSdkVersion, and targetSdkVersion without external tools.
  */
-function parseAxmlStrings(buf: Buffer): string[] {
+export function parseAxml(manifestBuf: Buffer): {
+  packageName?: string;
+  versionName?: string;
+  versionCode?: number;
+  minSdkVersion?: string;
+  targetSdkVersion?: number;
+} | null {
   try {
-    if (buf.readUInt32LE(0) !== 0x00080003) return [];
-    if (buf.readUInt32LE(8) !== 0x001c0001) return [];
+    if (manifestBuf.length < 8 || manifestBuf.readUInt32LE(0) !== 0x00080003) return null;
 
-    const stringCount = buf.readUInt32LE(16);
-    const flags = buf.readUInt32LE(24);
-    const stringsStart = 8 + buf.readUInt32LE(28);
-    const isUtf8 = (flags & (1 << 8)) !== 0;
+    let offset = 8;
+    const stringPool: string[] = [];
+    const result: {
+      packageName?: string;
+      versionName?: string;
+      versionCode?: number;
+      minSdkVersion?: string;
+      targetSdkVersion?: number;
+    } = {};
 
-    const offsets: number[] = [];
-    for (let i = 0; i < stringCount; i++) {
-      offsets.push(buf.readUInt32LE(36 + i * 4));
-    }
+    while (offset + 8 <= manifestBuf.length) {
+      const chunkType = manifestBuf.readUInt32LE(offset);
+      const chunkSize = manifestBuf.readUInt32LE(offset + 4);
+      if (chunkSize <= 0 || offset + chunkSize > manifestBuf.length) break;
 
-    const strings: string[] = [];
-    for (let i = 0; i < stringCount; i++) {
-      const strPos = stringsStart + offsets[i];
-      if (isUtf8) {
-        const len = buf.readUInt8(strPos + 1);
-        strings.push(buf.toString("utf8", strPos + 2, strPos + 2 + len));
-      } else {
-        const len = buf.readUInt16LE(strPos) * 2;
-        strings.push(buf.toString("utf16le", strPos + 2, strPos + 2 + len));
+      if (chunkType === 0x001c0001) {
+        // CHUNK_STRING_POOL
+        const stringCount = manifestBuf.readUInt32LE(offset + 8);
+        const flags = manifestBuf.readUInt32LE(offset + 16);
+        const stringsStart = offset + manifestBuf.readUInt32LE(offset + 20);
+        const isUtf8 = (flags & (1 << 8)) !== 0;
+        const offsets: number[] = [];
+
+        for (let i = 0; i < stringCount; i++) {
+          offsets.push(manifestBuf.readUInt32LE(offset + 28 + i * 4));
+        }
+
+        for (let i = 0; i < stringCount; i++) {
+          const pos = stringsStart + offsets[i];
+          if (pos >= manifestBuf.length) {
+            stringPool.push("");
+            continue;
+          }
+          if (isUtf8) {
+            const len = manifestBuf.readUInt8(pos + 1);
+            stringPool.push(manifestBuf.toString("utf8", pos + 2, pos + 2 + len));
+          } else {
+            const len = manifestBuf.readUInt16LE(pos) * 2;
+            stringPool.push(manifestBuf.toString("utf16le", pos + 2, pos + 2 + len));
+          }
+        }
+      } else if (chunkType === 0x00100102) {
+        // CHUNK_START_ELEMENT
+        const tagIndex = manifestBuf.readUInt32LE(offset + 20);
+        const tagName = stringPool[tagIndex];
+        const attrCount = manifestBuf.readUInt16LE(offset + 28);
+
+        if (tagName === "manifest") {
+          for (let i = 0; i < attrCount; i++) {
+            const aOff = offset + 36 + i * 20;
+            if (aOff + 20 > manifestBuf.length) break;
+
+            const attrNameIndex = manifestBuf.readUInt32LE(aOff + 4);
+            const rawValueIndex = manifestBuf.readUInt32LE(aOff + 8);
+            const valData = manifestBuf.readUInt32LE(aOff + 16);
+
+            const attrName = stringPool[attrNameIndex];
+            const rawValue =
+              rawValueIndex !== 0xffffffff && rawValueIndex < stringPool.length
+                ? stringPool[rawValueIndex]
+                : undefined;
+
+            if (attrName === "package") {
+              result.packageName = rawValue || (valData < stringPool.length ? stringPool[valData] : undefined);
+            } else if (attrName === "versionCode") {
+              result.versionCode = valData;
+            } else if (attrName === "versionName") {
+              result.versionName = rawValue || (valData < stringPool.length ? stringPool[valData] : undefined);
+            }
+          }
+        } else if (tagName === "uses-sdk") {
+          for (let i = 0; i < attrCount; i++) {
+            const aOff = offset + 36 + i * 20;
+            if (aOff + 20 > manifestBuf.length) break;
+
+            const attrNameIndex = manifestBuf.readUInt32LE(aOff + 4);
+            const valData = manifestBuf.readUInt32LE(aOff + 16);
+            const attrName = stringPool[attrNameIndex];
+
+            if (attrName === "minSdkVersion") {
+              result.minSdkVersion = `Android (API ${valData})`;
+            } else if (attrName === "targetSdkVersion") {
+              result.targetSdkVersion = valData;
+            }
+          }
+        }
       }
+      offset += chunkSize;
     }
-    return strings;
+
+    return result;
   } catch {
-    return [];
+    return null;
   }
 }
 
 /**
- * Attempts to locate standard Android build tools (aapt, apksigner) on the host.
+ * Pure TypeScript parser for APK Signing Block (APK Signature Scheme v2 and v3).
+ * Extracts the primary signer's X.509 certificate and calculates its SHA-256 fingerprint.
  */
-function findTool(toolName: string): string | null {
-  const commonPaths = [
-    `/Users/tanish/Library/Android/sdk/build-tools/34.0.0/${toolName}`,
-    `/Users/tanish/Library/Android/sdk/build-tools/36.0.0/${toolName}`,
-    `/Users/tanish/Library/Android/sdk/build-tools/36.1.0/${toolName}`,
-    toolName,
-  ];
-
-  for (const p of commonPaths) {
-    try {
-      execSync(`${p} --version`, { stdio: "ignore" });
-      return p;
-    } catch {
-      try {
-        execSync(`${p} version`, { stdio: "ignore" });
-        return p;
-      } catch {}
+export function parseApkSigningBlock(buf: Buffer): {
+  fingerprint: string;
+  certDer: Buffer;
+} | null {
+  try {
+    let eocdOffset = -1;
+    for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65536); i--) {
+      if (buf.readUInt32LE(i) === 0x06054b50) {
+        eocdOffset = i;
+        break;
+      }
     }
+    if (eocdOffset === -1) return null;
+
+    const cdOffset = buf.readUInt32LE(eocdOffset + 16);
+    if (cdOffset < 24) return null;
+
+    // Check 16-byte magic: "APK Sig Block 42"
+    const magic = buf.subarray(cdOffset - 16, cdOffset).toString("utf8");
+    if (magic !== "APK Sig Block 42") return null;
+
+    const blockSize = Number(buf.readBigUInt64LE(cdOffset - 24));
+    const blockStart = cdOffset - blockSize - 8;
+    if (blockStart < 0) return null;
+
+    let pos = blockStart + 8;
+    while (pos < cdOffset - 24) {
+      const pairLen = Number(buf.readBigUInt64LE(pos));
+      const id = buf.readUInt32LE(pos + 8);
+
+      // ID 0x7109871a is Scheme v2; ID 0xf05368c0 is Scheme v3
+      if (id === 0x7109871a || id === 0xf05368c0) {
+        const v2Data = buf.subarray(pos + 12, pos + 8 + pairLen);
+        if (v2Data.length < 12) break;
+
+        const signerLen = v2Data.readUInt32LE(4);
+        const signerBuf = v2Data.subarray(8, 8 + signerLen);
+        const signedDataLen = signerBuf.readUInt32LE(0);
+        const signedData = signerBuf.subarray(4, 4 + signedDataLen);
+
+        let sPos = 0;
+        const digestsLen = signedData.readUInt32LE(sPos);
+        sPos += 4 + digestsLen;
+
+        if (sPos + 8 <= signedData.length) {
+          sPos += 4; // skip certsSeqLen
+          const certLen = signedData.readUInt32LE(sPos);
+          sPos += 4;
+
+          if (sPos + certLen <= signedData.length) {
+            const certDer = signedData.subarray(sPos, sPos + certLen);
+            const fingerprint = crypto.createHash("sha256").update(certDer).digest("hex").toLowerCase();
+            return { fingerprint, certDer };
+          }
+        }
+      }
+      pos += 8 + pairLen;
+    }
+  } catch {
+    // Ignore block parsing errors and return null
   }
   return null;
 }
 
 export class ApkValidator {
   /**
-   * Inspects and validates an APK from either a file path or a Buffer.
+   * Inspects and validates an APK from either a file path or an in-memory Buffer.
+   * Completely self-contained: executes 100% in pure TypeScript without any external
+   * build-tools (aapt, apksigner) or temporary disk files, making it safe for Vercel Serverless.
    */
   static inspectApk(input: Buffer | string): ApkInspectionResult {
     if (typeof input === "string") {
@@ -157,15 +277,14 @@ export class ApkValidator {
       };
     }
 
-    const stats = fs.statSync(/*turbopackIgnore: true*/ filePath);
     const buffer = fs.readFileSync(/*turbopackIgnore: true*/ filePath);
-    return this.inspectApkBuffer(buffer, filePath);
+    return this.inspectApkBuffer(buffer);
   }
 
   /**
    * Inspects and validates an APK buffer in memory.
    */
-  static inspectApkBuffer(buffer: Buffer, tempFilePath?: string): ApkInspectionResult {
+  static inspectApkBuffer(buffer: Buffer): ApkInspectionResult {
     const fileSize = buffer.length;
 
     // Check basic file size limit: min 1MB, max 200MB
@@ -175,6 +294,15 @@ export class ApkValidator {
         fileSize,
         sha256: "",
         error: "File is too small to be a valid Android APK (less than 1 MB)",
+      };
+    }
+
+    if (fileSize > 200 * 1024 * 1024) {
+      return {
+        isValid: false,
+        fileSize,
+        sha256: "",
+        error: "File exceeds maximum supported APK size (200 MB)",
       };
     }
 
@@ -190,118 +318,40 @@ export class ApkValidator {
 
     const sha256 = crypto.createHash("sha256").update(buffer).digest("hex");
 
-    let packageName: string | undefined;
-    let versionName: string | undefined;
-    let versionCode: number | undefined;
-    let minSdkVersion: string | undefined;
-    let targetSdkVersion: number | undefined;
-    let certificateFingerprint: string | undefined;
-
-    // Method A: Check via aapt / apksigner CLI if a file path is provided or can be written
-    let targetPath = tempFilePath;
-    let isTemp = false;
-
-    if (!targetPath) {
-      try {
-        const tmpDir = path.join(process.cwd(), "scratch");
-        if (!fs.existsSync(/*turbopackIgnore: true*/ tmpDir)) fs.mkdirSync(/*turbopackIgnore: true*/ tmpDir, { recursive: true });
-        targetPath = path.join(tmpDir, `inspect-${Date.now()}-${Math.random().toString(36).substring(7)}.apk`);
-        fs.writeFileSync(/*turbopackIgnore: true*/ targetPath, buffer);
-        isTemp = true;
-      } catch {}
+    // 1. Extract and parse AndroidManifest.xml
+    const manifestBuf = extractFromZip(buffer, "AndroidManifest.xml");
+    if (!manifestBuf) {
+      return {
+        isValid: false,
+        fileSize,
+        sha256,
+        error: "Corrupted APK: AndroidManifest.xml missing from root package",
+      };
     }
 
-    if (targetPath && fs.existsSync(/*turbopackIgnore: true*/ targetPath)) {
-      const aapt = findTool("aapt");
-      if (aapt) {
-        try {
-          const out = execSync(`"${aapt}" dump badging "${targetPath}"`, {
-            encoding: "utf8",
-            maxBuffer: 10 * 1024 * 1024,
-          });
-
-          const pkgMatch = out.match(
-            /package: name=\x27([^\x27]+)\x27 versionCode=\x27([^\x27]+)\x27 versionName=\x27([^\x27]+)\x27/
-          );
-          if (pkgMatch) {
-            packageName = pkgMatch[1];
-            versionCode = parseInt(pkgMatch[2], 10);
-            versionName = pkgMatch[3];
-          }
-
-          const sdkMatch = out.match(/sdkVersion:\x27([^\x27]+)\x27/);
-          if (sdkMatch) minSdkVersion = `Android API ${sdkMatch[1]}`;
-
-          const targetSdkMatch = out.match(/targetSdkVersion:\x27([^\x27]+)\x27/);
-          if (targetSdkMatch) targetSdkVersion = parseInt(targetSdkMatch[1], 10);
-        } catch {}
-      }
-
-      const apksigner = findTool("apksigner");
-      if (apksigner) {
-        try {
-          const certOut = execSync(`"${apksigner}" verify --print-certs "${targetPath}"`, {
-            encoding: "utf8",
-            stdio: ["ignore", "pipe", "ignore"],
-          });
-          const shaMatch = certOut.match(/Signer #1 certificate SHA-256 digest: ([a-f0-9]{64})/i);
-          if (shaMatch) {
-            certificateFingerprint = shaMatch[1].toLowerCase();
-          }
-        } catch {}
-      }
-
-      if (isTemp && targetPath) {
-        try {
-          fs.unlinkSync(/*turbopackIgnore: true*/ targetPath);
-        } catch {}
-      }
+    const axml = parseAxml(manifestBuf);
+    if (!axml || !axml.packageName) {
+      return {
+        isValid: false,
+        fileSize,
+        sha256,
+        error: "Failed to parse binary AndroidManifest.xml: package attribute not found",
+      };
     }
 
-    // Method B: Pure Node.js fallback using ZIP extraction and AXML string parsing
-    if (!packageName || !versionName) {
-      const manifestBuf = extractFromZip(buffer, "AndroidManifest.xml");
-      if (!manifestBuf) {
-        return {
-          isValid: false,
-          fileSize,
-          sha256,
-          error: "Corrupted APK: AndroidManifest.xml missing from root package",
-        };
-      }
-
-      const strings = parseAxmlStrings(manifestBuf);
-      if (strings.length === 0) {
-        return {
-          isValid: false,
-          fileSize,
-          sha256,
-          error: "Failed to parse binary AndroidManifest.xml",
-        };
-      }
-
-      // Find package name (reverse-DNS domain like in.sunshineeldercare.*)
-      if (!packageName) {
-        const pkg = strings.find((s) => /^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$/.test(s) && (s.includes("sunshine") || s.includes("eldercare")));
-        if (pkg) packageName = pkg;
-      }
-
-      // Find version name (semver like 1.0.0 or 1.0)
-      if (!versionName) {
-        const v = strings.find((s) => /^\d+\.\d+(\.\d+)?(-[a-zA-Z0-9.]+)?$/.test(s));
-        if (v) versionName = v;
-      }
-    }
+    // 2. Extract and parse APK Signing Block (v2 / v3)
+    const sigBlock = parseApkSigningBlock(buffer);
+    const certificateFingerprint = sigBlock?.fingerprint;
 
     return {
       isValid: true,
       fileSize,
       sha256,
-      packageName,
-      versionName,
-      versionCode: versionCode ?? 1,
-      minSdkVersion: minSdkVersion ?? "Android 10 (API 29)",
-      targetSdkVersion: targetSdkVersion ?? 36,
+      packageName: axml.packageName,
+      versionName: axml.versionName || "1.0.0",
+      versionCode: axml.versionCode ?? 1,
+      minSdkVersion: axml.minSdkVersion || "Android 10 (API 29)",
+      targetSdkVersion: axml.targetSdkVersion || 36,
       certificateFingerprint,
     };
   }
