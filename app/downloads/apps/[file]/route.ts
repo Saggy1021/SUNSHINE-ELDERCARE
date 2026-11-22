@@ -31,33 +31,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const publicDownloadsDir = path.join(process.cwd(), "public", "downloads", "apps");
-
-    // 1. Direct disk check: if exact file exists, serve with full Android MIME headers
-    const directDiskPath = path.join(publicDownloadsDir, file);
-    if (fs.existsSync(directDiskPath)) {
-      try {
-        const stat = fs.statSync(directDiskPath);
-        const fileBuffer = fs.readFileSync(directDiskPath);
-        return new NextResponse(fileBuffer, {
-          status: 200,
-          headers: {
-            "Content-Type": "application/vnd.android.package-archive",
-            "Content-Disposition": `attachment; filename="${file}"`,
-            "Content-Length": stat.size.toString(),
-            "Cache-Control": file.includes("-Release.apk")
-              ? "no-cache, no-store, must-revalidate"
-              : "public, max-age=31536000, immutable",
-            "Access-Control-Allow-Origin": "*",
-            "X-Content-Type-Options": "nosniff",
-          },
-        });
-      } catch (readErr: any) {
-        console.warn("[Smart APK Route] Direct read error, proceeding to DB resolution:", readErr?.message);
-      }
-    }
-
-    // 2. Query database for release record associated with this filename or URL
     const cleanFileName = file.replace(/[^a-zA-Z0-9._-]/g, "");
+
+    // 1. Authoritative Release Query: resolve latest verified release from PostgreSQL
     const release = await prisma.appRelease.findFirst({
       where: {
         OR: [
@@ -74,8 +50,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const isMember = cleanFileName.toLowerCase().includes("member") || release?.app.slug === "member-app";
     const isEmployee = cleanFileName.toLowerCase().includes("employee") || release?.app.slug === "employee-app";
 
-    // 3. Persistent Cloudflare R2 delivery: if release is stored in R2, redirect to presigned URL
-    if (release && (release.storageKey || release.storageProvider === "R2")) {
+    // 2. Persistent Cloudflare R2 delivery: single authoritative source of truth
+    if (release && (release.storageKey || release.storageProvider === "R2" || r2ReleaseStorage.isConfigured())) {
       const storageKey = release.storageKey || `releases/apps/${release.app.slug}/${release.apkFileName}`;
       const presignedUrl = await r2ReleaseStorage.getPresignedDownloadUrl(
         storageKey,
@@ -91,6 +67,28 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           "Content-Disposition": `attachment; filename="${release.apkFileName}"`,
         },
       });
+    }
+
+    // 3. Fallback for offline local dev environments only if R2 is not configured
+    const directDiskPath = path.join(publicDownloadsDir, file);
+    if (fs.existsSync(directDiskPath)) {
+      try {
+        const stat = fs.statSync(directDiskPath);
+        const fileBuffer = fs.readFileSync(directDiskPath);
+        return new NextResponse(fileBuffer, {
+          status: 200,
+          headers: {
+            "Content-Type": "application/vnd.android.package-archive",
+            "Content-Disposition": `attachment; filename="${file}"`,
+            "Content-Length": stat.size.toString(),
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Access-Control-Allow-Origin": "*",
+            "X-Content-Type-Options": "nosniff",
+          },
+        });
+      } catch (readErr: any) {
+        console.warn("[Smart APK Route] Direct read error, proceeding to candidate check:", readErr?.message);
+      }
     }
 
     // 4. Candidate filenames to check on disk in order of specificity

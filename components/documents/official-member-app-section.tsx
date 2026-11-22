@@ -32,7 +32,7 @@ export function OfficialMemberAppSection({ app }: OfficialMemberAppSectionProps)
   const fileSizeMb = app?.fileSize ? (app.fileSize / (1024 * 1024)).toFixed(1) : "46.7";
   const sha256 =
     app?.sha256 || "cf672287e6e396dcfa6070a6256176ba5d1161342187b1f4f406ef3b0368deaf";
-  const downloadUrl = app?.apkUrl || "/downloads/apps/Sunshine-Member-Release.apk";
+  const downloadUrl = app?.apkUrl || "/api/apps/member-app/download/Sunshine-Member-Release.apk";
   const apkFileName = app?.apkFileName || "Sunshine-Member-Release.apk";
 
   const handleCopySha = () => {

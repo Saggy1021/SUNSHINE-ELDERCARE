@@ -2,6 +2,8 @@ import { db as prisma } from "@/lib/db";
 import { ApkValidator, ApkInspectionResult } from "../apk-validator";
 import { r2ReleaseStorage } from "../storage/r2-releases";
 
+export * from "./publisher";
+
 let activeDb: any = prisma;
 
 /**
@@ -82,25 +84,31 @@ export class AppsService {
         versions: {
           where: { isPublished: true },
           orderBy: { versionCode: "desc" },
-          take: 1,
         },
       },
       orderBy: { createdAt: "asc" },
     });
 
-    return apps.map((app: any) => ({
-      id: app.id,
-      slug: app.slug,
-      packageName: app.packageName,
-      name: app.name,
-      tagline: app.tagline,
-      description: app.description,
-      iconUrl: app.iconUrl,
-      platform: app.platform,
-      category: app.category,
-      latestRelease: app.versions[0] || null,
-      updatedAt: app.updatedAt,
-    }));
+    return apps.map((app: any) => {
+      const activeRelease =
+        (app.currentVersionId && app.versions.find((v: any) => v.id === app.currentVersionId)) ||
+        app.versions[0] ||
+        null;
+
+      return {
+        id: app.id,
+        slug: app.slug,
+        packageName: app.packageName,
+        name: app.name,
+        tagline: app.tagline,
+        description: app.description,
+        iconUrl: app.iconUrl,
+        platform: app.platform,
+        category: app.category,
+        latestRelease: activeRelease,
+        updatedAt: app.updatedAt,
+      };
+    });
   }
 
   /**
@@ -123,9 +131,14 @@ export class AppsService {
 
     if (!app) return null;
 
+    const activeRelease =
+      (app.currentVersionId && app.versions.find((v: any) => v.id === app.currentVersionId)) ||
+      app.versions[0] ||
+      null;
+
     return {
       ...app,
-      latestRelease: app.versions[0] || null,
+      latestRelease: activeRelease,
       allReleases: app.versions,
     };
   }
@@ -145,40 +158,7 @@ export class AppsService {
     const prefix = isMember ? "Sunshine-Member" : isEmployee ? "Sunshine-Employee" : "App";
     const fileName = release.apkFileName || `${prefix}-Release.apk`;
 
-    // If release is persisted in Cloudflare R2, route via canonical download gateway with filename
-    if (release.storageKey || release.storageProvider === "R2") {
-      return `${baseUrl}/api/apps/${appSlug}/download/${fileName}`;
-    }
-
-    const rawUrl = release.apkUrl || "";
-    if (rawUrl.startsWith("http")) return rawUrl;
-
-    try {
-      const nodePath = require("path");
-      const nodeFs = require("fs");
-      const publicDir = nodePath.join(process.cwd(), "public");
-
-      if (nodeFs.existsSync(publicDir)) {
-        // 1. Candidate versioned file check
-        const versionedName = `${prefix}-v${release.versionName}-b${release.versionCode}.apk`;
-        if (nodeFs.existsSync(nodePath.join(publicDir, "downloads", "apps", versionedName))) {
-          return `${baseUrl}/downloads/apps/${versionedName}`;
-        }
-
-        // 2. Candidate canonical release file check
-        const canonicalName = `${prefix}-Release.apk`;
-        if (nodeFs.existsSync(nodePath.join(publicDir, "downloads", "apps", canonicalName))) {
-          return `${baseUrl}/downloads/apps/${canonicalName}`;
-        }
-
-        // 3. Direct file check
-        if (rawUrl.startsWith("/") && nodeFs.existsSync(nodePath.join(publicDir, rawUrl))) {
-          return `${baseUrl}${rawUrl}`;
-        }
-      }
-    } catch (_: any) {}
-
-    // Fallback to unified download gateway
+    // Canonical download gateway with filename is the authoritative single source of truth
     return `${baseUrl}/api/apps/${appSlug}/download/${fileName}`;
   }
 
@@ -224,9 +204,9 @@ export class AppsService {
       const app = await this.getPublishedAppBySlug(identifier);
       if (!app || !app.latestRelease) return null;
 
-      // Select highest published release with verified binary availability
+      // Authoritative active release defined by app.latestRelease (synchronized with currentVersionId)
       let targetRelease = app.latestRelease;
-      if (app.allReleases && app.allReleases.length > 1) {
+      if (!this.isReleaseBinaryAvailable(targetRelease, app) && app.allReleases && app.allReleases.length > 1) {
         for (const candidate of app.allReleases) {
           if (this.isReleaseBinaryAvailable(candidate, app)) {
             targetRelease = candidate;

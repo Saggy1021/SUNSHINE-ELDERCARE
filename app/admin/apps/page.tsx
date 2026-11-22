@@ -24,6 +24,7 @@ import {
   ChevronDown,
   ChevronUp,
   AlertTriangle,
+  Download,
 } from "lucide-react";
 import {
   getAllAppsAdminAction,
@@ -34,6 +35,7 @@ import {
   togglePublishReleaseAction,
   deleteReleaseAction,
   runReleaseAcceptanceCheckAction,
+  rollbackReleaseAction,
 } from "@/app/actions/apps";
 import { inspectApkInBrowser } from "@/lib/services/client-apk-inspector";
 
@@ -48,6 +50,8 @@ interface AppReleaseItem {
   certificateFingerprint: string | null;
   minAndroidVersion: string;
   targetSdkVersion: number | null;
+  storageKey: string | null;
+  storageProvider?: string;
   releaseNotes: string | null;
   isMandatory: boolean;
   isPublished: boolean;
@@ -596,6 +600,32 @@ export default function AdminAppsPage() {
       }
     } catch (err: any) {
       showNotification(err?.message || "Failed to toggle release status", true);
+    }
+  };
+
+  const handleRollbackRelease = async (release: AppReleaseItem) => {
+    if (!selectedApp) return;
+    const confirm = window.confirm(
+      `Are you sure you want to rollback to v${release.versionName} (Build ${release.versionCode})?\n\nThis will immediately switch the active production release pointer so all downloads, documents, and app updaters serve Build ${release.versionCode}.\n\nHistorical releases will NOT be deleted.`
+    );
+    if (!confirm) return;
+
+    setSaving(true);
+    try {
+      await rollbackReleaseAction(selectedApp.slug, release.id);
+      showNotification(`Successfully rolled back active release to v${release.versionName} (Build ${release.versionCode})`);
+      await loadApps();
+      if (selectedApp) {
+        const updated = await getAllAppsAdminAction();
+        const found = (updated as unknown as PublishedAppItem[]).find(
+          (a) => a.id === selectedApp.id
+        );
+        if (found) setSelectedApp(found);
+      }
+    } catch (err: any) {
+      showNotification(err?.message || "Failed to rollback release", true);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -1523,20 +1553,24 @@ export default function AdminAppsPage() {
                       className="rounded-xl border border-border p-4 hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
                     >
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="font-display text-base font-bold text-[#091329] dark:text-white">
                             v{release.versionName}
                           </span>
                           <span className="rounded bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
-                            code {release.versionCode}
+                            Build {release.versionCode}
                           </span>
-                          {release.isPublished ? (
-                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                              Published
+                          {selectedApp.currentVersionId === release.id ? (
+                            <span className="rounded-full bg-emerald-600 text-white px-2.5 py-0.5 text-[10px] font-bold shadow-2xs">
+                              ★ Active Production Release
+                            </span>
+                          ) : release.isPublished ? (
+                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                              Published (Historical)
                             </span>
                           ) : (
                             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
-                              Withdrawn / Unpublished
+                              Staged / Draft
                             </span>
                           )}
                           {release.isMandatory && (
@@ -1544,9 +1578,36 @@ export default function AdminAppsPage() {
                               Mandatory
                             </span>
                           )}
+                          {release.storageKey && (
+                            <span className="rounded-full bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-300">
+                              Cloudflare R2
+                            </span>
+                          )}
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {selectedApp.currentVersionId !== release.id && (
+                            <button
+                              type="button"
+                              onClick={() => handleRollbackRelease(release)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 px-2.5 py-1 text-xs font-semibold hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 transition-colors"
+                              title="Roll back active production release pointer to this version"
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                              <span>Rollback</span>
+                            </button>
+                          )}
+
+                          <a
+                            href={`/api/apps/${selectedApp.slug}/download/${release.apkFileName}`}
+                            download={release.apkFileName}
+                            className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs font-semibold hover:bg-muted text-slate-700 dark:text-slate-200 transition-colors"
+                            title="Download this specific release APK directly from Cloudflare R2"
+                          >
+                            <Download className="h-3 w-3" />
+                            <span>Download</span>
+                          </a>
+
                           <button
                             type="button"
                             onClick={() => handleToggleReleasePublished(release)}
@@ -1615,6 +1676,12 @@ export default function AdminAppsPage() {
                         </div>
                         <div>
                           OS: <strong className="text-slate-700 dark:text-slate-300">{release.minAndroidVersion}</strong>
+                        </div>
+                        <div className="col-span-2 truncate" title={release.storageKey || "Local disk"}>
+                          Storage: <strong className="text-slate-700 dark:text-slate-300 font-mono text-[10px]">{release.storageKey || "Local Disk"}</strong>
+                        </div>
+                        <div className="col-span-2">
+                          Signing: <strong className="text-emerald-700 dark:text-emerald-400 font-medium">{release.certificateFingerprint ? "✓ Official Keystore Verified" : "Unsigned"}</strong>
                         </div>
                       </div>
 

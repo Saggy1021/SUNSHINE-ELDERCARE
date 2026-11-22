@@ -11,13 +11,17 @@ export default async function FinancialDocumentsPage() {
   ]);
 
   const latestRelease = memberApp?.latestRelease;
+  const authoritativeDownloadUrl = latestRelease
+    ? AppsService.resolveAuthoritativeDownloadUrl(latestRelease, memberApp)
+    : "/api/apps/member-app/download/Sunshine-Member-Release.apk";
+
   const appData = latestRelease ? {
     versionName: latestRelease.versionName,
     versionCode: latestRelease.versionCode,
     fileSize: latestRelease.fileSize,
     sha256: latestRelease.sha256,
-    apkUrl: "/downloads/apps/Sunshine-Member-Release.apk",
-    apkFileName: "Sunshine-Member-Release.apk",
+    apkUrl: authoritativeDownloadUrl,
+    apkFileName: latestRelease.apkFileName || "Sunshine-Member-Release.apk",
     releasedAt: latestRelease.releasedAt,
   } : undefined;
 

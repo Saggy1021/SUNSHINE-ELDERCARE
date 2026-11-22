@@ -215,6 +215,28 @@ export async function POST(request: NextRequest) {
       }
 
       // -----------------------------------------------------------------------
+      // ACTION: ROLLBACK (Atomically update active version pointer)
+      // -----------------------------------------------------------------------
+      if (body.action === "rollback") {
+        const { appSlug, releaseId } = body;
+        if (!appSlug || !releaseId) {
+          return NextResponse.json({ error: "Missing appSlug or releaseId for rollback" }, { status: 400 });
+        }
+        const { ReleasePublishingService } = await import("@/lib/services/apps/publisher");
+        const result = await ReleasePublishingService.rollbackToRelease(appSlug, releaseId);
+        return NextResponse.json(result);
+      }
+
+      // -----------------------------------------------------------------------
+      // ACTION: PUBLISH_R2 (Finalize and register R2 uploaded release)
+      // -----------------------------------------------------------------------
+      if (body.action === "publish_r2") {
+        const { ReleasePublishingService } = await import("@/lib/services/apps/publisher");
+        const result = await ReleasePublishingService.publishFromR2Storage(body);
+        return NextResponse.json(result);
+      }
+
+      // -----------------------------------------------------------------------
       // MODE A: STANDARD LIGHTWEIGHT JSON INSPECTION VERIFICATION
       // -----------------------------------------------------------------------
       const {

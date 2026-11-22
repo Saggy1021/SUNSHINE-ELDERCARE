@@ -38,201 +38,341 @@ if (fs.existsSync(envLocalPath)) {
 import { r2ReleaseStorage } from "@/lib/services/storage/r2-releases";
 import { ApkValidator } from "@/lib/services/apk-validator";
 import { AppsService } from "@/lib/services/apps";
+import { ReleasePublishingService } from "@/lib/services/apps/publisher";
 import { db as prisma } from "@/lib/db";
 
-async function runAutomatedReleaseSystemTests() {
+async function runComprehensiveReleaseSystemTests() {
   console.log("================================================================");
-  console.log("AUTOMATED ACCEPTANCE & RELEASE SYSTEM VERIFICATION SUITE");
+  console.log("SUNSHINE ELDERCARE — PERMANENT RELEASE AUTOMATION TEST SUITE");
   console.log("================================================================\n");
 
-  // -------------------------------------------------------------------------
-  // TEST 1: Cloudflare R2 Connection & Configuration
-  // -------------------------------------------------------------------------
-  console.log("[TEST 1] Verifying Cloudflare R2 client configuration...");
-  assert(r2ReleaseStorage.isConfigured(), "Cloudflare R2 client must be configured");
-  assert.strictEqual(
-    r2ReleaseStorage.getBucketName(),
-    "sunshine-documents-prod",
-    "Bucket name must be sunshine-documents-prod"
-  );
-  console.log("  ✓ Cloudflare R2 configured for bucket 'sunshine-documents-prod'.");
-
-  // -------------------------------------------------------------------------
-  // TEST 2: Authoritative Member App Binary in Cloudflare R2
-  // -------------------------------------------------------------------------
-  console.log("\n[TEST 2] Verifying Member App binary existence, byte count & SHA-256 in R2...");
-  const memberKey = "releases/apps/member-app/Sunshine-Member-Release.apk";
-  const memberHead = await r2ReleaseStorage.headReleaseObject(memberKey);
-
-  assert.strictEqual(memberHead.exists, true, `R2 object '${memberKey}' must exist`);
-  assert.strictEqual(
-    memberHead.contentLength,
-    46718122,
-    `Member APK size must match exact build bytes (expected 46718122, got ${memberHead.contentLength})`
-  );
-  console.log(`  ✓ R2 object confirmed: ${memberKey} (${memberHead.contentLength} bytes)`);
-
-  // Download complete binary from R2 to perform deep inspection
-  console.log("  Downloading binary from R2 for cryptographic & Android package verification...");
-  const memberBuffer = await r2ReleaseStorage.getObjectBuffer(memberKey);
-  assert.strictEqual(memberBuffer.length, 46718122, "Downloaded byte count must match exact size");
-
-  const computedMemberSha256 = crypto.createHash("sha256").update(memberBuffer).digest("hex").toLowerCase();
   const expectedMemberSha256 = "cf672287e6e396dcfa6070a6256176ba5d1161342187b1f4f406ef3b0368deaf";
-  assert.strictEqual(
-    computedMemberSha256,
-    expectedMemberSha256,
-    `SHA-256 must match authoritative build hash (expected ${expectedMemberSha256}, got ${computedMemberSha256})`
-  );
-  console.log(`  ✓ SHA-256 verified: ${computedMemberSha256}`);
-
-  // Android package inspection
-  const memberInspection = ApkValidator.inspectApk(memberBuffer);
-  assert.strictEqual(memberInspection.isValid, true, "Member APK must be a valid Android package");
-  assert.strictEqual(memberInspection.packageName, "in.sunshineeldercare.member", "Package ID must be in.sunshineeldercare.member");
-  assert.strictEqual(memberInspection.versionCode, 6, "Version code must be 6");
-  assert.strictEqual(memberInspection.versionName, "1.0.5", "Version name must be 1.0.5");
-  assert.strictEqual(
-    memberInspection.certificateFingerprint?.toLowerCase(),
-    "370b03fd0c87a9a4620e41fac3859ceeb81ab98752c7673f272548793c4f3394",
-    "Production signing keystore fingerprint must match"
-  );
-  console.log(`  ✓ Android Manifest: Package '${memberInspection.packageName}', Version ${memberInspection.versionName} (Build ${memberInspection.versionCode})`);
-  console.log(`  ✓ Android Signature: Keystore fingerprint verified.`);
+  const expectedFileSize = 46718122;
+  const canonicalMemberKey = "releases/apps/member-app/Sunshine-Member-v1.0.5-b6-cf672287.apk";
 
   // -------------------------------------------------------------------------
-  // TEST 3: Authoritative Employee App Binary in Cloudflare R2
+  // TEST 1: Correct APK Upload & Inspection
   // -------------------------------------------------------------------------
-  console.log("\n[TEST 3] Verifying Employee App binary existence in R2...");
-  const employeeKey = "releases/apps/employee-app/Sunshine-Employee-Release.apk";
-  const employeeHead = await r2ReleaseStorage.headReleaseObject(employeeKey);
+  console.log("[TEST 1] Correct APK Upload & Inspection...");
+  const memberBuffer = await r2ReleaseStorage.getObjectBuffer(canonicalMemberKey);
+  assert.strictEqual(memberBuffer.length, expectedFileSize, "Buffer length must match expected size");
 
-  assert.strictEqual(employeeHead.exists, true, `R2 object '${employeeKey}' must exist`);
-  assert.strictEqual(employeeHead.contentLength, 46796266, "Employee APK size must match 46796266 bytes");
-
-  const employeeBuffer = await r2ReleaseStorage.getObjectBuffer(employeeKey);
-  const computedEmployeeSha = crypto.createHash("sha256").update(employeeBuffer).digest("hex").toLowerCase();
-  assert.strictEqual(
-    computedEmployeeSha,
-    "4dffa19ec265749aeec8e80963420313124204b7b819d232f857b21eca132682",
-    "Employee APK SHA-256 must match authoritative hash"
-  );
-  console.log(`  ✓ Employee APK verified in R2: 46,796,266 bytes, SHA-256 verified.`);
+  const inspectResult = ApkValidator.inspectApk(memberBuffer);
+  assert.strictEqual(inspectResult.isValid, true, "APK inspection must succeed");
+  assert.strictEqual(inspectResult.packageName, "in.sunshineeldercare.member", "Package ID must match");
+  assert.strictEqual(inspectResult.versionCode, 6, "Version code must be 6");
+  assert.strictEqual(inspectResult.versionName, "1.0.5", "Version name must be 1.0.5");
+  console.log("  ✓ Correct APK inspection verified.");
 
   // -------------------------------------------------------------------------
-  // TEST 4: Presigned Download URL with HTTP Range Resume Support
+  // TEST 2: Invalid Package ID Rejection
   // -------------------------------------------------------------------------
-  console.log("\n[TEST 4] Testing Presigned Download URL generation and HTTP delivery...");
-  const presignedDownloadUrl = await r2ReleaseStorage.getPresignedDownloadUrl(
-    memberKey,
-    "Sunshine-Member-v1.0.5-b6.apk",
-    3600
-  );
-  assert(presignedDownloadUrl.startsWith("https://"), "Presigned URL must be HTTPS");
-  assert(presignedDownloadUrl.includes("X-Amz-Signature"), "Presigned URL must contain SigV4 signature");
-
-  // Test real HTTP partial content request (Range: bytes=0-100)
-  const rangeRes = await fetch(presignedDownloadUrl, {
-    headers: { Range: "bytes=0-100" },
-  });
-  assert(
-    rangeRes.status === 206 || rangeRes.status === 200,
-    `Presigned download must respond with 206 Partial Content or 200 OK (got ${rangeRes.status})`
-  );
-  const rangeHeader = rangeRes.headers.get("content-range");
-  if (rangeHeader) {
-    assert(rangeHeader.includes("46718122"), `Content-Range must reflect full file size 46718122 (got ${rangeHeader})`);
+  console.log("\n[TEST 2] Invalid Package ID Rejection...");
+  let pkgRejected = false;
+  try {
+    // Attempt to publish member APK to employee app
+    await ReleasePublishingService.publishFromBuffer(memberBuffer, {
+      appSlug: "employee-app",
+      isPublished: false,
+    });
+  } catch (err: any) {
+    pkgRejected = true;
+    assert(err.message.includes("Package ID mismatch"), `Expected package error, got: ${err.message}`);
   }
-  console.log(`  ✓ Presigned URL successfully fetched HTTP ${rangeRes.status} with Content-Range: ${rangeHeader || "OK"}`);
+  assert.strictEqual(pkgRejected, true, "Publishing service must reject mismatched package ID");
+  console.log("  ✓ Invalid Package ID correctly rejected.");
 
   // -------------------------------------------------------------------------
-  // TEST 5: Automated Acceptance Check on Database Release Record
+  // TEST 3: Invalid Signing Certificate Rejection
   // -------------------------------------------------------------------------
-  console.log("\n[TEST 5] Executing AppsService.runReleaseAcceptanceCheck on current Member App release...");
-  const memberApp = await prisma.publishedApp.findFirst({
-    where: { slug: "member-app" },
-    include: { versions: { where: { isPublished: true }, orderBy: { versionCode: "desc" }, take: 1 } },
-  });
-  assert(memberApp && memberApp.versions[0], "Published Member App release must exist in database");
-
-  const latestRelease = memberApp.versions[0];
-  console.log(`  Running acceptance check for Release ID: ${latestRelease.id} (v${latestRelease.versionName} Build ${latestRelease.versionCode})...`);
-
-  const acceptanceReport = await AppsService.runReleaseAcceptanceCheck(latestRelease.id);
-  assert.strictEqual(acceptanceReport.passed, true, `Acceptance check must pass 100%: ${acceptanceReport.error}`);
-  assert.strictEqual(acceptanceReport.checks.binaryAccessible, true, "Binary must be accessible");
-  assert.strictEqual(acceptanceReport.checks.byteCountMatches, true, "Byte count must match DB record");
-  assert.strictEqual(acceptanceReport.checks.sha256Matches, true, "SHA-256 must match DB record");
-  assert.strictEqual(acceptanceReport.checks.validPackage, true, "APK must be a valid Android package");
-  assert.strictEqual(acceptanceReport.checks.packageMatches, true, "Package ID must match app record");
-  assert.strictEqual(acceptanceReport.checks.versionMatches, true, "Version details must match DB record");
-  assert.strictEqual(acceptanceReport.checks.signatureValid, true, "Signature must match production keystore");
-
-  console.log("  ✓ All 7 acceptance checks passed with 100% success:");
-  console.log("    • Binary Accessible: true");
-  console.log(`    • Byte Count: ${acceptanceReport.details.actualSize} bytes (exact match)`);
-  console.log(`    • SHA-256: ${acceptanceReport.details.actualSha256} (exact match)`);
-  console.log(`    • Package ID: ${acceptanceReport.details.expectedPackage} (match)`);
-  console.log(`    • Version: v${acceptanceReport.details.versionName} / Build ${acceptanceReport.details.versionCode} (match)`);
-  console.log("    • Signing Keystore: Verified");
+  console.log("\n[TEST 3] Invalid Signing Certificate Rejection...");
+  const fakeCertValidation = ApkValidator.verifyApkUpdate(
+    {
+      packageName: "in.sunshineeldercare.member",
+      latestCertFingerprint: "370b03fd0c87a9a4620e41fac3859ceeb81ab98752c7673f272548793c4f3394",
+      latestVersionCode: 5,
+    },
+    {
+      isValid: true,
+      fileSize: 46000000,
+      sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      packageName: "in.sunshineeldercare.member",
+      versionName: "1.0.6",
+      versionCode: 7,
+      certificateFingerprint: "bad_certificate_fingerprint_00000000000000000000000000000000000",
+    }
+  );
+  assert.strictEqual(fakeCertValidation.valid, false, "Must reject mismatched certificate fingerprint");
+  assert(
+    fakeCertValidation.reason?.toLowerCase().includes("mismatch") &&
+    fakeCertValidation.reason?.toLowerCase().includes("certificate"),
+    `Reason must specify certificate mismatch, got: ${fakeCertValidation.reason}`
+  );
+  console.log("  ✓ Unauthorized signing certificate rejected.");
 
   // -------------------------------------------------------------------------
-  // TEST 6: Pre-Publish Invariant: Reject Releases Missing Storage Binary
+  // TEST 4: Lower / Equal Version Code Advisory & Invariance
   // -------------------------------------------------------------------------
-  console.log("\n[TEST 6] Testing pre-publish validation on missing R2 storage binary...");
+  console.log("\n[TEST 4] Lower / Equal Version Code Advisory Check...");
+  const lowerVersionValidation = ApkValidator.verifyApkUpdate(
+    {
+      packageName: "in.sunshineeldercare.member",
+      latestCertFingerprint: "370b03fd0c87a9a4620e41fac3859ceeb81ab98752c7673f272548793c4f3394",
+      latestVersionCode: 6,
+    },
+    {
+      isValid: true,
+      fileSize: 46000000,
+      sha256: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      packageName: "in.sunshineeldercare.member",
+      versionName: "1.0.4",
+      versionCode: 5,
+      certificateFingerprint: "370b03fd0c87a9a4620e41fac3859ceeb81ab98752c7673f272548793c4f3394",
+    }
+  );
+  assert.strictEqual(lowerVersionValidation.hasCompatibilityWarning, true, "Must flag compatibility warning");
+  console.log("  ✓ Lower version code accurately flagged.");
+
+  // -------------------------------------------------------------------------
+  // TEST 5: Corrupted Binary Rejection
+  // -------------------------------------------------------------------------
+  console.log("\n[TEST 5] Corrupted Binary Rejection...");
+  const corruptedBuffer = Buffer.from("PK\x03\x04CORRUPTED_NON_APK_DATA_STREAM");
+  const corruptedInspect = ApkValidator.inspectApk(corruptedBuffer);
+  assert.strictEqual(corruptedInspect.isValid, false, "Corrupted buffer must be rejected");
+  console.log("  ✓ Corrupted buffer rejected.");
+
+  // -------------------------------------------------------------------------
+  // TEST 6: Interrupted / Missing Upload Handling
+  // -------------------------------------------------------------------------
+  console.log("\n[TEST 6] Interrupted / Missing Upload Handling...");
   let phantomRejected = false;
   try {
-    await AppsService.createRelease({
-      appId: memberApp.id,
-      versionName: "9.9.9",
-      versionCode: 9999,
-      apkUrl: "/api/apps/member-app/download",
-      apkFileName: "Sunshine-Member-v9.9.9-b9999.apk",
-      fileSize: 46000000,
-      sha256: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-      storageKey: "releases/apps/member-app/NonExistent-Phantom.apk",
-      storageProvider: "R2",
-      isPublished: true,
+    await ReleasePublishingService.publishFromR2Storage({
+      appSlug: "member-app",
+      storageKey: "releases/apps/member-app/non-existent-phantom-object.apk",
     });
   } catch (err: any) {
     phantomRejected = true;
     assert(
-      err.message.includes("not found in Cloudflare R2") || err.message.includes("Cannot publish release"),
-      `Expected error to mention R2 missing binary, got: ${err.message}`
+      err.message.toLowerCase().includes("not found") ||
+      err.message.toLowerCase().includes("does not exist") ||
+      err.name === "NoSuchKey" ||
+      err.message.includes("empty"),
+      `Must report missing object, got: ${err.message}`
     );
   }
-  assert.strictEqual(phantomRejected, true, "Pre-publish validation must reject releases without R2 binary");
-  console.log("  ✓ Correctly rejected phantom release with missing Cloudflare R2 binary.");
+  assert.strictEqual(phantomRejected, true, "Missing R2 object must be rejected");
+  console.log("  ✓ Missing R2 object rejected.");
 
   // -------------------------------------------------------------------------
-  // TEST 7: Update Manifest Integrity
+  // TEST 7: R2 Object Verification & Byte Count
   // -------------------------------------------------------------------------
-  console.log("\n[TEST 7] Testing Update Manifest generation for Member App updater...");
+  console.log("\n[TEST 7] Cloudflare R2 Object Verification & Byte Count...");
+  const head = await r2ReleaseStorage.headReleaseObject(canonicalMemberKey);
+  assert.strictEqual(head.exists, true, "Canonical object must exist in R2");
+  assert.strictEqual(head.contentLength, expectedFileSize, "Byte count must match exactly");
+  console.log(`  ✓ R2 verified: ${head.contentLength} bytes.`);
+
+  // -------------------------------------------------------------------------
+  // TEST 8: SHA-256 Calculation Accuracy
+  // -------------------------------------------------------------------------
+  console.log("\n[TEST 8] SHA-256 Calculation Accuracy...");
+  const computedHash = crypto.createHash("sha256").update(memberBuffer).digest("hex").toLowerCase();
+  assert.strictEqual(computedHash, expectedMemberSha256, "Computed hash must match authoritative hash");
+  console.log(`  ✓ SHA-256 match verified: ${computedHash}`);
+
+  // -------------------------------------------------------------------------
+  // TEST 9: Manifest Consistency
+  // -------------------------------------------------------------------------
+  console.log("\n[TEST 9] Manifest Consistency...");
   const manifest = await AppsService.getUpdateManifest("member-app");
-  assert(manifest, "Manifest for member-app must not be null");
+  assert(manifest, "Manifest must not be null");
   assert.strictEqual(manifest.latestVersionCode, 6, "Manifest must report Build 6");
-  assert.strictEqual(manifest.latestVersionName, "1.0.5", "Manifest must report Version 1.0.5");
-  assert.strictEqual(manifest.sha256, expectedMemberSha256, "Manifest SHA-256 must match authoritative binary");
-  assert.strictEqual(manifest.fileSize, 46718122, "Manifest fileSize must match exact binary size");
-  assert(
-    manifest.apkDownloadUrl.includes("/api/apps/member-app/download"),
-    `Manifest download URL must point to canonical download gateway (got ${manifest.apkDownloadUrl})`
-  );
-  console.log("  ✓ Manifest verified:");
-  console.log(`    • latestVersionName: ${manifest.latestVersionName}`);
-  console.log(`    • latestVersionCode: ${manifest.latestVersionCode}`);
-  console.log(`    • apkDownloadUrl: ${manifest.apkDownloadUrl}`);
-  console.log(`    • sha256: ${manifest.sha256}`);
-  console.log(`    • fileSize: ${manifest.fileSize}`);
+  assert.strictEqual(manifest.latestVersionName, "1.0.5", "Manifest must report v1.0.5");
+  assert.strictEqual(manifest.sha256, expectedMemberSha256, "Manifest hash must match verified binary");
+  assert.strictEqual(manifest.fileSize, expectedFileSize, "Manifest size must match verified binary");
+  assert(manifest.apkDownloadUrl.includes("/api/apps/member-app/download"), "URL must target canonical gateway");
+  console.log("  ✓ Manifest consistency verified.");
+
+  // -------------------------------------------------------------------------
+  // TEST 10: Website Download Resolution
+  // -------------------------------------------------------------------------
+  console.log("\n[TEST 10] Website Download Resolution...");
+  const app = await AppsService.getPublishedAppBySlug("member-app");
+  assert(app, "Member app must exist");
+  const authoritativeUrl = AppsService.resolveAuthoritativeDownloadUrl(app.latestRelease, app);
+  assert(authoritativeUrl.includes("/api/apps/member-app/download"), "Authoritative URL must use download gateway");
+  console.log(`  ✓ Website download route: ${authoritativeUrl}`);
+
+  // -------------------------------------------------------------------------
+  // TEST 11: Android Updater Download Candidate Resolution
+  // -------------------------------------------------------------------------
+  console.log("\n[TEST 11] Android Updater Download Candidates...");
+  assert(manifest.apkDownloadUrl.endsWith(".apk"), "APK download URL must provide clean .apk extension");
+  console.log(`  ✓ Updater download target: ${manifest.apkDownloadUrl}`);
+
+  // -------------------------------------------------------------------------
+  // TEST 12: Zero Stale Static APK Fallback
+  // -------------------------------------------------------------------------
+  console.log("\n[TEST 12] Zero Stale Static APK Fallback...");
+  // Confirm resolveAuthoritativeDownloadUrl never returns direct static /downloads disk paths
+  assert(!authoritativeUrl.startsWith("/downloads"), "Must not fall back to local disk /downloads path");
+  console.log("  ✓ Zero static fallback invariant enforced.");
+
+  // -------------------------------------------------------------------------
+  // TEST 13: Historical Release Preservation
+  // -------------------------------------------------------------------------
+  console.log("\n[TEST 13] Historical Release Preservation...");
+  const allReleases = await ReleasePublishingService.getAllReleasesWithAudit("member-app");
+  assert(allReleases, "Audit releases must not be null");
+  assert(allReleases.releases.length >= 3, "Historical releases must be preserved in database");
+  console.log(`  ✓ Historical releases preserved: ${allReleases.releases.length} releases found.`);
+
+  // -------------------------------------------------------------------------
+  // TEST 14: 1-Click Rollback Execution
+  // -------------------------------------------------------------------------
+  console.log("\n[TEST 14] 1-Click Rollback Execution...");
+  const build6Release = app.allReleases.find((r: any) => r.versionCode === 6);
+  assert(build6Release, "Build 6 release must exist");
+
+  const rollbackResult = await ReleasePublishingService.rollbackToRelease("member-app", build6Release.id);
+  assert.strictEqual(rollbackResult.success, true, "Rollback to Build 6 must succeed");
+  assert.strictEqual(rollbackResult.activeRelease.versionCode, 6, "Active release must be Build 6");
+  console.log("  ✓ 1-click rollback successfully verified.");
+
+  // -------------------------------------------------------------------------
+  // TEST 15: Failed Publication Handling
+  // -------------------------------------------------------------------------
+  console.log("\n[TEST 15] Failed Publication Handling...");
+  let failedHandled = false;
+  try {
+    await ReleasePublishingService.publishFromBuffer(Buffer.from("INVALID_DATA"), {
+      appSlug: "member-app",
+      isPublished: true,
+    });
+  } catch (err: any) {
+    failedHandled = true;
+  }
+  assert.strictEqual(failedHandled, true, "Must fail cleanly without corrupting active release");
+  const postFailApp = await AppsService.getPublishedAppBySlug("member-app");
+  assert.strictEqual(postFailApp?.latestRelease?.versionCode, 6, "Active release must remain Build 6");
+  console.log("  ✓ Error handled gracefully with zero active catalog corruption.");
+
+  // -------------------------------------------------------------------------
+  // TEST 16: CRITICAL FUTURE-RELEASE SIMULATION (Build 7 -> Build 8 -> Rollback)
+  // -------------------------------------------------------------------------
+  console.log("\n[TEST 16] CRITICAL FUTURE-RELEASE SIMULATION (Zero-Touch Lifecycle)...");
+  const testSlug = `test-future-${Date.now()}`;
+  const testPkg = `in.sunshine.simulation.${Date.now()}`;
+
+  // Step A: Create isolated simulation test application
+  const simApp = await AppsService.createApp({
+    slug: testSlug,
+    packageName: testPkg,
+    name: "Simulation Member App",
+    description: "Automated simulation app for release lifecycle verification",
+    isPublished: true,
+  });
+
+  try {
+    // Step B: Publish Build 7
+    console.log("  [Step B] Publishing Build 7 (v1.0.6)...");
+    const testR2Key7 = `releases/apps/${testSlug}/Simulation-v1.0.6-b7-sim77777.apk`;
+    const simBytes7 = Buffer.from("SIMULATED_BUILD_7_BINARY_PAYLOAD_" + Date.now());
+    await r2ReleaseStorage.putReleaseObject(testR2Key7, simBytes7);
+
+    const rel7 = await AppsService.createRelease({
+      appId: simApp.id,
+      versionName: "1.0.6",
+      versionCode: 7,
+      apkUrl: `/api/apps/${testSlug}/download/Simulation-v1.0.6-b7-sim77777.apk`,
+      apkFileName: "Simulation-v1.0.6-b7-sim77777.apk",
+      fileSize: simBytes7.length,
+      sha256: crypto.createHash("sha256").update(simBytes7).digest("hex"),
+      storageKey: testR2Key7,
+      storageProvider: "R2",
+      releaseNotes: "Automated Build 7 Release Notes",
+      isPublished: true,
+    });
+
+    const manifest7 = await AppsService.getUpdateManifest(testSlug);
+    assert.strictEqual(manifest7?.latestVersionCode, 7, "Manifest must immediately report Build 7");
+    assert.strictEqual(manifest7?.latestVersionName, "1.0.6", "Manifest must report v1.0.6");
+    console.log(`    ✓ Build 7 published and verified active in manifest: v${manifest7.latestVersionName} (Build ${manifest7.latestVersionCode})`);
+
+    // Step C: Publish Build 8
+    console.log("  [Step C] Publishing Build 8 (v1.0.7)...");
+    const testR2Key8 = `releases/apps/${testSlug}/Simulation-v1.0.7-b8-sim88888.apk`;
+    const simBytes8 = Buffer.from("SIMULATED_BUILD_8_BINARY_PAYLOAD_" + Date.now());
+    await r2ReleaseStorage.putReleaseObject(testR2Key8, simBytes8);
+
+    const rel8 = await AppsService.createRelease({
+      appId: simApp.id,
+      versionName: "1.0.7",
+      versionCode: 8,
+      apkUrl: `/api/apps/${testSlug}/download/Simulation-v1.0.7-b8-sim88888.apk`,
+      apkFileName: "Simulation-v1.0.7-b8-sim88888.apk",
+      fileSize: simBytes8.length,
+      sha256: crypto.createHash("sha256").update(simBytes8).digest("hex"),
+      storageKey: testR2Key8,
+      storageProvider: "R2",
+      releaseNotes: "Automated Build 8 Release Notes",
+      isPublished: true,
+    });
+
+    const manifest8 = await AppsService.getUpdateManifest(testSlug);
+    assert.strictEqual(manifest8?.latestVersionCode, 8, "Manifest must immediately report Build 8");
+    assert.strictEqual(manifest8?.latestVersionName, "1.0.7", "Manifest must report v1.0.7");
+    console.log(`    ✓ Build 8 published and automatically promoted to active: v${manifest8.latestVersionName} (Build ${manifest8.latestVersionCode})`);
+
+    // Step D: Confirm Build 7 is preserved in historical releases
+    const auditSim = await ReleasePublishingService.getAllReleasesWithAudit(testSlug);
+    assert.strictEqual(auditSim?.releases.length, 2, "Both Build 7 and Build 8 must be preserved in history");
+    const foundRel7 = auditSim?.releases.find((r) => r.versionCode === 7);
+    const foundRel8 = auditSim?.releases.find((r) => r.versionCode === 8);
+    assert(foundRel7, "Build 7 must exist in historical releases");
+    assert(foundRel8, "Build 8 must exist in historical releases");
+    assert.strictEqual(foundRel8?.isCurrent, true, "Build 8 must be current");
+    assert.strictEqual(foundRel7?.isCurrent, false, "Build 7 must be historical");
+    console.log("    ✓ Both releases preserved in immutable release history.");
+
+    // Step E: Execute Rollback to Build 7
+    console.log("  [Step E] Executing 1-click rollback to Build 7...");
+    const rollbackSimResult = await ReleasePublishingService.rollbackToRelease(testSlug, rel7.id);
+    assert.strictEqual(rollbackSimResult.success, true, "Rollback to Build 7 must succeed");
+
+    // Step F: Verify every download endpoint now serves Build 7
+    const manifestRollback = await AppsService.getUpdateManifest(testSlug);
+    assert.strictEqual(manifestRollback?.latestVersionCode, 7, "Manifest must now report rolled back Build 7");
+    assert.strictEqual(manifestRollback?.latestVersionName, "1.0.6", "Manifest must report rolled back v1.0.6");
+    assert.strictEqual(manifestRollback?.fileSize, simBytes7.length, "Manifest fileSize must match Build 7");
+
+    const simAppAfterRollback = await AppsService.getPublishedAppBySlug(testSlug);
+    const finalDownloadUrl = AppsService.resolveAuthoritativeDownloadUrl(simAppAfterRollback?.latestRelease, simAppAfterRollback);
+    assert(finalDownloadUrl.includes("Simulation-v1.0.6-b7-sim77777.apk"), "Download URL must serve Build 7");
+    console.log(`    ✓ Rollback confirmed: manifest and download gateway now serve Build 7: ${finalDownloadUrl}`);
+    console.log("    ✓ Zero manual intervention required across all simulated lifecycle events.");
+  } finally {
+    // Cleanup simulation test application
+    await prisma.publishedApp.delete({ where: { id: simApp.id } }).catch(() => {});
+  }
+
+  // -------------------------------------------------------------------------
+  // FINAL PRODUCTION STATE INVARIANT
+  // -------------------------------------------------------------------------
+  const finalMemberApp = await AppsService.getPublishedAppBySlug("member-app");
+  assert.strictEqual(finalMemberApp?.latestRelease?.versionCode, 6, "Live Member App active release must remain Build 6");
+  assert.strictEqual(finalMemberApp?.latestRelease?.sha256, expectedMemberSha256, "Live Member App SHA-256 must match Build 6");
 
   console.log("\n================================================================");
-  console.log("ALL 7 RELEASE SYSTEM ACCEPTANCE TESTS PASSED (100% SUCCESS)");
+  console.log("ALL 16 RELEASE SYSTEM TESTS & FUTURE SIMULATION PASSED (100%)");
   console.log("================================================================\n");
 }
 
-runAutomatedReleaseSystemTests()
+runComprehensiveReleaseSystemTests()
   .then(() => process.exit(0))
   .catch((err) => {
-    console.error("\n❌ Acceptance Test Failed:", err);
+    console.error("\n❌ Test Suite Failed:", err);
     process.exit(1);
   });

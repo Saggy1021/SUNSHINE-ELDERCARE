@@ -184,3 +184,44 @@ export async function runReleaseAcceptanceCheckAction(releaseId: string) {
     throw new Error(error?.message || "Failed to run release acceptance check");
   }
 }
+
+export async function rollbackReleaseAction(appSlug: string, targetReleaseId: string) {
+  await requireAdminUser();
+  try {
+    const { ReleasePublishingService } = await import("@/lib/services/apps/publisher");
+    const result = await ReleasePublishingService.rollbackToRelease(appSlug, targetReleaseId);
+    revalidatePath("/apps");
+    revalidatePath("/admin/apps");
+    revalidatePath("/dashboard/documents");
+    return result;
+  } catch (error: any) {
+    console.error("[rollbackReleaseAction] Error:", error);
+    throw new Error(error?.message || "Failed to roll back release");
+  }
+}
+
+export async function getAllReleasesWithAuditAction(appSlug: string) {
+  await requireAdminUser();
+  try {
+    const { ReleasePublishingService } = await import("@/lib/services/apps/publisher");
+    return await ReleasePublishingService.getAllReleasesWithAudit(appSlug);
+  } catch (error: any) {
+    console.error("[getAllReleasesWithAuditAction] Error:", error);
+    throw new Error(error?.message || "Failed to fetch releases with audit");
+  }
+}
+
+export async function publishReleaseFromR2Action(options: any) {
+  await requireAdminUser();
+  try {
+    const { ReleasePublishingService } = await import("@/lib/services/apps/publisher");
+    const result = await ReleasePublishingService.publishFromR2Storage(options);
+    revalidatePath("/apps");
+    revalidatePath("/admin/apps");
+    revalidatePath("/dashboard/documents");
+    return result;
+  } catch (error: any) {
+    console.error("[publishReleaseFromR2Action] Error:", error);
+    throw new Error(error?.message || "Failed to publish release from R2");
+  }
+}
