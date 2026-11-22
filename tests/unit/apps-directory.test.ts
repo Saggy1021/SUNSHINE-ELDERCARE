@@ -652,6 +652,21 @@ async function runAppsDirectoryTestSuite() {
     }
   });
 
+  // Cleanup any temporary test apps created during the suite run
+  try {
+    const { db } = await import("@/lib/db");
+    const testApps = await (db as any).publishedApp.findMany({
+      where: { slug: { startsWith: "test-" } },
+      select: { id: true },
+    });
+    for (const testApp of testApps) {
+      await (db as any).appRelease.deleteMany({ where: { appId: testApp.id } });
+      await (db as any).publishedApp.delete({ where: { id: testApp.id } });
+    }
+  } catch (cleanErr) {
+    // Ignore cleanup error
+  }
+
   console.log("\n================================================================");
   console.log(`ALL ${passedTests}/${totalTests} TESTS PASSED SUCCESSFULLY!`);
   console.log("================================================================\n");
