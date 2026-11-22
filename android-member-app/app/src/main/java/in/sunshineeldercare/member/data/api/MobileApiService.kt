@@ -1,5 +1,6 @@
 package `in`.sunshineeldercare.member.data.api
 
+import `in`.sunshineeldercare.member.data.model.AppManifestResponse
 import `in`.sunshineeldercare.member.data.model.DashboardResponse
 import `in`.sunshineeldercare.member.data.model.DocumentsResponse
 import `in`.sunshineeldercare.member.data.model.GenericApiResponse
@@ -47,6 +48,9 @@ interface MobileApiService {
 
     @POST("api/emergency/sos")
     suspend fun triggerSos(@Body request: SosTriggerRequest): Response<SosTriggerResponse>
+
+    @GET("api/apps/member-app/manifest")
+    suspend fun getAppUpdateManifest(): Response<AppManifestResponse>
 
     @POST("api/emergency/telemetry")
     suspend fun sendTelemetry(@Body request: TelemetryRequest): Response<TelemetryResponse>

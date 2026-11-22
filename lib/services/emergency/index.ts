@@ -17,6 +17,7 @@ export type EmergencyTriggerSource =
   | "MANUAL_ENTRY";
 
 export interface CreateIncidentParams {
+  idempotencyKey?: string | null;
   userId?: string | null;
   memberId?: string | null;
   callerName?: string | null;
@@ -108,17 +109,29 @@ export class EmergencyService {
 
   /**
    * Creates a new emergency incident and logs its trigger event.
+   * Fully idempotent: duplicate retries with the same idempotencyKey return the existing incident.
    */
   static async createIncident(params: CreateIncidentParams) {
+    // 1. Immediate idempotency lookup before running mutations
+    if (params.idempotencyKey) {
+      const existing = await db.emergencyIncident.findUnique({
+        where: { idempotencyKey: params.idempotencyKey },
+      });
+      if (existing) {
+        return existing;
+      }
+    }
+
     let callerName = params.callerName || null;
     let callerPhone = params.callerPhone || null;
     let memberId = params.memberId || null;
     let fallbackAddress = params.fallbackAddress || null;
+    let userId = params.userId || null;
 
     // Enriched caller & member info if userId provided
-    if (params.userId) {
+    if (userId) {
       const user = await db.user.findUnique({
-        where: { id: params.userId },
+        where: { id: userId },
         include: { memberProfile: true, emergencyContact: true },
       });
 
@@ -130,44 +143,80 @@ export class EmergencyService {
           fallbackAddress = user.memberProfile.serviceAddress || null;
         }
       }
+    } else if (memberId) {
+      // Fallback enrichment via canonical Member ID if session token expired or unauthenticated
+      try {
+        const profile = await db.memberProfile.findUnique({
+          where: { memberId },
+          include: { user: { include: { emergencyContact: true } } },
+        });
+        if (profile) {
+          userId = profile.userId;
+          if (!callerName) callerName = `${profile.salutation || ''} ${profile.firstName} ${profile.lastName}`.trim() || profile.user.name || null;
+          if (!callerPhone) callerPhone = profile.mobileNumber || profile.user.emergencyContact?.phone || null;
+          if (!fallbackAddress) fallbackAddress = profile.serviceAddress || null;
+        }
+      } catch (e) {
+        console.warn("[EmergencyService] MemberId enrichment warning:", e);
+      }
     }
 
     return db.$transaction(async (tx) => {
+      // Re-verify idempotency within transaction to guard against concurrent collisions
+      if (params.idempotencyKey) {
+        const existingInTx = await tx.emergencyIncident.findUnique({
+          where: { idempotencyKey: params.idempotencyKey },
+        });
+        if (existingInTx) return existingInTx;
+      }
+
       const incidentNumber = await this.generateIncidentNumber(tx);
       const classification = params.initialClassification || "CODE_RED";
       const triggerSource = params.triggerSource || "MEMBER_APP_SOS";
 
-      const incident = await tx.emergencyIncident.create({
-        data: {
-          incidentNumber,
-          status: "TRIGGERED",
-          classification,
-          userId: params.userId || null,
-          memberId,
-          callerName,
-          callerPhone,
-          triggerSource,
-          triggerNotes: params.triggerNotes || null,
-          currentLatitude: params.latitude ?? null,
-          currentLongitude: params.longitude ?? null,
-          locationAccuracy: params.accuracy ?? null,
-          locationTimestamp: params.latitude ? new Date() : null,
-          trackingActive: true,
-          fallbackAddress,
-        },
-      });
+      try {
+        const incident = await tx.emergencyIncident.create({
+          data: {
+            incidentNumber,
+            idempotencyKey: params.idempotencyKey || null,
+            status: "TRIGGERED",
+            classification,
+            userId: userId || null,
+            memberId,
+            callerName,
+            callerPhone,
+            triggerSource,
+            triggerNotes: params.triggerNotes || null,
+            currentLatitude: params.latitude ?? null,
+            currentLongitude: params.longitude ?? null,
+            locationAccuracy: params.accuracy ?? null,
+            locationTimestamp: params.latitude ? new Date() : null,
+            trackingActive: true,
+            fallbackAddress,
+          },
+        });
 
-      await tx.emergencyIncidentLog.create({
-        data: {
-          incidentId: incident.id,
-          authorId: params.userId || null,
-          authorName: callerName || "System / Member",
-          action: "TRIGGERED",
-          details: `Emergency SOS incident ${incidentNumber} triggered via ${triggerSource}. Initial classification: ${classification}.`,
-        },
-      });
+        await tx.emergencyIncidentLog.create({
+          data: {
+            incidentId: incident.id,
+            authorId: userId || null,
+            authorName: callerName || "System / Member",
+            action: "TRIGGERED",
+            details: `Emergency SOS incident ${incidentNumber} triggered via ${triggerSource}. Initial classification: ${classification}.`,
+          },
+        });
 
-      return incident;
+        return incident;
+      } catch (err: any) {
+        // If concurrent insert caused P2002 on unique idempotencyKey, return existing record
+        if (params.idempotencyKey && (err.code === "P2002" || err.message?.includes("idempotencyKey"))) {
+          const existing = await tx.emergencyIncident.findUnique({
+            where: { idempotencyKey: params.idempotencyKey },
+          });
+          if (existing) return existing;
+        }
+        throw err;
+      }
     });
   }
 

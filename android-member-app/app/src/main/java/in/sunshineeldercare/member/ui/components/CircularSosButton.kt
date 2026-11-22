@@ -1,11 +1,7 @@
 package `in`.sunshineeldercare.member.ui.components
 
-import android.Manifest
-import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.location.LocationManager
 import android.net.Uri
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -31,14 +27,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.core.content.ContextCompat
-import `in`.sunshineeldercare.member.data.api.ApiClient
-import `in`.sunshineeldercare.member.data.model.SosTriggerRequest
-import `in`.sunshineeldercare.member.service.EmergencyLocationService
+import `in`.sunshineeldercare.member.data.repository.SosDeliveryStatus
+import `in`.sunshineeldercare.member.data.repository.SosOutboxManager
 import `in`.sunshineeldercare.member.ui.theme.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 private const val EMERGENCY_HELPLINE = "03340585515"
 private const val DISPLAY_HELPLINE = "033-40585515"
@@ -48,105 +39,47 @@ fun CircularSosButton(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
+    val sosItem by SosOutboxManager.currentSos.collectAsState()
 
-    var isSubmittingSos by remember { mutableStateOf(false) }
-    var activeIncidentNumber by remember { mutableStateOf<String?>(null) }
-    var activeIncidentId by remember { mutableStateOf<String?>(null) }
-    var sosError by remember { mutableStateOf<String?>(null) }
-    var showErrorDialog by remember { mutableStateOf(false) }
     var showActiveEmergencyDialog by remember { mutableStateOf(false) }
+
+    val isSending = sosItem?.status == SosDeliveryStatus.SENDING || sosItem?.status == SosDeliveryStatus.QUEUED
+    val isDelivered = sosItem?.status == SosDeliveryStatus.DELIVERED
+    val isPendingRetry = sosItem?.status == SosDeliveryStatus.PENDING_RETRY
+    val isFailed = sosItem?.status == SosDeliveryStatus.FAILED
+
+    // Open active dialog when delivered
+    LaunchedEffect(sosItem?.status) {
+        if (isDelivered) {
+            showActiveEmergencyDialog = true
+        }
+    }
 
     // Pulsing animation for ambient emergency ring
     val infiniteTransition = rememberInfiniteTransition(label = "SosPulse")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = if (isSubmittingSos) 1.25f else 1.15f,
+        targetValue = when {
+            isSending -> 1.25f
+            isDelivered -> 1.18f
+            isPendingRetry -> 1.20f
+            else -> 1.12f
+        },
         animationSpec = infiniteRepeatable(
-            animation = tween(if (isSubmittingSos) 600 else 1200, easing = FastOutSlowInEasing),
+            animation = tween(if (isSending) 600 else 1200, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "PulseScale"
     )
 
-    fun triggerSosWorkflow() {
-        if (isSubmittingSos) return
-        isSubmittingSos = true
-        sosError = null
-        showErrorDialog = false
-
-        coroutineScope.launch {
-            try {
-                // Obtain best available GPS fix if permission is already granted
-                var lat: Double? = null
-                var lon: Double? = null
-                var acc: Float? = null
-
-                try {
-                    val hasFine = ContextCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.ACCESS_FINE_LOCATION
-                    ) == PackageManager.PERMISSION_GRANTED
-                    val hasCoarse = ContextCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.ACCESS_COARSE_LOCATION
-                    ) == PackageManager.PERMISSION_GRANTED
-
-                    if (hasFine || hasCoarse) {
-                        val locManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-                        @SuppressLint("MissingPermission")
-                        val lastGps = locManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                            ?: locManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-                        if (lastGps != null) {
-                            lat = lastGps.latitude
-                            lon = lastGps.longitude
-                            acc = lastGps.accuracy
-                        }
-                    }
-                } catch (_: Exception) {
-                    // Fall back to registered member address without crashing or blocking SOS
-                }
-
-                val response = withContext(Dispatchers.IO) {
-                    ApiClient.service.triggerSos(
-                        SosTriggerRequest(
-                            triggerSource = "MEMBER_APP_SOS",
-                            latitude = lat,
-                            longitude = lon,
-                            accuracy = acc,
-                            notes = "One-tap emergency SOS triggered by member from Sunshine Member App"
-                        )
-                    )
-                }
-
-                isSubmittingSos = false
-
-                if (response.isSuccessful && response.body()?.success == true) {
-                    val body = response.body()!!
-                    activeIncidentId = body.incidentId
-                    activeIncidentNumber = body.incidentNumber
-                    showActiveEmergencyDialog = true
-                    `in`.sunshineeldercare.member.data.repository.LiveRefreshManager.isSosActive = true
-
-                    // Start background GPS streaming foreground service if incident ID returned
-                    if (!body.incidentId.isNullOrBlank()) {
-                        EmergencyLocationService.start(
-                            context,
-                            body.incidentId,
-                            body.incidentNumber ?: "Active Incident"
-                        )
-                    }
-                } else {
-                    val err = response.body()?.error ?: "Failed to connect to EmergencyOS. Please call the emergency helpline immediately."
-                    sosError = err
-                    showErrorDialog = true
-                }
-            } catch (e: Exception) {
-                isSubmittingSos = false
-                sosError = "Network error: ${e.message ?: "Could not reach emergency command center."} Please retry or dial helpline."
-                showErrorDialog = true
-            }
+    fun handleSosClick() {
+        if (isDelivered) {
+            showActiveEmergencyDialog = true
+            return
         }
+        if (isSending) return
+
+        SosOutboxManager.triggerSosImmediate(context) { _, _ -> }
     }
 
     Card(
@@ -165,20 +98,42 @@ fun CircularSosButton(
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))
-                    .background(Color(0xFFFEE2E2))
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .background(
+                        when {
+                            isDelivered -> Color(0xFFDCFCE7)
+                            isPendingRetry -> Color(0xFFFEF3C7)
+                            else -> Color(0xFFFEE2E2)
+                        }
+                    )
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Default.Shield,
+                        imageVector = when {
+                            isDelivered -> Icons.Default.CheckCircle
+                            isPendingRetry -> Icons.Default.Sync
+                            else -> Icons.Default.Shield
+                        },
                         contentDescription = null,
-                        tint = SosRed,
+                        tint = when {
+                            isDelivered -> Color(0xFF15803D)
+                            isPendingRetry -> Color(0xFFB45309)
+                            else -> SosRed
+                        },
                         modifier = Modifier.size(14.dp)
                     )
                     Spacer(modifier = Modifier.size(6.dp))
                     Text(
-                        text = "24/7 EMERGENCY ASSISTANCE",
-                        color = SosRed,
+                        text = when {
+                            isDelivered -> "EMERGENCY ACTIVE • COMMAND CENTER CONNECTED"
+                            isPendingRetry -> "EMERGENCY QUEUED • AUTO RETRYING"
+                            else -> "24/7 EMERGENCY ASSISTANCE"
+                        },
+                        color = when {
+                            isDelivered -> Color(0xFF15803D)
+                            isPendingRetry -> Color(0xFFB45309)
+                            else -> SosRed
+                        },
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 0.5.sp
@@ -199,7 +154,13 @@ fun CircularSosButton(
                         .size(120.dp)
                         .scale(pulseScale)
                         .clip(CircleShape)
-                        .background(Color(0x33DC2626))
+                        .background(
+                            when {
+                                isDelivered -> Color(0x3316A34A)
+                                isPendingRetry -> Color(0x33D97706)
+                                else -> Color(0x33DC2626)
+                            }
+                        )
                 )
 
                 // Outer border ring
@@ -207,8 +168,22 @@ fun CircularSosButton(
                     modifier = Modifier
                         .size(106.dp)
                         .clip(CircleShape)
-                        .background(Color(0x22DC2626))
-                        .border(2.dp, Color(0x66DC2626), CircleShape)
+                        .background(
+                            when {
+                                isDelivered -> Color(0x2216A34A)
+                                isPendingRetry -> Color(0x22D97706)
+                                else -> Color(0x22DC2626)
+                            }
+                        )
+                        .border(
+                            2.dp,
+                            when {
+                                isDelivered -> Color(0x6616A34A)
+                                isPendingRetry -> Color(0x66D97706)
+                                else -> Color(0x66DC2626)
+                            },
+                            CircleShape
+                        )
                 )
 
                 // Inner Main Circular SOS Button (One-tap action)
@@ -219,50 +194,89 @@ fun CircularSosButton(
                         .clip(CircleShape)
                         .background(
                             Brush.linearGradient(
-                                listOf(SosRed, SosRedDark)
+                                when {
+                                    isDelivered -> listOf(Color(0xFF16A34A), Color(0xFF15803D))
+                                    isPendingRetry -> listOf(Color(0xFFD97706), Color(0xFFB45309))
+                                    else -> listOf(SosRed, SosRedDark)
+                                }
                             )
                         )
                         .border(4.dp, IvoryBackground, CircleShape)
-                        .clickable(enabled = !isSubmittingSos) {
-                            triggerSosWorkflow()
+                        .clickable(enabled = !isSending) {
+                            handleSosClick()
                         }
                 ) {
-                    if (isSubmittingSos) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            CircularProgressIndicator(
-                                color = Color.White,
-                                modifier = Modifier.size(28.dp),
-                                strokeWidth = 3.dp
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "SENDING",
-                                color = Color.White,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
-                            )
+                    when {
+                        isSending -> {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    color = Color.White,
+                                    modifier = Modifier.size(28.dp),
+                                    strokeWidth = 3.dp
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "SENDING",
+                                    color = Color.White,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.sp
+                                )
+                            }
                         }
-                    } else {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PhoneInTalk,
-                                contentDescription = "Emergency SOS",
-                                tint = Color.White,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Text(
-                                text = "SOS",
-                                color = Color.White,
-                                fontSize = 21.sp,
-                                fontWeight = FontWeight.Black,
-                                letterSpacing = 2.sp
-                            )
+                        isDelivered -> {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = Icons.Default.Sensors,
+                                    contentDescription = "Active Emergency",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Text(
+                                    text = "ACTIVE",
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 1.5.sp
+                                )
+                            }
+                        }
+                        isPendingRetry -> {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = Icons.Default.Sync,
+                                    contentDescription = "Retrying SOS",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Text(
+                                    text = "RETRYING",
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 1.sp
+                                )
+                            }
+                        }
+                        else -> {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = Icons.Default.PhoneInTalk,
+                                    contentDescription = "Emergency SOS",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Text(
+                                    text = "SOS",
+                                    color = Color.White,
+                                    fontSize = 21.sp,
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 2.sp
+                                )
+                            }
                         }
                     }
                 }
@@ -272,8 +286,19 @@ fun CircularSosButton(
 
             // Clear Senior Action Label
             Text(
-                text = if (isSubmittingSos) "CONNECTING TO EMERGENCY COMMAND CENTER..." else "TAP FOR IMMEDIATE EMERGENCY ASSISTANCE",
-                color = if (isSubmittingSos) SosRedDark else NavyDark,
+                text = when {
+                    isSending -> "CONNECTING TO EMERGENCY COMMAND CENTER..."
+                    isDelivered -> "EMERGENCY ACKNOWLEDGED (INCIDENT #${sosItem?.incidentNumber ?: "REGISTERED"})"
+                    isPendingRetry -> "EMERGENCY QUEUED • RETRYING DISPATCH IN BACKGROUND"
+                    isFailed -> "DELIVERY FAILED • PLEASE CALL HELPLINE DIRECTLY"
+                    else -> "TAP FOR IMMEDIATE EMERGENCY ASSISTANCE"
+                },
+                color = when {
+                    isDelivered -> Color(0xFF15803D)
+                    isPendingRetry -> Color(0xFFB45309)
+                    isSending -> SosRedDark
+                    else -> NavyDark
+                },
                 fontSize = 13.sp,
                 fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 0.5.sp,
@@ -311,124 +336,8 @@ fun CircularSosButton(
         }
     }
 
-    // Failure / Error Alert Dialog
-    if (showErrorDialog) {
-        Dialog(onDismissRequest = { showErrorDialog = false }) {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFFEE2E2)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = null,
-                            tint = SosRed,
-                            modifier = Modifier.size(36.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        text = "SOS Submission Failed",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = NavyDark
-                        )
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = sosError ?: "Unable to complete emergency transmission. Please retry immediately or connect directly with our emergency desk.",
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            color = TextSecondary,
-                            textAlign = TextAlign.Center,
-                            lineHeight = 20.sp
-                        )
-                    )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Retry Button
-                    Button(
-                        onClick = {
-                            showErrorDialog = false
-                            triggerSosWorkflow()
-                        },
-                        colors = sosRedButtonColors(),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "RETRY SOS NOW",
-                            color = Color.White,
-                            fontWeight = FontWeight.Black
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Direct Helpline Call Button
-                    Button(
-                        onClick = {
-                            showErrorDialog = false
-                            launchEmergencyDialer(context, EMERGENCY_HELPLINE)
-                        },
-                        colors = navyButtonColors(),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Phone,
-                            contentDescription = null,
-                            tint = GoldLight,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Call Helpline ($DISPLAY_HELPLINE)",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    TextButton(
-                        onClick = { showErrorDialog = false }
-                    ) {
-                        Text("Dismiss", color = TextSecondary)
-                    }
-                }
-            }
-        }
-    }
-
     // Active Emergency In Progress Dialog
-    if (showActiveEmergencyDialog) {
+    if (showActiveEmergencyDialog && isDelivered) {
         Dialog(onDismissRequest = { showActiveEmergencyDialog = false }) {
             Card(
                 shape = RoundedCornerShape(20.dp),
@@ -473,7 +382,7 @@ fun CircularSosButton(
                         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFECACA))
                     ) {
                         Text(
-                            text = "Incident #${activeIncidentNumber ?: "REGISTERED"}",
+                            text = "Incident #${sosItem?.incidentNumber ?: "REGISTERED"}",
                             color = SosRedDark,
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
@@ -519,9 +428,7 @@ fun CircularSosButton(
 
                     OutlinedButton(
                         onClick = {
-                            // Stop emergency streaming service
-                            EmergencyLocationService.stop(context)
-                            `in`.sunshineeldercare.member.data.repository.LiveRefreshManager.isSosActive = false
+                            SosOutboxManager.dismissCurrentEmergency()
                             showActiveEmergencyDialog = false
                         },
                         shape = RoundedCornerShape(12.dp),
@@ -531,7 +438,7 @@ fun CircularSosButton(
                             .height(48.dp)
                     ) {
                         Text(
-                            text = "I Am Safe / End Tracking",
+                            text = "I Am Safe / End Emergency",
                             color = TextSecondary,
                             fontWeight = FontWeight.SemiBold
                         )

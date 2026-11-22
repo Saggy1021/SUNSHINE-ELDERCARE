@@ -66,7 +66,27 @@ data class SosTriggerRequest(
     val latitude: Double? = null,
     val longitude: Double? = null,
     val accuracy: Float? = null,
-    val notes: String? = null
+    val notes: String? = null,
+    val idempotencyKey: String? = null,
+    val memberId: String? = null,
+    val callerName: String? = null,
+    val callerPhone: String? = null
+)
+
+@Serializable
+data class AppManifestResponse(
+    val appId: String,
+    val packageName: String,
+    val name: String,
+    val latestVersionName: String,
+    val latestVersionCode: Int,
+    val apkDownloadUrl: String,
+    val sha256: String,
+    val fileSize: Long,
+    val minSupportedVersion: String? = null,
+    val releaseNotes: String? = null,
+    val isMandatory: Boolean = false,
+    val releasedAt: String? = null
 )
 
 @Serializable

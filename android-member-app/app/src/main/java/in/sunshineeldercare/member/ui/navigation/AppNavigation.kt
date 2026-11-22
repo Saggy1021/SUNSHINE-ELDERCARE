@@ -4,12 +4,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -43,8 +45,16 @@ fun AppNavigation(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Splash.route
 
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    // Strictly enforce Closed drawer on app launch without restoring stale Open state
+    val drawerState = remember { DrawerState(initialValue = DrawerValue.Closed) }
     val scope = rememberCoroutineScope()
+
+    // Ensure drawer is explicitly closed whenever navigating to dashboard or on initial composition
+    LaunchedEffect(currentRoute) {
+        if (currentRoute == Screen.Dashboard.route) {
+            drawerState.close()
+        }
+    }
 
     val unadornedRoutes = listOf(
         Screen.Splash.route,
@@ -61,21 +71,28 @@ fun AppNavigation(
             Screen.Dashboard.route
         }
         navController.navigate(dest) {
-            popUpTo(Screen.Login.route) { inclusive = true }
+            popUpTo(0) { inclusive = true }
+            launchSingleTop = true
         }
     }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = showChrome,
+        // Drawer opens only when deliberately tapping hamburger menu icon; gestures enabled only to close it
+        gesturesEnabled = showChrome && drawerState.isOpen,
         drawerContent = {
             if (showChrome) {
                 MemberDrawerContent(
                     memberName = SecureSessionManager.getMemberName() ?: "Sunshine Member",
                     memberId = SecureSessionManager.getMemberId() ?: "SEC/MEMBER",
                     onNavigate = { route ->
+                        scope.launch { drawerState.close() }
                         navController.navigate(route) {
-                            popUpTo(Screen.Dashboard.route) { saveState = true }
+                            if (route == Screen.Dashboard.route) {
+                                popUpTo(Screen.Dashboard.route) { inclusive = false }
+                            } else {
+                                popUpTo(Screen.Dashboard.route) { saveState = true }
+                            }
                             launchSingleTop = true
                             restoreState = true
                         }

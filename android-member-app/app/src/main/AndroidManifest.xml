@@ -4,6 +4,8 @@
     <!-- Normal permissions: Required for secure network communication -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Location permissions: Used EXCLUSIVELY during active SOS emergency incidents -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
@@ -41,6 +43,17 @@
             android:name=".service.EmergencyLocationService"
             android:exported="false"
             android:foregroundServiceType="location" />
+
+        <!-- FileProvider for Secure APK Package Installation -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="in.sunshineeldercare.member.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 

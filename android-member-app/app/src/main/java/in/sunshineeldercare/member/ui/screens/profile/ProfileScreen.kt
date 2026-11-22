@@ -1,5 +1,6 @@
 package `in`.sunshineeldercare.member.ui.screens.profile
 
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -39,8 +40,10 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -48,9 +51,13 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -71,6 +78,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import `in`.sunshineeldercare.member.data.repository.AppUpdateManager
+import `in`.sunshineeldercare.member.data.repository.UpdateStatus
 import `in`.sunshineeldercare.member.ui.theme.BorderGold
 import `in`.sunshineeldercare.member.ui.theme.CardBackground
 import `in`.sunshineeldercare.member.ui.theme.EmeraldActive
@@ -96,6 +105,7 @@ fun ProfileScreen(
     viewModel: ProfileViewModel = viewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    val updateState by AppUpdateManager.updateState.collectAsState()
     val context = LocalContext.current
     val scrollState = rememberScrollState()
 
@@ -858,6 +868,241 @@ fun ProfileScreen(
                             contentDescription = null,
                             tint = Color.White,
                             modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // ==========================================
+            // CARD 5: APPLICATION UPDATES & RELEASE
+            // ==========================================
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFFEFF6FF)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SystemUpdate,
+                                contentDescription = null,
+                                tint = Color(0xFF2563EB),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Application Updates",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = NavyDark
+                            )
+                            Text(
+                                text = "Keep your app updated for latest emergency safety features",
+                                fontSize = 11.sp,
+                                color = TextSecondary
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                    HorizontalDivider(color = Color(0xFFF1F5F9))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Version Info Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text(
+                                text = "INSTALLED VERSION",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextSecondary,
+                                letterSpacing = 0.5.sp
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "${updateState.currentVersionName} (Build ${updateState.currentVersionCode})",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = NavyDark
+                            )
+                        }
+
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "LATEST AVAILABLE",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextSecondary,
+                                letterSpacing = 0.5.sp
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = updateState.latestVersionName?.let { "$it (Build ${updateState.latestVersionCode})" } ?: "Checking...",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (updateState.status == UpdateStatus.UPDATE_AVAILABLE || updateState.status == UpdateStatus.READY_TO_INSTALL) GoldPrimary else NavyDark
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Status pill
+                    Surface(
+                        color = when (updateState.status) {
+                            UpdateStatus.UP_TO_DATE -> Color(0xFFDCFCE7)
+                            UpdateStatus.UPDATE_AVAILABLE, UpdateStatus.DOWNLOADING, UpdateStatus.READY_TO_INSTALL -> Color(0xFFFEF3C7)
+                            UpdateStatus.ERROR -> Color(0xFFFEE2E2)
+                            else -> Color(0xFFF1F5F9)
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = when (updateState.status) {
+                                    UpdateStatus.UP_TO_DATE -> "✓ Up to date with official release"
+                                    UpdateStatus.CHECKING -> "Checking for official updates..."
+                                    UpdateStatus.UPDATE_AVAILABLE -> "New update v${updateState.latestVersionName} available"
+                                    UpdateStatus.DOWNLOADING -> "Downloading update (${updateState.downloadProgress}%)..."
+                                    UpdateStatus.READY_TO_INSTALL -> "Update v${updateState.latestVersionName} downloaded & verified"
+                                    UpdateStatus.INSTALLING -> "Starting system installer..."
+                                    UpdateStatus.ERROR -> updateState.errorMessage ?: "Check failed"
+                                    else -> updateState.statusMessage ?: "Tap check to search for updates"
+                                },
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = when (updateState.status) {
+                                    UpdateStatus.UP_TO_DATE -> Color(0xFF15803D)
+                                    UpdateStatus.UPDATE_AVAILABLE, UpdateStatus.DOWNLOADING, UpdateStatus.READY_TO_INSTALL -> Color(0xFFB45309)
+                                    UpdateStatus.ERROR -> SosRed
+                                    else -> NavyDark
+                                }
+                            )
+                        }
+                    }
+
+                    // Download progress bar
+                    if (updateState.status == UpdateStatus.DOWNLOADING) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        LinearProgressIndicator(
+                            progress = { updateState.downloadProgress / 100f },
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                            color = GoldPrimary,
+                            trackColor = Color(0xFFE2E8F0)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Automatic Updates Toggle
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFFF8FAFC))
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Automatic Updates",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = NavyDark
+                            )
+                            Text(
+                                text = "Download newer releases automatically (Recommended for seniors)",
+                                fontSize = 10.sp,
+                                color = TextSecondary
+                            )
+                        }
+                        Switch(
+                            checked = updateState.isAutoUpdateEnabled,
+                            onCheckedChange = { AppUpdateManager.setAutoUpdateEnabled(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = GoldPrimary
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Large UPDATE NOW button if ready to install
+                    if (updateState.status == UpdateStatus.READY_TO_INSTALL) {
+                        Button(
+                            onClick = {
+                                (context as? Activity)?.let { act ->
+                                    AppUpdateManager.startInstallation(act)
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF15803D),
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().height(50.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SystemUpdate,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "UPDATE NOW (v${updateState.latestVersionName})",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    // Check for Updates Button
+                    OutlinedButton(
+                        onClick = { AppUpdateManager.checkForUpdates(isManual = true) },
+                        enabled = updateState.status != UpdateStatus.CHECKING && updateState.status != UpdateStatus.DOWNLOADING,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NavyDark),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth().height(44.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = null,
+                            tint = NavyDark,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (updateState.status == UpdateStatus.CHECKING) "Checking..." else "Check for Updates Now",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = NavyDark
                         )
                     }
                 }

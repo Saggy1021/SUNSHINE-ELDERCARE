@@ -1123,6 +1123,7 @@ model VisitAssignment {
 model EmergencyIncident {
   id                     String   @id @default(cuid())
   incidentNumber         String   @unique // e.g., EMG-20261120-001
+  idempotencyKey         String?  @unique
   status                 String   @default("TRIGGERED") // TRIGGERED, ACKNOWLEDGED, DISPATCHED, RESPONDER_ON_SCENE, RESOLVED, CANCELLED
   classification         String   @default("CODE_RED") // CODE_RED, CODE_YELLOW, CODE_GREEN
   previousClassification String?

@@ -40,4 +40,7 @@ test-results/
 local.properties
 .gradle/
 **/build/
+scratch/
+backups/
+scripts/verify-production-db.mjs
 

@@ -4,8 +4,10 @@ import android.app.Activity
 import android.app.Application
 import android.os.Bundle
 import `in`.sunshineeldercare.member.data.api.ApiClient
+import `in`.sunshineeldercare.member.data.repository.AppUpdateManager
 import `in`.sunshineeldercare.member.data.repository.AuthRepository
 import `in`.sunshineeldercare.member.data.repository.LiveRefreshManager
+import `in`.sunshineeldercare.member.data.repository.SosOutboxManager
 import `in`.sunshineeldercare.member.data.security.SecureSessionManager
 
 class SunshineMemberApp : Application() {
@@ -25,12 +27,20 @@ class SunshineMemberApp : Application() {
         ApiClient.init(this)
         authRepository = AuthRepository()
 
+        // Initialize durable SOS outbox and WorkManager delivery
+        SosOutboxManager.init(this)
+
+        // Initialize Automatic App Update Manager
+        AppUpdateManager.init(this)
+
         // Register lifecycle callbacks for automatic 5-second foreground live refresh
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
                 startedActivitiesCount++
                 if (startedActivitiesCount == 1) {
                     LiveRefreshManager.onAppForegrounded()
+                    SosOutboxManager.checkAndResumePendingDelivery()
+                    AppUpdateManager.onAppForegrounded()
                 }
             }
 

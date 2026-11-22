@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
     }
 
     const incident = await EmergencyService.createIncident({
+      idempotencyKey: body.idempotencyKey || body.requestId || req.headers.get("x-idempotency-key") || null,
       userId,
       memberId,
       callerName,
@@ -63,6 +64,7 @@ export async function POST(req: NextRequest) {
       classification: incident.classification,
       emergencyHelpline: "03340585515",
       trackingActive: incident.trackingActive,
+      idempotent: !!(body.idempotencyKey || body.requestId || req.headers.get("x-idempotency-key")),
     });
   } catch (error: any) {
     console.error("[EMERGENCY_SOS_API_ERROR]", error);
