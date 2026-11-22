@@ -229,9 +229,34 @@ object AppUpdateManager {
                 .url(manifest.apkDownloadUrl)
                 .build()
 
-            val response = httpClient.newCall(request).execute()
+            var response = httpClient.newCall(request).execute()
+
+            // Resilient Fallback: If direct manifest URL returned 404, try the canonical download route
+            if (!response.isSuccessful && response.code == 404) {
+                Log.w(TAG, "Direct download URL returned 404. Attempting resilient fallback route...")
+                val origin = if (manifest.apkDownloadUrl.startsWith("http")) {
+                    val uri = Uri.parse(manifest.apkDownloadUrl)
+                    "${uri.scheme}://${uri.host}" + if (uri.port != -1 && uri.port != 80 && uri.port != 443) ":${uri.port}" else ""
+                } else {
+                    "https://www.sunshineeldercare.in"
+                }
+                val fallbackUrl = "$origin/api/apps/member-app/download"
+                val fallbackRequest = Request.Builder().url(fallbackUrl).build()
+                val fallbackResponse = httpClient.newCall(fallbackRequest).execute()
+                if (fallbackResponse.isSuccessful) {
+                    response = fallbackResponse
+                    Log.i(TAG, "Fallback download succeeded via /api/apps/member-app/download")
+                }
+            }
+
             if (!response.isSuccessful) {
-                throw Exception("Failed to download APK: HTTP ${response.code}")
+                val errorReason = when (response.code) {
+                    404 -> "The update package is currently being deployed to our servers. Please try again shortly or contact support at 033-40585515."
+                    401, 403 -> "Update download authorization failed. Please contact support."
+                    in 500..599 -> "The distribution server is temporarily unavailable (HTTP ${response.code}). Please try again in a few minutes."
+                    else -> "Download server returned HTTP ${response.code}."
+                }
+                throw Exception(errorReason)
             }
 
             val body = response.body ?: throw Exception("Empty download response body")
@@ -303,9 +328,20 @@ object AppUpdateManager {
         } catch (e: Exception) {
             Log.e(TAG, "Download error", e)
             if (tempApk.exists()) tempApk.delete()
+            val friendlyError = when {
+                e is java.net.SocketTimeoutException ->
+                    "Connection timed out while downloading update. Please check your internet connection."
+                e is java.net.UnknownHostException ->
+                    "Unable to reach update server. Please check your network connection."
+                e.message?.startsWith("SHA-256 checksum mismatch") == true ->
+                    "Download verification failed: the file was incomplete or corrupted. Please try downloading again."
+                e.message?.startsWith("APK signature") == true ->
+                    "Security verification failed: invalid digital signature. Download cancelled for your safety."
+                else -> e.message ?: "Download failed. Please try again later."
+            }
             _updateState.value = _updateState.value.copy(
                 status = UpdateStatus.ERROR,
-                errorMessage = "Download failed: ${e.message}",
+                errorMessage = "Download failed: $friendlyError",
                 statusMessage = null
             )
         }

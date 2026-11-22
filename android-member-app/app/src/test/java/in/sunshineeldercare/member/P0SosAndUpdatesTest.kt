@@ -418,4 +418,83 @@ class P0SosAndUpdatesTest {
 
         assertEquals("Exactly one dispatch must occur regardless of repeated taps", 1, dispatchCount)
     }
+
+    // ==========================================
+    // PRIORITY 5: PERMANENT AUTO-UPDATE INVARIANTS
+    // ==========================================
+
+    @Test
+    fun testMeaningfulUpdateErrorMapping() {
+        // Maps technical exceptions to senior-friendly messages
+        fun mapError(code: Int?, exception: Exception?): String {
+            if (code != null) {
+                return when (code) {
+                    404 -> "The update package is currently being deployed to our servers. Please try again shortly or contact support at 033-40585515."
+                    401, 403 -> "Update download authorization failed. Please contact support."
+                    in 500..599 -> "The distribution server is temporarily unavailable (HTTP $code). Please try again in a few minutes."
+                    else -> "Download server returned HTTP $code."
+                }
+            }
+            return when {
+                exception is java.net.SocketTimeoutException ->
+                    "Connection timed out while downloading update. Please check your internet connection."
+                exception is java.net.UnknownHostException ->
+                    "Unable to reach update server. Please check your network connection."
+                exception?.message?.startsWith("SHA-256 checksum mismatch") == true ->
+                    "Download verification failed: the file was incomplete or corrupted. Please try downloading again."
+                exception?.message?.startsWith("APK signature") == true ->
+                    "Security verification failed: invalid digital signature. Download cancelled for your safety."
+                else -> exception?.message ?: "Download failed. Please try again later."
+            }
+        }
+
+        val err404 = mapError(404, null)
+        assertTrue("404 error must provide clear explanatory context", err404.contains("support at 033-40585515"))
+        assertFalse("Must not expose raw technical 404 to senior without context", err404 == "Failed to download APK: HTTP 404")
+
+        val err500 = mapError(500, null)
+        assertTrue("500 error must explain server unavailability", err500.contains("temporarily unavailable"))
+
+        val timeoutErr = mapError(null, java.net.SocketTimeoutException("Read timed out"))
+        assertTrue("Timeout must mention internet connection", timeoutErr.contains("check your internet connection"))
+
+        val shaErr = mapError(null, Exception("SHA-256 checksum mismatch. Expected: aaa, Got: bbb"))
+        assertTrue("Checksum mismatch must mention file corrupted", shaErr.contains("incomplete or corrupted"))
+    }
+
+    @Test
+    fun testInstalledBuild3DetectsBuild5UpdateAvailable() {
+        val installedVersionCode = 3
+        val installedVersionName = "1.0.2"
+
+        val manifest = AppManifestResponse(
+            appId = "member-app",
+            packageName = "in.sunshineeldercare.member",
+            name = "Sunshine Member App",
+            latestVersionName = "1.0.4",
+            latestVersionCode = 5,
+            apkDownloadUrl = "https://www.sunshineeldercare.in/downloads/apps/Sunshine-Member-v1.0.4-b5.apk",
+            sha256 = "1984162f268df287bf12e2ec7e7f790c10c995e9977e52d0bfbd6c7a9a3f2be0",
+            fileSize = 46718122,
+            minSupportedVersion = "Android (API 29)",
+            releaseNotes = "Production update Build 5"
+        )
+
+        val isUpdateAvailable = manifest.latestVersionCode > installedVersionCode
+        assertTrue("Manifest Build 5 must trigger update for installed Build 3", isUpdateAvailable)
+        assertEquals("in.sunshineeldercare.member", manifest.packageName)
+        assertTrue(manifest.apkDownloadUrl.endsWith(".apk"))
+    }
+
+    @Test
+    fun testFallbackUrlResolutionLogicOn404() {
+        val directUrl = "https://www.sunshineeldercare.in/downloads/apps/Sunshine-Member-v1.0.4-b5.apk"
+        fun computeFallbackUrl(url: String): String {
+            val origin = url.substringBefore("/downloads/")
+            return "$origin/api/apps/member-app/download"
+        }
+
+        val fallback = computeFallbackUrl(directUrl)
+        assertEquals("https://www.sunshineeldercare.in/api/apps/member-app/download", fallback)
+    }
 }

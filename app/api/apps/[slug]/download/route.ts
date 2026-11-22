@@ -33,10 +33,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Telemetry: record download asynchronously (fire-and-forget)
     AppsService.recordDownload(app.latestRelease.id).catch(() => {});
 
-    // Compute redirect target
-    const targetUrl = app.latestRelease.apkUrl.startsWith("http")
-      ? app.latestRelease.apkUrl
-      : `${new URL(request.url).origin}${app.latestRelease.apkUrl}`;
+    // Compute verified redirect target
+    const targetUrl = AppsService.resolveAuthoritativeDownloadUrl(app.latestRelease, app);
 
     return NextResponse.redirect(targetUrl, {
       status: 307,
