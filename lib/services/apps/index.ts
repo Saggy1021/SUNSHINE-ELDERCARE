@@ -1,6 +1,15 @@
 import { db as prisma } from "@/lib/db";
 import { ApkValidator, ApkInspectionResult } from "../apk-validator";
 
+let activeDb: any = prisma;
+
+/**
+ * Allows overriding database client for testing or staging environments.
+ */
+export function setAppsDb(client: any) {
+  activeDb = client;
+}
+
 export interface CreateAppInput {
   slug: string;
   packageName: string;
@@ -44,7 +53,7 @@ export class AppsService {
    * Returns all published applications with their latest published release for the public directory.
    */
   static async getPublishedApps() {
-    const apps = await prisma.publishedApp.findMany({
+    const apps = await activeDb.publishedApp.findMany({
       where: {
         isPublished: true,
         isArchived: false,
@@ -78,7 +87,7 @@ export class AppsService {
    * Returns a specific published application by slug or package name.
    */
   static async getPublishedAppBySlug(slugOrPkg: string) {
-    const app = await prisma.publishedApp.findFirst({
+    const app = await activeDb.publishedApp.findFirst({
       where: {
         OR: [{ slug: slugOrPkg }, { packageName: slugOrPkg }],
         isPublished: true,
@@ -157,7 +166,7 @@ export class AppsService {
    * ADMIN: Returns all applications with complete version history and statistics.
    */
   static async getAllAppsAdmin() {
-    return prisma.publishedApp.findMany({
+    return activeDb.publishedApp.findMany({
       include: {
         versions: {
           orderBy: { versionCode: "desc" },
@@ -178,7 +187,7 @@ export class AppsService {
     const packageName = input.packageName.trim();
 
     // Check slug or packageName uniqueness
-    const existing = await prisma.publishedApp.findFirst({
+    const existing = await activeDb.publishedApp.findFirst({
       where: {
         OR: [{ slug }, { packageName }],
       },
@@ -191,7 +200,7 @@ export class AppsService {
       throw new Error(`An application with package name "${packageName}" already exists.`);
     }
 
-    return prisma.publishedApp.create({
+    return activeDb.publishedApp.create({
       data: {
         slug,
         packageName,
@@ -211,10 +220,10 @@ export class AppsService {
    * ADMIN: Updates application metadata.
    */
   static async updateApp(appId: string, input: UpdateAppInput) {
-    const app = await prisma.publishedApp.findUnique({ where: { id: appId } });
+    const app = await activeDb.publishedApp.findUnique({ where: { id: appId } });
     if (!app) throw new Error("Application not found.");
 
-    return prisma.publishedApp.update({
+    return activeDb.publishedApp.update({
       where: { id: appId },
       data: {
         name: input.name !== undefined ? input.name.trim() : undefined,
@@ -232,7 +241,7 @@ export class AppsService {
    * ADMIN: Adds a new version release to an application.
    */
   static async createRelease(input: CreateReleaseInput) {
-    const app = await prisma.publishedApp.findUnique({
+    const app = await activeDb.publishedApp.findUnique({
       where: { id: input.appId },
       include: {
         versions: {
@@ -265,7 +274,7 @@ export class AppsService {
       throw new Error(verification.reason || "APK validation failed.");
     }
 
-    return prisma.$transaction(async (tx) => {
+    return activeDb.$transaction(async (tx) => {
       const release = await tx.appRelease.create({
         data: {
           appId: input.appId,
@@ -299,13 +308,13 @@ export class AppsService {
    * ADMIN: Toggles publication status of a release.
    */
   static async togglePublishRelease(releaseId: string, isPublished: boolean) {
-    const release = await prisma.appRelease.findUnique({
+    const release = await activeDb.appRelease.findUnique({
       where: { id: releaseId },
       include: { app: true },
     });
     if (!release) throw new Error("Release not found.");
 
-    return prisma.$transaction(async (tx) => {
+    return activeDb.$transaction(async (tx) => {
       const updated = await tx.appRelease.update({
         where: { id: releaseId },
         data: { isPublished },
@@ -333,12 +342,12 @@ export class AppsService {
    * ADMIN: Deletes an unneeded release.
    */
   static async deleteRelease(releaseId: string) {
-    const release = await prisma.appRelease.findUnique({
+    const release = await activeDb.appRelease.findUnique({
       where: { id: releaseId },
     });
     if (!release) throw new Error("Release not found.");
 
-    return prisma.$transaction(async (tx) => {
+    return activeDb.$transaction(async (tx) => {
       await tx.appRelease.delete({ where: { id: releaseId } });
 
       const latestPublished = await tx.appRelease.findFirst({
@@ -361,7 +370,7 @@ export class AppsService {
    */
   static async recordDownload(releaseId: string) {
     try {
-      await prisma.appRelease.update({
+      await activeDb.appRelease.update({
         where: { id: releaseId },
         data: { downloadCount: { increment: 1 } },
       });

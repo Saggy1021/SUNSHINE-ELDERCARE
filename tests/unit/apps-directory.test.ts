@@ -2,7 +2,7 @@ import assert from "node:assert";
 import fs from "fs";
 import path from "path";
 
-// Automatically configure DATABASE_URL from session file if running in local CLI
+// Automatically configure DATABASE_URL from session file if available locally
 const sessionFile = "/Users/tanish/Sunshine Web/.production-db-session.local";
 if (fs.existsSync(sessionFile) && (!process.env.DATABASE_URL || process.env.DATABASE_URL.includes("127.0.0.1"))) {
   try {
@@ -16,8 +16,253 @@ if (fs.existsSync(sessionFile) && (!process.env.DATABASE_URL || process.env.DATA
 }
 
 import { ApkValidator } from "@/lib/services/apk-validator";
-import { AppsService } from "@/lib/services/apps";
-import { db as prisma } from "@/lib/db";
+import { AppsService, setAppsDb } from "@/lib/services/apps";
+
+// In-Memory Database Simulation for CI / isolated runner environments
+function createMockAppsDb() {
+  let apps: any[] = [
+    {
+      id: "seed_member_app",
+      slug: "member-app",
+      packageName: "in.sunshineeldercare.member",
+      name: "Sunshine Member App",
+      tagline: "Elder Care & One-Tap Emergency Support",
+      description: "Official Android application for Sunshine Eldercare members.",
+      iconUrl: "/images/apps/member-app-icon.png",
+      platform: "ANDROID",
+      category: "HEALTH_AND_FITNESS",
+      isPublished: true,
+      isArchived: false,
+      currentVersionId: "seed_member_v1",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      versions: [
+        {
+          id: "seed_member_v1",
+          appId: "seed_member_app",
+          versionName: "1.0.0",
+          versionCode: 1,
+          apkUrl: "/downloads/apps/Sunshine-Member-Release.apk",
+          apkFileName: "Sunshine-Member-Release.apk",
+          fileSize: 45665829,
+          sha256: "f1031c6b5854f8dbd6b8c9d43facf44e0ea8572a4afb194575f8b9b00fee5f99",
+          certificateFingerprint: "370b03fd0c87a9a4620e41fac3859ceeb81ab98752c7673f272548793c4f3394",
+          minAndroidVersion: "Android 10 (API 29)",
+          targetSdkVersion: 36,
+          releaseNotes: "Initial release of Sunshine Member App.",
+          isMandatory: false,
+          isPublished: true,
+          downloadCount: 0,
+          releasedAt: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+    },
+    {
+      id: "seed_employee_app",
+      slug: "employee-app",
+      packageName: "in.sunshineeldercare.employee",
+      name: "Sunshine Employee App",
+      tagline: "Staff Operations & Visit Scheduling",
+      description: "Official Android application for Sunshine Eldercare staff.",
+      iconUrl: "/images/apps/employee-app-icon.png",
+      platform: "ANDROID",
+      category: "MEDICAL",
+      isPublished: true,
+      isArchived: false,
+      currentVersionId: "seed_emp_v1",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      versions: [
+        {
+          id: "seed_emp_v1",
+          appId: "seed_employee_app",
+          versionName: "1.0.0",
+          versionCode: 1,
+          apkUrl: "/downloads/apps/Sunshine-Employee-Release.apk",
+          apkFileName: "Sunshine-Employee-Release.apk",
+          fileSize: 46796266,
+          sha256: "4dffa19ec265749aeec8e80963420313124204b7b819d232f857b21eca132682",
+          certificateFingerprint: "843d8e746bd6604b61f4284131556a948ad6b70b8720842a38fec3e2e09af8cd",
+          minAndroidVersion: "Android 10 (API 29)",
+          targetSdkVersion: 36,
+          releaseNotes: "Initial release of Sunshine Employee App.",
+          isMandatory: false,
+          isPublished: true,
+          downloadCount: 0,
+          releasedAt: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+    },
+  ];
+
+  let releases: any[] = [
+    apps[0].versions[0],
+    apps[1].versions[0],
+  ];
+
+  const db = {
+    publishedApp: {
+      findMany: async (args?: any) => {
+        let result = [...apps];
+        if (args?.where) {
+          if (args.where.isPublished !== undefined) {
+            result = result.filter((a) => a.isPublished === args.where.isPublished);
+          }
+          if (args.where.isArchived !== undefined) {
+            result = result.filter((a) => a.isArchived === args.where.isArchived);
+          }
+        }
+        return result.map((a) => {
+          let item = { ...a };
+          if (args?.include?.versions) {
+            let vers = releases.filter((r) => r.appId === a.id);
+            if (args.include.versions.where?.isPublished !== undefined) {
+              vers = vers.filter((r) => r.isPublished === args.include.versions.where.isPublished);
+            }
+            vers.sort((x, y) => y.versionCode - x.versionCode);
+            if (args.include.versions.take) {
+              vers = vers.slice(0, args.include.versions.take);
+            }
+            item.versions = vers;
+          }
+          return item;
+        });
+      },
+      findFirst: async (args: any) => {
+        let result = [...apps];
+        if (args?.where?.OR) {
+          const conditions = args.where.OR;
+          result = result.filter((a) =>
+            conditions.some((c: any) =>
+              (c.slug && a.slug === c.slug) || (c.packageName && a.packageName === c.packageName)
+            )
+          );
+        }
+        if (args?.where?.isPublished !== undefined) {
+          result = result.filter((a) => a.isPublished === args.where.isPublished);
+        }
+        if (args?.where?.isArchived !== undefined) {
+          result = result.filter((a) => a.isArchived === args.where.isArchived);
+        }
+        const found = result[0];
+        if (!found) return null;
+        let item = { ...found };
+        if (args?.include?.versions) {
+          let vers = releases.filter((r) => r.appId === found.id);
+          if (args.include.versions.where?.isPublished !== undefined) {
+            vers = vers.filter((r) => r.isPublished === args.include.versions.where.isPublished);
+          }
+          vers.sort((x, y) => y.versionCode - x.versionCode);
+          item.versions = vers;
+        }
+        return item;
+      },
+      findUnique: async (args: any) => {
+        const found = apps.find((a) => a.id === args.where.id);
+        if (!found) return null;
+        let item = { ...found };
+        if (args?.include?.versions) {
+          let vers = releases.filter((r) => r.appId === found.id);
+          vers.sort((x, y) => y.versionCode - x.versionCode);
+          if (args.include.versions.take) {
+            vers = vers.slice(0, args.include.versions.take);
+          }
+          item.versions = vers;
+        }
+        return item;
+      },
+      create: async (args: any) => {
+        const newApp = {
+          id: `app_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          ...args.data,
+          versions: [],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        apps.push(newApp);
+        return newApp;
+      },
+      update: async (args: any) => {
+        const idx = apps.findIndex((a) => a.id === args.where.id);
+        if (idx >= 0) {
+          apps[idx] = { ...apps[idx], ...args.data, updatedAt: new Date() };
+          return apps[idx];
+        }
+        return null;
+      },
+      delete: async (args: any) => {
+        apps = apps.filter((a) => a.id !== args.where.id);
+        releases = releases.filter((r) => r.appId !== args.where.id);
+        return { success: true };
+      },
+    },
+    appRelease: {
+      create: async (args: any) => {
+        const newRelease = {
+          id: `release_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          downloadCount: 0,
+          releasedAt: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          ...args.data,
+        };
+        releases.push(newRelease);
+        const parent = apps.find((a) => a.id === args.data.appId);
+        if (parent) {
+          if (!parent.versions) parent.versions = [];
+          parent.versions.push(newRelease);
+        }
+        return newRelease;
+      },
+      findUnique: async (args: any) => {
+        const found = releases.find((r) => r.id === args.where.id);
+        if (!found) return null;
+        const app = apps.find((a) => a.id === found.appId);
+        return { ...found, app };
+      },
+      findFirst: async (args: any) => {
+        let match = releases.filter((r) => r.appId === args.where.appId);
+        if (args?.where?.isPublished !== undefined) {
+          match = match.filter((r) => r.isPublished === args.where.isPublished);
+        }
+        match.sort((a, b) => b.versionCode - a.versionCode);
+        return match[0] || null;
+      },
+      update: async (args: any) => {
+        const idx = releases.findIndex((r) => r.id === args.where.id);
+        if (idx >= 0) {
+          if (args.data.downloadCount?.increment) {
+            releases[idx].downloadCount += args.data.downloadCount.increment;
+          } else {
+            releases[idx] = { ...releases[idx], ...args.data, updatedAt: new Date() };
+          }
+          return releases[idx];
+        }
+        return null;
+      },
+      delete: async (args: any) => {
+        releases = releases.filter((r) => r.id !== args.where.id);
+        return { success: true };
+      },
+    },
+    $transaction: async (fn: any) => {
+      return fn(db);
+    },
+  };
+
+  return db;
+}
+
+// In CI runners or when no external DB is reachable, use in-memory database simulation
+const shouldUseMock = !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("127.0.0.1") || process.env.CI === "true";
+if (shouldUseMock) {
+  console.log("ℹ Using isolated in-memory test database for test suite.");
+  setAppsDb(createMockAppsDb());
+}
 
 async function runAppsDirectoryTestSuite() {
   console.log("================================================================");
@@ -74,17 +319,13 @@ async function runAppsDirectoryTestSuite() {
   // Test 3: Unpublished applications remain invisible
   // -------------------------------------------------------------
   await test("Scenario 3: Unpublished and archived apps are excluded from public directory", async () => {
-    // Query directly with raw filter vs service
     const testAppSlug = `test-draft-${Date.now()}`;
-    const testApp = await prisma.publishedApp.create({
-      data: {
-        slug: testAppSlug,
-        packageName: `in.sunshine.test.${Date.now()}`,
-        name: "Test Unpublished App",
-        description: "Draft app for testing exclusion",
-        isPublished: false, // DRAFT
-        isArchived: false,
-      },
+    const testApp = await AppsService.createApp({
+      slug: testAppSlug,
+      packageName: `in.sunshine.test.${Date.now()}`,
+      name: "Test Unpublished App",
+      description: "Draft app for testing exclusion",
+      isPublished: false, // DRAFT
     });
 
     try {
@@ -95,7 +336,7 @@ async function runAppsDirectoryTestSuite() {
       const publicSingle = await AppsService.getPublishedAppBySlug(testAppSlug);
       assert.strictEqual(publicSingle, null, "Unpublished app lookup by slug must return null");
     } finally {
-      await prisma.publishedApp.delete({ where: { id: testApp.id } });
+      await AppsService.updateApp(testApp.id, { isArchived: true });
     }
   });
 
@@ -226,7 +467,7 @@ async function runAppsDirectoryTestSuite() {
 
     try {
       // Add Release 1
-      const r1 = await AppsService.createRelease({
+      await AppsService.createRelease({
         appId: app.id,
         versionName: "1.0.0",
         versionCode: 1,
@@ -238,7 +479,7 @@ async function runAppsDirectoryTestSuite() {
       });
 
       // Add Release 2
-      const r2 = await AppsService.createRelease({
+      await AppsService.createRelease({
         appId: app.id,
         versionName: "1.1.0",
         versionCode: 2,
@@ -257,7 +498,8 @@ async function runAppsDirectoryTestSuite() {
       assert.strictEqual(updatedApp?.versions[0].versionCode, 2, "Latest release is first (desc order)");
       assert.strictEqual(updatedApp?.versions[1].versionCode, 1, "Prior release is second");
     } finally {
-      await prisma.publishedApp.delete({ where: { id: app.id } });
+      // Clean up
+      await AppsService.updateApp(app.id, { isArchived: true });
     }
   });
 
@@ -275,7 +517,7 @@ async function runAppsDirectoryTestSuite() {
     });
 
     try {
-      const r1 = await AppsService.createRelease({
+      await AppsService.createRelease({
         appId: app.id,
         versionName: "1.0.0",
         versionCode: 1,
@@ -304,7 +546,7 @@ async function runAppsDirectoryTestSuite() {
       const manifest = await AppsService.getUpdateManifest(testAppSlug);
       assert.strictEqual((manifest as any).latestVersionCode, 1, "Withdrawing v2 must fall back to v1");
     } finally {
-      await prisma.publishedApp.delete({ where: { id: app.id } });
+      await AppsService.updateApp(app.id, { isArchived: true });
     }
   });
 
@@ -335,11 +577,8 @@ async function runAppsDirectoryTestSuite() {
     const initialDownloads = app.latestRelease.downloadCount;
     await AppsService.recordDownload(app.latestRelease.id);
 
-    const reloaded = await prisma.appRelease.findUnique({
-      where: { id: app.latestRelease.id },
-    });
-
-    assert.strictEqual(reloaded?.downloadCount, initialDownloads + 1, "Download count must increment by 1");
+    const reloaded = await AppsService.getPublishedAppBySlug("member-app");
+    assert.strictEqual(reloaded?.latestRelease?.downloadCount, initialDownloads + 1, "Download count must increment by 1");
   });
 
   // -------------------------------------------------------------
@@ -357,7 +596,6 @@ async function runAppsDirectoryTestSuite() {
   // Test 14: Non-admin authorization guard
   // -------------------------------------------------------------
   await test("Scenario 14: Authorization guards protect administrative mutation actions", async () => {
-    // Dynamically verify AuthorizationService blocks unauthorized users
     const { AuthorizationService } = await import("@/lib/services/authorization");
     const fakeUserId = "fake_unauthorized_user_99999";
     const hasAdmin = await AuthorizationService.hasAdminPortalAccess(fakeUserId, "regular.user@example.com");
