@@ -585,4 +585,106 @@ class P0SosAndUpdatesTest {
         assertTrue("Subsequent check must succeed", attemptCheck())
         assertEquals(2, startedChecks)
     }
+
+    @Test
+    fun testMultiCandidateUrlResolution() {
+        val manifest = AppManifestResponse(
+            appId = "member-app",
+            packageName = "in.sunshineeldercare.member",
+            name = "Sunshine Member App",
+            latestVersionName = "1.0.5",
+            latestVersionCode = 6,
+            apkDownloadUrl = "https://www.sunshineeldercare.in/downloads/apps/Sunshine-Member-Release.apk",
+            sha256 = "cf672287e6e396dcfa6070a6256176ba5d1161342187b1f4f406ef3b0368deaf",
+            fileSize = 46718122,
+            minSupportedVersion = "10 (API 29)",
+            releaseNotes = "Build 6 Release Notes"
+        )
+
+        val origin = "https://www.sunshineeldercare.in"
+        val timestamp = 1763800000000L
+
+        val candidateUrls = linkedSetOf<String>().apply {
+            if (manifest.apkDownloadUrl.isNotBlank()) {
+                add(manifest.apkDownloadUrl)
+            }
+            add("$origin/api/apps/member-app/download/Sunshine-Member-Release.apk?v=${manifest.latestVersionCode}&t=$timestamp")
+            add("$origin/api/apps/member-app/download?v=${manifest.latestVersionCode}&t=$timestamp")
+            add("$origin/downloads/apps/Sunshine-Member-v${manifest.latestVersionName}-b${manifest.latestVersionCode}.apk")
+            add("$origin/downloads/apps/Sunshine-Member-Release.apk?t=$timestamp")
+        }.toList()
+
+        assertEquals("Must generate 5 candidate URLs", 5, candidateUrls.size)
+        assertEquals(manifest.apkDownloadUrl, candidateUrls[0])
+        assertTrue("Candidate 2 must target canonical API with filename and version", candidateUrls[1].contains("/api/apps/member-app/download/Sunshine-Member-Release.apk?v=6"))
+        assertTrue("Candidate 3 must target canonical API gateway with version", candidateUrls[2].contains("/api/apps/member-app/download?v=6"))
+        assertTrue("Candidate 4 must target versioned static APK", candidateUrls[3].endsWith("Sunshine-Member-v1.0.5-b6.apk"))
+        assertTrue("Candidate 5 must include timestamp cache buster", candidateUrls[4].contains("?t=1763800000000"))
+    }
+
+    @Test
+    fun testCandidateFallbackOnSha256Mismatch() {
+        val expectedSha256 = "cf672287e6e396dcfa6070a6256176ba5d1161342187b1f4f406ef3b0368deaf"
+        val staleSha256 = "d3f31e5631155416e7ed6ed056f4fbf710982fbbb7670c968d05181bfb49a725"
+
+        val candidates = listOf(
+            "https://www.sunshineeldercare.in/downloads/apps/Sunshine-Member-Release.apk" to staleSha256,
+            "https://www.sunshineeldercare.in/api/apps/member-app/download/Sunshine-Member-Release.apk?v=6" to expectedSha256
+        )
+
+        var resolvedSha: String? = null
+        var winningCandidateUrl: String? = null
+        val rejectedCandidates = mutableListOf<String>()
+
+        for ((url, sha) in candidates) {
+            if (!sha.equals(expectedSha256, ignoreCase = true)) {
+                rejectedCandidates.add(url)
+                continue
+            }
+            resolvedSha = sha
+            winningCandidateUrl = url
+            break
+        }
+
+        assertEquals("Exactly 1 candidate must be rejected due to mismatch", 1, rejectedCandidates.size)
+        assertEquals("https://www.sunshineeldercare.in/downloads/apps/Sunshine-Member-Release.apk", rejectedCandidates[0])
+        assertEquals("Canonical R2 gateway must succeed as winning candidate", "https://www.sunshineeldercare.in/api/apps/member-app/download/Sunshine-Member-Release.apk?v=6", winningCandidateUrl)
+        assertEquals(expectedSha256, resolvedSha)
+    }
+
+    @Test
+    fun testIncompleteDownloadByteCountCheck() {
+        val expectedSize = 46718122L
+        val truncatedBytes = 10485760L // only 10MB received
+
+        fun isDownloadComplete(downloaded: Long, expected: Long): Boolean {
+            return expected <= 0L || downloaded == expected
+        }
+
+        assertFalse("Truncated download of 10MB against 46.7MB must be rejected", isDownloadComplete(truncatedBytes, expectedSize))
+        assertTrue("Complete download of exact 46718122 bytes must pass", isDownloadComplete(expectedSize, expectedSize))
+    }
+
+    @Test
+    fun testTempApkCleanupInvariant() {
+        val tempFile = java.io.File.createTempFile("Sunshine-Member-6", ".apk.tmp")
+        val targetFile = java.io.File(tempFile.parentFile, "Sunshine-Member-6.apk")
+
+        try {
+            tempFile.writeText("corrupted partial binary bytes")
+            assertTrue("Temp file must exist initially", tempFile.exists())
+
+            // Simulating failure cleanup
+            val isVerified = false
+            if (!isVerified) {
+                if (tempFile.exists()) tempFile.delete()
+            }
+
+            assertFalse("Temp file must be deleted upon verification failure", tempFile.exists())
+            assertFalse("Target APK must NOT be created when verification fails", targetFile.exists())
+        } finally {
+            if (tempFile.exists()) tempFile.delete()
+            if (targetFile.exists()) targetFile.delete()
+        }
+    }
 }

@@ -140,18 +140,18 @@ export class AppsService {
     if (!release) return `${baseUrl}/apps`;
 
     const appSlug = app?.slug || (release.app?.slug) || (release.packageName?.includes("employee") ? "employee-app" : "member-app");
+    const isMember = (appSlug === "member-app" || release.packageName === "in.sunshineeldercare.member" || (release.apkUrl || "").toLowerCase().includes("member"));
+    const isEmployee = (appSlug === "employee-app" || release.packageName === "in.sunshineeldercare.employee" || (release.apkUrl || "").toLowerCase().includes("employee"));
+    const prefix = isMember ? "Sunshine-Member" : isEmployee ? "Sunshine-Employee" : "App";
+    const fileName = release.apkFileName || `${prefix}-Release.apk`;
 
-    // If release is persisted in Cloudflare R2, route via canonical download gateway
+    // If release is persisted in Cloudflare R2, route via canonical download gateway with filename
     if (release.storageKey || release.storageProvider === "R2") {
-      return `${baseUrl}/api/apps/${appSlug}/download`;
+      return `${baseUrl}/api/apps/${appSlug}/download/${fileName}`;
     }
 
     const rawUrl = release.apkUrl || "";
     if (rawUrl.startsWith("http")) return rawUrl;
-
-    const isMember = (appSlug === "member-app" || release.packageName === "in.sunshineeldercare.member" || rawUrl.toLowerCase().includes("member"));
-    const isEmployee = (appSlug === "employee-app" || release.packageName === "in.sunshineeldercare.employee" || rawUrl.toLowerCase().includes("employee"));
-    const prefix = isMember ? "Sunshine-Member" : isEmployee ? "Sunshine-Employee" : "App";
 
     try {
       const nodePath = require("path");
@@ -159,27 +159,27 @@ export class AppsService {
       const publicDir = nodePath.join(process.cwd(), "public");
 
       if (nodeFs.existsSync(publicDir)) {
-        // 1. Direct file check
-        if (rawUrl.startsWith("/") && nodeFs.existsSync(nodePath.join(publicDir, rawUrl))) {
-          return `${baseUrl}${rawUrl}`;
-        }
-
-        // 2. Candidate versioned file check
+        // 1. Candidate versioned file check
         const versionedName = `${prefix}-v${release.versionName}-b${release.versionCode}.apk`;
         if (nodeFs.existsSync(nodePath.join(publicDir, "downloads", "apps", versionedName))) {
           return `${baseUrl}/downloads/apps/${versionedName}`;
         }
 
-        // 3. Candidate canonical release file check
+        // 2. Candidate canonical release file check
         const canonicalName = `${prefix}-Release.apk`;
         if (nodeFs.existsSync(nodePath.join(publicDir, "downloads", "apps", canonicalName))) {
           return `${baseUrl}/downloads/apps/${canonicalName}`;
+        }
+
+        // 3. Direct file check
+        if (rawUrl.startsWith("/") && nodeFs.existsSync(nodePath.join(publicDir, rawUrl))) {
+          return `${baseUrl}${rawUrl}`;
         }
       }
     } catch (_: any) {}
 
     // Fallback to unified download gateway
-    return `${baseUrl}/api/apps/${appSlug}/download`;
+    return `${baseUrl}/api/apps/${appSlug}/download/${fileName}`;
   }
 
   /**

@@ -153,6 +153,8 @@ object AppUpdateManager {
                 val request = Request.Builder()
                     .url(MANIFEST_URL)
                     .addHeader("Accept", "application/json")
+                    .addHeader("Cache-Control", "no-cache, no-store, must-revalidate")
+                    .addHeader("Pragma", "no-cache")
                     .build()
 
                 val response = httpClient.newCall(request).execute()
@@ -226,149 +228,221 @@ object AppUpdateManager {
             val targetApk = File(updatesDir, "Sunshine-Member-${manifest.latestVersionCode}.apk")
             val tempApk = File(updatesDir, "Sunshine-Member-${manifest.latestVersionCode}.apk.tmp")
 
+            // Always clean up any stale or leftover temp file from prior interrupted download
+            if (tempApk.exists()) {
+                tempApk.delete()
+            }
+
             // If target file already exists and passes verification, jump straight to ready
-            if (targetApk.exists() && targetApk.length() == manifest.fileSize) {
+            if (targetApk.exists() && (manifest.fileSize <= 0L || targetApk.length() == manifest.fileSize)) {
                 val valid = verifyDownloadedApk(context, targetApk, manifest.sha256, manifest.latestVersionCode)
                 if (valid) {
                     _updateState.value = _updateState.value.copy(
                         status = UpdateStatus.READY_TO_INSTALL,
                         downloadProgress = 100,
                         downloadedApkFile = targetApk,
-                        statusMessage = "Update ready to install."
+                        statusMessage = "Update ready to install.",
+                        errorMessage = null
                     )
                     return@withContext
+                } else {
+                    targetApk.delete() // Stale or corrupt target APK
                 }
             }
 
             _updateState.value = _updateState.value.copy(
                 status = UpdateStatus.DOWNLOADING,
                 downloadProgress = 0,
-                statusMessage = "Downloading Sunshine update..."
+                statusMessage = "Downloading Sunshine update...",
+                errorMessage = null
             )
 
-            try {
-                val request = Request.Builder()
-                    .url(manifest.apkDownloadUrl)
-                    .build()
+            // Resolve Origin and Candidate Download URLs
+            val origin = if (manifest.apkDownloadUrl.startsWith("http")) {
+                val uri = Uri.parse(manifest.apkDownloadUrl)
+                "${uri.scheme}://${uri.host}" + if (uri.port != -1 && uri.port != 80 && uri.port != 443) ":${uri.port}" else ""
+            } else {
+                "https://www.sunshineeldercare.in"
+            }
 
-                var response = httpClient.newCall(request).execute()
+            val timestamp = System.currentTimeMillis()
+            val candidateUrls = linkedSetOf<String>().apply {
+                if (manifest.apkDownloadUrl.isNotBlank()) {
+                    add(manifest.apkDownloadUrl)
+                }
+                add("$origin/api/apps/member-app/download/Sunshine-Member-Release.apk?v=${manifest.latestVersionCode}&t=$timestamp")
+                add("$origin/api/apps/member-app/download?v=${manifest.latestVersionCode}&t=$timestamp")
+                add("$origin/downloads/apps/Sunshine-Member-v${manifest.latestVersionName}-b${manifest.latestVersionCode}.apk")
+                add("$origin/downloads/apps/Sunshine-Member-Release.apk?t=$timestamp")
+            }.toList()
 
-                // Resilient Fallback 1: If direct manifest URL returned 404, try canonical download route
-                if (!response.isSuccessful && response.code == 404) {
-                    Log.w(TAG, "Direct download URL returned 404. Attempting /api/apps/member-app/download...")
-                    val origin = if (manifest.apkDownloadUrl.startsWith("http")) {
-                        val uri = Uri.parse(manifest.apkDownloadUrl)
-                        "${uri.scheme}://${uri.host}" + if (uri.port != -1 && uri.port != 80 && uri.port != 443) ":${uri.port}" else ""
-                    } else {
-                        "https://www.sunshineeldercare.in"
-                    }
-                    val fallbackUrl = "$origin/api/apps/member-app/download"
-                    val fallbackRequest = Request.Builder().url(fallbackUrl).build()
-                    val fallbackResponse = httpClient.newCall(fallbackRequest).execute()
-                    if (fallbackResponse.isSuccessful) {
-                        response = fallbackResponse
-                        Log.i(TAG, "Fallback download succeeded via /api/apps/member-app/download")
-                    } else if (fallbackResponse.code == 404) {
-                        // Resilient Fallback 2: Try canonical static release binary alias
-                        val staticUrl = "$origin/downloads/apps/Sunshine-Member-Release.apk"
-                        val staticRequest = Request.Builder().url(staticUrl).build()
-                        val staticResponse = httpClient.newCall(staticRequest).execute()
-                        if (staticResponse.isSuccessful) {
-                            response = staticResponse
-                            Log.i(TAG, "Fallback download succeeded via /downloads/apps/Sunshine-Member-Release.apk")
+            var downloadSuccess = false
+            var lastFailureReason = "Download failed."
+            var lastExpectedSha = manifest.sha256
+            var lastReceivedSha: String? = null
+
+            for ((index, candidateUrl) in candidateUrls.withIndex()) {
+                if (SosOutboxManager.hasActiveOrPendingEmergency()) {
+                    Log.w(TAG, "Download cancelled due to active SOS.")
+                    if (tempApk.exists()) tempApk.delete()
+                    _updateState.value = _updateState.value.copy(status = UpdateStatus.IDLE)
+                    return@withContext
+                }
+
+                Log.i(TAG, "Attempting update download candidate [${index + 1}/${candidateUrls.size}]: $candidateUrl")
+
+                if (tempApk.exists()) tempApk.delete()
+
+                try {
+                    val request = Request.Builder()
+                        .url(candidateUrl)
+                        .header("Cache-Control", "no-cache, no-store, must-revalidate")
+                        .header("Pragma", "no-cache")
+                        .header("User-Agent", "SunshineMemberApp/${_updateState.value.currentVersionName} (Build ${_updateState.value.currentVersionCode}; Android ${Build.VERSION.SDK_INT})")
+                        .header("Accept", "application/vnd.android.package-archive, application/octet-stream, */*")
+                        .build()
+
+                    val response = httpClient.newCall(request).execute()
+
+                    // Ensure complete content (Reject 206 Partial Content or HTTP errors)
+                    if (!response.isSuccessful || response.code != 200) {
+                        val code = response.code
+                        response.close()
+                        Log.w(TAG, "Candidate ${index + 1} returned HTTP $code.")
+                        lastFailureReason = when (code) {
+                            404 -> "The update package is currently being deployed to our servers. Please try again shortly or contact support at 033-40585515."
+                            401, 403 -> "Update download authorization failed. Please contact support."
+                            in 500..599 -> "The distribution server is temporarily unavailable (HTTP $code). Please try again in a few minutes."
+                            else -> "Download server returned HTTP $code."
                         }
+                        continue
                     }
-                }
 
-                if (!response.isSuccessful) {
-                    val errorReason = when (response.code) {
-                        404 -> "The update package is currently being deployed to our servers. Please try again shortly or contact support at 033-40585515."
-                        401, 403 -> "Update download authorization failed. Please contact support."
-                        in 500..599 -> "The distribution server is temporarily unavailable (HTTP ${response.code}). Please try again in a few minutes."
-                        else -> "Download server returned HTTP ${response.code}."
+                    val body = response.body
+                    if (body == null) {
+                        response.close()
+                        Log.w(TAG, "Candidate ${index + 1} returned empty response body.")
+                        lastFailureReason = "Empty download response body from server."
+                        continue
                     }
-                    throw Exception(errorReason)
-                }
 
-                val body = response.body ?: throw Exception("Empty download response body")
-                val totalBytes = if (manifest.fileSize > 0) manifest.fileSize else body.contentLength()
+                    val contentLength = body.contentLength()
+                    val totalBytes = if (manifest.fileSize > 0) manifest.fileSize else contentLength
 
-                val digest = MessageDigest.getInstance("SHA-256")
-                val input = body.byteStream()
-                val output = FileOutputStream(tempApk)
+                    val digest = MessageDigest.getInstance("SHA-256")
+                    val input = body.byteStream()
+                    val output = FileOutputStream(tempApk)
 
-                val buffer = ByteArray(8192)
-                var bytesRead: Int
-                var downloadedBytes = 0L
-                var lastReportedProgress = 0
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    var downloadedBytes = 0L
+                    var lastReportedProgress = 0
+                    var streamInterrupted = false
 
-                while (input.read(buffer).also { bytesRead = it } != -1) {
-                    // Periodically check if emergency started during download
-                    if (SosOutboxManager.hasActiveOrPendingEmergency()) {
-                        output.close()
-                        input.close()
-                        tempApk.delete()
-                        Log.w(TAG, "Download cancelled due to active SOS.")
+                    try {
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            if (SosOutboxManager.hasActiveOrPendingEmergency()) {
+                                streamInterrupted = true
+                                Log.w(TAG, "Download stream cancelled due to active SOS.")
+                                break
+                            }
+
+                            output.write(buffer, 0, bytesRead)
+                            digest.update(buffer, 0, bytesRead)
+                            downloadedBytes += bytesRead
+
+                            if (totalBytes > 0) {
+                                val progress = ((downloadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100)
+                                if (progress != lastReportedProgress) {
+                                    lastReportedProgress = progress
+                                    _updateState.value = _updateState.value.copy(downloadProgress = progress)
+                                }
+                            }
+                        }
+                    } finally {
+                        try { output.flush() } catch (_: Exception) {}
+                        try { output.close() } catch (_: Exception) {}
+                        try { input.close() } catch (_: Exception) {}
+                        try { response.close() } catch (_: Exception) {}
+                    }
+
+                    if (streamInterrupted) {
+                        if (tempApk.exists()) tempApk.delete()
                         _updateState.value = _updateState.value.copy(status = UpdateStatus.IDLE)
                         return@withContext
                     }
 
-                    output.write(buffer, 0, bytesRead)
-                    digest.update(buffer, 0, bytesRead)
-                    downloadedBytes += bytesRead
+                    // 1. Partial / Incomplete Stream Check
+                    if (manifest.fileSize > 0 && downloadedBytes != manifest.fileSize) {
+                        Log.w(TAG, "Candidate ${index + 1} size mismatch: received $downloadedBytes bytes, expected ${manifest.fileSize} bytes.")
+                        if (tempApk.exists()) tempApk.delete()
+                        lastFailureReason = "Download verification failed: the file was incomplete or corrupted. Please try downloading again."
+                        continue
+                    } else if (contentLength > 0 && downloadedBytes != contentLength) {
+                        Log.w(TAG, "Candidate ${index + 1} stream truncated: received $downloadedBytes bytes, header stated $contentLength bytes.")
+                        if (tempApk.exists()) tempApk.delete()
+                        lastFailureReason = "Download stream ended prematurely. Please check your internet connection."
+                        continue
+                    }
 
-                    if (totalBytes > 0) {
-                        val progress = ((downloadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100)
-                        if (progress != lastReportedProgress) {
-                            lastReportedProgress = progress
-                            _updateState.value = _updateState.value.copy(downloadProgress = progress)
-                        }
+                    // 2. Full Streaming SHA-256 Verification
+                    val calculatedSha = digest.digest().joinToString("") { "%02x".format(it) }
+                    lastReceivedSha = calculatedSha
+
+                    if (!calculatedSha.equals(manifest.sha256, ignoreCase = true)) {
+                        Log.w(TAG, "Candidate ${index + 1} SHA-256 mismatch! Expected: ${manifest.sha256}, Got: $calculatedSha. URL: $candidateUrl")
+                        if (tempApk.exists()) tempApk.delete()
+                        lastFailureReason = "Download verification failed: received SHA-256 does not match manifest. Expected: ${manifest.sha256.take(8)}..., Got: ${calculatedSha.take(8)}..."
+                        continue
+                    }
+
+                    // 3. Verify Package Name & Signing Certificate
+                    val isValidApk = verifyDownloadedApk(context, tempApk, manifest.sha256, manifest.latestVersionCode)
+                    if (!isValidApk) {
+                        Log.w(TAG, "Candidate ${index + 1} APK package/signature verification failed.")
+                        if (tempApk.exists()) tempApk.delete()
+                        lastFailureReason = "Security verification failed: invalid digital signature. Download cancelled for your safety."
+                        continue
+                    }
+
+                    // 4. Atomically commit temp file to target file
+                    if (targetApk.exists()) targetApk.delete()
+                    val renamed = tempApk.renameTo(targetApk)
+                    if (!renamed) {
+                        tempApk.copyTo(targetApk, overwrite = true)
+                        tempApk.delete()
+                    }
+
+                    _updateState.value = _updateState.value.copy(
+                        status = UpdateStatus.READY_TO_INSTALL,
+                        downloadProgress = 100,
+                        downloadedApkFile = targetApk,
+                        statusMessage = "Update ready to install.",
+                        errorMessage = null
+                    )
+                    Log.i(TAG, "Update successfully downloaded and verified via candidate ${index + 1}: ${targetApk.name}")
+                    downloadSuccess = true
+                    break
+
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error on download candidate ${index + 1} ($candidateUrl)", e)
+                    if (tempApk.exists()) tempApk.delete()
+                    lastFailureReason = when {
+                        e is java.net.SocketTimeoutException ->
+                            "Connection timed out while downloading update. Please check your internet connection."
+                        e is java.net.UnknownHostException ->
+                            "Unable to reach update server. Please check your network connection."
+                        else -> e.message ?: "Download connection error."
                     }
                 }
+            }
 
-                output.flush()
-                output.close()
-                input.close()
-
-                // Verify SHA-256 Checksum
-                val calculatedSha = digest.digest().joinToString("") { "%02x".format(it) }
-                if (!calculatedSha.equals(manifest.sha256, ignoreCase = true)) {
-                    tempApk.delete()
-                    throw Exception("SHA-256 checksum mismatch. Expected: ${manifest.sha256}, Got: $calculatedSha")
-                }
-
-                // Verify Package Name & Signing Certificate
-                val isValidApk = verifyDownloadedApk(context, tempApk, manifest.sha256, manifest.latestVersionCode)
-                if (!isValidApk) {
-                    tempApk.delete()
-                    throw Exception("APK signature or package verification failed.")
-                }
-
-                // Atomically rename to final target file
-                if (targetApk.exists()) targetApk.delete()
-                tempApk.renameTo(targetApk)
-
-                _updateState.value = _updateState.value.copy(
-                    status = UpdateStatus.READY_TO_INSTALL,
-                    downloadProgress = 100,
-                    downloadedApkFile = targetApk,
-                    statusMessage = "Update ready to install."
-                )
-                Log.i(TAG, "Update successfully downloaded, verified and ready: ${targetApk.name}")
-
-            } catch (e: Exception) {
-                Log.e(TAG, "Download error", e)
+            if (!downloadSuccess) {
                 if (tempApk.exists()) tempApk.delete()
-                val friendlyError = when {
-                    e is java.net.SocketTimeoutException ->
-                        "Connection timed out while downloading update. Please check your internet connection."
-                    e is java.net.UnknownHostException ->
-                        "Unable to reach update server. Please check your network connection."
-                    e.message?.startsWith("SHA-256 checksum mismatch") == true ->
-                        "Download verification failed: the file was incomplete or corrupted. Please try downloading again."
-                    e.message?.startsWith("APK signature") == true ->
-                        "Security verification failed: invalid digital signature. Download cancelled for your safety."
-                    else -> e.message ?: "Download failed. Please try again later."
+                val friendlyError = if (lastReceivedSha != null && !lastReceivedSha.equals(lastExpectedSha, ignoreCase = true)) {
+                    "Download verification failed: the file was incomplete or corrupted. Please try downloading again."
+                } else {
+                    lastFailureReason
                 }
                 _updateState.value = _updateState.value.copy(
                     status = UpdateStatus.ERROR,
@@ -376,6 +450,7 @@ object AppUpdateManager {
                     statusMessage = null
                 )
             }
+
         } finally {
             isDownloading.set(false)
         }

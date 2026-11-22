@@ -5,7 +5,7 @@ import { r2ReleaseStorage } from "@/lib/services/storage/r2-releases";
 export const dynamic = "force-dynamic";
 
 interface RouteParams {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ slug: string; filename?: string }>;
 }
 
 /**
