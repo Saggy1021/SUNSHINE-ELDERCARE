@@ -39,7 +39,7 @@ class SunshineMemberApp : Application() {
                 startedActivitiesCount++
                 if (startedActivitiesCount == 1) {
                     LiveRefreshManager.onAppForegrounded()
-                    SosOutboxManager.checkAndResumePendingDelivery()
+                    // Auto-dispatch on foreground removed: SOS calls must only occur on explicit user interaction
                     AppUpdateManager.onAppForegrounded()
                 }
             }

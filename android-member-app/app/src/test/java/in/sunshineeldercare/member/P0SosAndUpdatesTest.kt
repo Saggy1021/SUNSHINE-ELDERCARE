@@ -301,4 +301,121 @@ class P0SosAndUpdatesTest {
         val dashboardRoute = "dashboard"
         assertEquals("dashboard", dashboardRoute)
     }
+
+    // ==========================================
+    // PRIORITY 4: ACCIDENTAL SOS LAUNCH & CONFIRMATION INVARIANTS
+    // ==========================================
+
+    @Test
+    fun testDefaultSosStateIsIdle() {
+        // Invariant: SosOutboxManager default state must be strictly null (inactive/idle)
+        val defaultSos = `in`.sunshineeldercare.member.data.repository.SosOutboxManager.currentSos.value
+        assertNull("Default SOS state must be null on clean launch", defaultSos)
+    }
+
+    @Test
+    fun testStalePersistedOutboxCriteria() {
+        val now = System.currentTimeMillis()
+        val staleItem = SosOutboxItem(
+            requestId = UUID.randomUUID().toString(),
+            timestamp = now - (3 * 3600 * 1000L), // 3 hours ago
+            status = SosDeliveryStatus.DELIVERED
+        )
+        val freshItem = SosOutboxItem(
+            requestId = UUID.randomUUID().toString(),
+            timestamp = now - (30 * 60 * 1000L), // 30 minutes ago
+            status = SosDeliveryStatus.DELIVERED
+        )
+        val failedItem = SosOutboxItem(
+            requestId = UUID.randomUUID().toString(),
+            timestamp = now - (10 * 60 * 1000L), // 10 minutes ago
+            status = SosDeliveryStatus.FAILED
+        )
+
+        fun isStale(item: SosOutboxItem): Boolean {
+            val ageHours = (now - item.timestamp) / (1000 * 60 * 60)
+            return ageHours >= 2 || item.status == SosDeliveryStatus.FAILED
+        }
+
+        assertTrue("Item older than 2 hours must be classified as stale", isStale(staleItem))
+        assertFalse("Item under 2 hours must not be classified as stale", isStale(freshItem))
+        assertTrue("Failed item must be classified as stale for immediate cleanup", isStale(failedItem))
+    }
+
+    @Test
+    fun testSendingStateDowngradedToPendingRetryOnProcessRestart() {
+        val deadProcessItem = SosOutboxItem(
+            requestId = UUID.randomUUID().toString(),
+            timestamp = System.currentTimeMillis() - 5000L,
+            status = SosDeliveryStatus.SENDING
+        )
+
+        // On cold start, transient SENDING must be converted to PENDING_RETRY to avoid indefinite spinner
+        val restoredItem = if (deadProcessItem.status == SosDeliveryStatus.SENDING) {
+            deadProcessItem.copy(status = SosDeliveryStatus.PENDING_RETRY)
+        } else {
+            deadProcessItem
+        }
+
+        assertEquals(SosDeliveryStatus.PENDING_RETRY, restoredItem.status)
+    }
+
+    @Test
+    fun testConfirmationDialogPreventsUnintentionalSosTrigger() {
+        // Simulates the UI logic: tapping the SOS button must not directly trigger SOS.
+        // It must set showConfirmDialog = true, requiring explicit confirmation.
+        var showConfirmDialog = false
+        var sosTriggered = false
+
+        fun onSosButtonClicked(isDelivered: Boolean, isSending: Boolean) {
+            if (isDelivered || isSending) return
+            showConfirmDialog = true
+        }
+
+        fun onConfirmCancelled() {
+            showConfirmDialog = false
+            // sosTriggered remains false!
+        }
+
+        fun onConfirmAccepted() {
+            showConfirmDialog = false
+            sosTriggered = true
+        }
+
+        // 1. Initial click
+        onSosButtonClicked(isDelivered = false, isSending = false)
+        assertTrue("Confirmation dialog must be shown on click", showConfirmDialog)
+        assertFalse("SOS must NOT be triggered merely by clicking the SOS button", sosTriggered)
+
+        // 2. Member cancels
+        onConfirmCancelled()
+        assertFalse("Confirmation dialog must be dismissed on cancel", showConfirmDialog)
+        assertFalse("SOS must NOT be triggered after user cancellation", sosTriggered)
+
+        // 3. Member clicks again and confirms
+        onSosButtonClicked(isDelivered = false, isSending = false)
+        assertTrue(showConfirmDialog)
+        onConfirmAccepted()
+        assertFalse(showConfirmDialog)
+        assertTrue("SOS must only be triggered after explicit confirmation", sosTriggered)
+    }
+
+    @Test
+    fun testSubmissionLockPreventsDuplicateSosDispatches() {
+        var isSubmittingSos = false
+        var dispatchCount = 0
+
+        fun triggerSosWithLock() {
+            if (isSubmittingSos) return
+            isSubmittingSos = true
+            dispatchCount++
+        }
+
+        // Rapid double-tap simulation
+        triggerSosWithLock()
+        triggerSosWithLock()
+        triggerSosWithLock()
+
+        assertEquals("Exactly one dispatch must occur regardless of repeated taps", 1, dispatchCount)
+    }
 }

@@ -42,18 +42,13 @@ fun CircularSosButton(
     val sosItem by SosOutboxManager.currentSos.collectAsState()
 
     var showActiveEmergencyDialog by remember { mutableStateOf(false) }
+    var showConfirmDialog by remember { mutableStateOf(false) }
+    var isSubmittingSos by remember { mutableStateOf(false) }
 
     val isSending = sosItem?.status == SosDeliveryStatus.SENDING || sosItem?.status == SosDeliveryStatus.QUEUED
     val isDelivered = sosItem?.status == SosDeliveryStatus.DELIVERED
     val isPendingRetry = sosItem?.status == SosDeliveryStatus.PENDING_RETRY
     val isFailed = sosItem?.status == SosDeliveryStatus.FAILED
-
-    // Open active dialog when delivered
-    LaunchedEffect(sosItem?.status) {
-        if (isDelivered) {
-            showActiveEmergencyDialog = true
-        }
-    }
 
     // Pulsing animation for ambient emergency ring
     val infiniteTransition = rememberInfiniteTransition(label = "SosPulse")
@@ -77,14 +72,15 @@ fun CircularSosButton(
             showActiveEmergencyDialog = true
             return
         }
-        if (isSending) return
+        if (isSending || isSubmittingSos) return
 
         if (isPendingRetry) {
             SosOutboxManager.retryNow(context)
             return
         }
 
-        SosOutboxManager.triggerSosImmediate(context) { _, _ -> }
+        // Show explicit confirmation dialog before triggering SOS
+        showConfirmDialog = true
     }
 
     Card(
@@ -208,7 +204,7 @@ fun CircularSosButton(
                             )
                         )
                         .border(4.dp, IvoryBackground, CircleShape)
-                        .clickable(enabled = !isSending) {
+                        .clickable(enabled = !isSending && !isSubmittingSos) {
                             handleSosClick()
                         }
                 ) {
@@ -337,6 +333,119 @@ fun CircularSosButton(
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace
                     )
+                }
+            }
+        }
+    }
+
+    // Explicit Confirmation Dialog before sending SOS (Prevents accidental triggers)
+    if (showConfirmDialog) {
+        Dialog(onDismissRequest = { showConfirmDialog = false }) {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFFEE2E2)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = "Emergency Alert",
+                            tint = SosRed,
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = "Confirm Emergency SOS",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Black,
+                            color = NavyDark,
+                            textAlign = TextAlign.Center
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "Are you sure you want to trigger an emergency SOS?\n\nThis will immediately notify the Sunshine Emergency Command Center, transmit your live location, and dispatch emergency response assistance.",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = TextSecondary,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 22.sp
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // Primary Action: Confirm & Send SOS (with double-tap guard)
+                    Button(
+                        onClick = {
+                            if (!isSubmittingSos) {
+                                isSubmittingSos = true
+                                showConfirmDialog = false
+                                SosOutboxManager.triggerSosImmediate(context) { _, _ ->
+                                    isSubmittingSos = false
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SosRed,
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PhoneInTalk,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Confirm & Send SOS",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Secondary Action: Cancel (Safe, zero side-effects)
+                    OutlinedButton(
+                        onClick = {
+                            showConfirmDialog = false
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                    ) {
+                        Text(
+                            text = "Cancel",
+                            color = TextPrimary,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 15.sp
+                        )
+                    }
                 }
             }
         }

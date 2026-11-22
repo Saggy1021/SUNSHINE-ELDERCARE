@@ -75,7 +75,8 @@ object SosOutboxManager {
     fun init(context: Context) {
         appContext = context.applicationContext
         loadPersistedOutbox()
-        checkAndResumePendingDelivery()
+        // Do NOT automatically dispatch or trigger network calls on init.
+        // SOS requests and incident creation must only occur after explicit user interaction.
     }
 
     /**
@@ -104,9 +105,9 @@ object SosOutboxManager {
             SosDeliveryStatus.SENDING,
             SosDeliveryStatus.PENDING_RETRY -> true
             SosDeliveryStatus.DELIVERED -> {
-                // Keep active state for 6 hours unless explicitly cleared
+                // Keep active state for at most 2 hours unless explicitly cleared
                 val ageHours = (System.currentTimeMillis() - item.timestamp) / (1000 * 60 * 60)
-                ageHours < 6
+                ageHours < 2
             }
             else -> false
         }
@@ -465,9 +466,23 @@ object SosOutboxManager {
                 val content = file.readText()
                 if (content.isNotBlank()) {
                     val item = json.decodeFromString<SosOutboxItem>(content)
-                    _currentSos.value = item
-                    Log.d(TAG, "Loaded persisted SOS outbox: status=${item.status}, incident=${item.incidentNumber}")
-                    return item
+                    val ageHours = (System.currentTimeMillis() - item.timestamp) / (1000 * 60 * 60)
+                    // If the item is older than 2 hours or in FAILED status, purge it to prevent stale state
+                    if (ageHours >= 2 || item.status == SosDeliveryStatus.FAILED) {
+                        Log.i(TAG, "Persisted outbox item is stale (${ageHours}h old or failed). Purging.")
+                        file.delete()
+                        _currentSos.value = null
+                        return null
+                    }
+                    val effectiveItem = if (item.status == SosDeliveryStatus.SENDING) {
+                        // Reset transient SENDING state to PENDING_RETRY if app process was killed while sending
+                        item.copy(status = SosDeliveryStatus.PENDING_RETRY)
+                    } else {
+                        item
+                    }
+                    _currentSos.value = effectiveItem
+                    Log.d(TAG, "Loaded persisted SOS outbox: status=${effectiveItem.status}, incident=${effectiveItem.incidentNumber}")
+                    return effectiveItem
                 }
             }
             null
