@@ -166,8 +166,16 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const safeName = (fileName || "app-release.apk").replace(/[^a-zA-Z0-9._-]/g, "_");
-      const relativeUrl = `/downloads/apps/${safeName}`;
+      // Generate a unique, immutable release-specific filename to prevent CDN cache collisions and stale downloads
+      let prefix = appSlug || "app";
+      if (fileName && fileName.toLowerCase().includes("member")) {
+        prefix = "Sunshine-Member";
+      } else if (fileName && fileName.toLowerCase().includes("employee")) {
+        prefix = "Sunshine-Employee";
+      }
+      const safeVersion = (versionName || "1.0.0").replace(/[^a-zA-Z0-9._-]/g, "_");
+      const uniqueFileName = `${prefix}-v${safeVersion}-b${versionCode}.apk`;
+      const relativeUrl = `/downloads/apps/${uniqueFileName}`;
 
       return NextResponse.json({
         success: true,
@@ -181,7 +189,7 @@ export async function POST(request: NextRequest) {
           minSdkVersion: minSdkVersion || "Android 10 (API 29)",
           targetSdkVersion: targetSdkVersion || 36,
           certificateFingerprint,
-          apkFileName: safeName,
+          apkFileName: uniqueFileName,
           apkUrl: relativeUrl,
         },
       });
