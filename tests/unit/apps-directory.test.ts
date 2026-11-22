@@ -600,10 +600,22 @@ async function runAppsDirectoryTestSuite() {
   // Test 14: Non-admin authorization guard
   // -------------------------------------------------------------
   await test("Scenario 14: Authorization guards protect administrative mutation actions", async () => {
-    const { AuthorizationService } = await import("@/lib/services/authorization");
-    const fakeUserId = "fake_unauthorized_user_99999";
-    const hasAdmin = await AuthorizationService.hasAdminPortalAccess(fakeUserId, "regular.user@example.com");
-    assert.strictEqual(hasAdmin, false, "Regular user must NOT have admin access");
+    const { db } = await import("@/lib/db");
+    const originalFindMany = (db as any).userRole?.findMany;
+    try {
+      (db as any).userRole = {
+        ...(db as any).userRole,
+        findMany: async () => [],
+      };
+      const { AuthorizationService } = await import("@/lib/services/authorization");
+      const fakeUserId = "fake_unauthorized_user_99999";
+      const hasAdmin = await AuthorizationService.hasAdminPortalAccess(fakeUserId, "regular.user@example.com");
+      assert.strictEqual(hasAdmin, false, "Regular user must NOT have admin access");
+    } finally {
+      if ((db as any).userRole && originalFindMany) {
+        (db as any).userRole.findMany = originalFindMany;
+      }
+    }
   });
 
   console.log("\n================================================================");
