@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Plus, X, Users, Clock, FileText } from "lucide-react";
 import { createCareOperation } from "@/app/actions/care-operations";
 import { useRouter } from "next/navigation";
@@ -112,16 +113,22 @@ export function CareOperationsClient({ operations, cases, employees, canManage }
 
   return (
     <div className="space-y-6">
-      {canManage && (
-        <div className="flex justify-end">
+      <div className="flex justify-end gap-3">
+        <Link
+          href="/admin/care/excess-hours"
+          className="flex items-center gap-2 bg-amber-50 text-[#091329] border border-amber-300 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-amber-100 shadow-2xs transition-colors"
+        >
+          <FileText className="h-4 w-4 text-[#B08A4A]" /> Monthly Excess Care Hours
+        </Link>
+        {canManage && (
           <button
             onClick={() => setShowCreate(true)}
             className="flex items-center gap-2 bg-[#091329] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#162850] shadow-sm transition-colors"
           >
             <Plus className="h-4 w-4" /> Schedule Operation
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {showCreate && canManage && (
         <div className="bg-white border border-slate-200/90 shadow-sm p-6 rounded-xl relative">

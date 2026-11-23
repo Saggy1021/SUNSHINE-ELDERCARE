@@ -1394,3 +1394,57 @@ model AttendanceCorrectionLog {
   @@index([dutySessionId])
 }
 
+// --- Phase 23: Monthly Excess Care Hours Statement & Management Reporting ---
+
+model MonthlyCareHoursReport {
+  id                 String   @id @default(cuid())
+  monthKey           String   @unique // e.g. "2026-11"
+  monthLabel         String   // e.g. "November 2026"
+  year               Int
+  month              Int
+  status             String   @default("ACTIVE") // "ACTIVE" | "FINALIZED"
+  totalMembers       Int      @default(0)
+  excessMembers      Int      @default(0)
+  totalEntitledHours Float    @default(0)
+  totalUsedHours     Float    @default(0)
+  totalExcessHours   Float    @default(0)
+  generatedAt        DateTime @default(now())
+  finalizedAt        DateTime?
+  finalizedById      String?
+
+  items              MonthlyCareHoursStatementItem[]
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([year, month])
+  @@index([status])
+}
+
+model MonthlyCareHoursStatementItem {
+  id                 String   @id @default(cuid())
+  reportId           String
+  report             MonthlyCareHoursReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  memberId           String   // Unique Member Identification Number (e.g. "SEC/1001/RAH")
+  memberName         String   // Full Name of the Member
+  userId             String?  // Reference to User if available
+  packageName        String   // Current applicable care package
+  packageSlug        String?  // Plan slug if available
+  monthlyEntitlement Float    // Total permitted care hours for that month
+  totalHoursUsed     Float    // Actual completed care hours
+  remainingHours     Float    // Unused hours, if any
+  excessHours        Float    // Hours consumed beyond entitlement (min 0)
+  completedVisits    Int      // Number of completed visits
+  reportMonth        String   // Month and year (e.g. "November 2026")
+  metadata           Json?    // Array of visit drilldowns: visitId, date, actualStart, actualEnd, durationMinutes, caregiverName
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([reportId, memberId])
+  @@index([memberId])
+  @@index([excessHours])
+}
+
+

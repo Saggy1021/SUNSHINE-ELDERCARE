@@ -723,6 +723,16 @@ export function VisitScheduleCalendar({
                 Refresh
               </button>
 
+              <Link
+                href="/admin/care/excess-hours"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#091329] bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg transition-colors shadow-2xs"
+                title="Monthly Excess Care Hours Statement"
+              >
+                <FileText className="h-3.5 w-3.5 text-[#B08A4A]" />
+                <span className="hidden sm:inline">Monthly Statement</span>
+                <span className="sm:hidden">Statement</span>
+              </Link>
+
               {canManage && (
                 <button
                   onClick={() => {
