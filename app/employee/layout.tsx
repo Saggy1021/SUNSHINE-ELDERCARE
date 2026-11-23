@@ -24,6 +24,11 @@ export default async function EmployeeLayout({ children }: { children: ReactNode
     redirect('/admin');
   }
 
+  const hasEmergency = await AuthorizationService.hasEmergencyAccess(session.user.id, session.user.email);
+  if (hasEmergency) {
+    redirect('/emergencyos');
+  }
+
   // Ensure they are actually an employee
   if (
     session.user.role !== 'EMPLOYEE' &&

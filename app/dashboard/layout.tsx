@@ -34,6 +34,10 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     if (hasAdminAccess) {
       redirect('/admin');
     } else {
+      const hasEmergency = await AuthorizationService.hasEmergencyAccess(session.user.id, session.user.email);
+      if (hasEmergency) {
+        redirect('/emergencyos');
+      }
       redirect('/employee');
     }
   }
