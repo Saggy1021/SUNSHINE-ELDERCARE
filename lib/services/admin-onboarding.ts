@@ -11,6 +11,7 @@ import { documentService } from '@/lib/services/document'
 import { storageService } from '@/lib/services/storage'
 import { calculateMembershipEndDate } from '@/lib/services/dates'
 import { normalize12HourTime } from '@/lib/services/preferred-schedule'
+import { RecurringSchedulerService } from '@/lib/services/recurring-scheduler'
 
 export type AdminOnboardDependencies = {
   dbClient?: any
@@ -460,6 +461,16 @@ export async function executeAdminOnboardMember(
         }
       }
     })
+
+    // Automatically generate prospective recurring care visits for the newly onboarded member
+    try {
+      await RecurringSchedulerService.generateRecurringVisitsForMember({
+        userId: txResult.userId,
+        actorUserId: adminId,
+      });
+    } catch (schedErr) {
+      console.warn("Failed to generate initial recurring visits on admin onboarding:", schedErr);
+    }
 
     return { success: true, userId: txResult.userId, invoiceId: invoice.id }
   } catch (postCommitError: any) {

@@ -389,6 +389,13 @@ export async function getScheduleVisits(filters: {
 }): Promise<ScheduleVisitDTO[]> {
   await requireSchedulePermission(false);
 
+  // Automatically reconcile and backfill any missing recurring visits for active eligible members
+  try {
+    await RecurringSchedulerService.reconcileAllEligibleMembers();
+  } catch (reconcileErr) {
+    console.warn("[getScheduleVisits] Background recurrence reconciliation warning:", reconcileErr);
+  }
+
   const startUtc = new Date(filters.startDate);
   const endUtc = new Date(filters.endDate);
 

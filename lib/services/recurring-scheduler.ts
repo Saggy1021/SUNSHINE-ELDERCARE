@@ -87,6 +87,26 @@ export interface GeneratedVisitOccurrence {
   weekdayOccurrenceIndex: number; // 1 to 5
 }
 
+export interface ReconcileResult {
+  success: boolean;
+  totalEligibleMembers: number;
+  totalVisitsGenerated: number;
+  totalVisitsSkipped: number;
+  throttled?: boolean;
+  errors: Array<{ memberId?: string; profileId: string; error: string }>;
+  details: Array<{
+    memberId: string | null;
+    profileId: string;
+    name: string;
+    preferredDay: string;
+    preferredTime: string;
+    frequency: string;
+    pattern?: string | null;
+    generated: number;
+    skipped: number;
+  }>;
+}
+
 export class RecurringSchedulerService {
   /**
    * Calculates the occurrence index (1st, 2nd, 3rd, 4th, 5th) of a weekday in its calendar month.
@@ -439,10 +459,24 @@ export class RecurringSchedulerService {
     let createdCount = 0;
 
     if (visitsToCreate.length > 0) {
-      await currentDb.$transaction(async (tx: any) => {
+      if (typeof currentDb.careVisit?.createMany === "function") {
+        await currentDb.careVisit.createMany({
+          data: visitsToCreate.map((v) => ({
+            careCaseId: careCase.id,
+            scheduledStart: v.scheduledStart,
+            scheduledEnd: v.scheduledEnd,
+            status: "SCHEDULED",
+            occurrenceType: "RECURRING",
+            operationalNotes: "[Scheduled] Automated Recurring Care Visit",
+            isIndividuallyRescheduled: false,
+            createdById: params.actorUserId || null,
+          })),
+          skipDuplicates: true,
+        });
+        createdCount = visitsToCreate.length;
+      } else {
         for (const v of visitsToCreate) {
-          // Double-check inside transaction to prevent concurrency race conditions
-          const existing = await tx.careVisit.findFirst({
+          const existing = await currentDb.careVisit.findFirst({
             where: {
               careCaseId: careCase.id,
               scheduledStart: v.scheduledStart,
@@ -451,7 +485,7 @@ export class RecurringSchedulerService {
           });
 
           if (!existing) {
-            await tx.careVisit.create({
+            await currentDb.careVisit.create({
               data: {
                 careCaseId: careCase.id,
                 scheduledStart: v.scheduledStart,
@@ -466,7 +500,7 @@ export class RecurringSchedulerService {
             createdCount++;
           }
         }
-      });
+      }
     }
 
     return {
@@ -669,6 +703,162 @@ export class RecurringSchedulerService {
       added,
     };
     });
+  }
+
+  private static lastReconcileTimestamp: number = 0;
+  private static reconcilePromise: Promise<ReconcileResult> | null = null;
+
+  /**
+   * Resets the reconciliation throttle timer (useful for tests or forced sync).
+   */
+  public static resetReconcileThrottle() {
+    this.lastReconcileTimestamp = 0;
+    this.reconcilePromise = null;
+  }
+
+  /**
+   * Safe, idempotent reconciliation and backfill for all existing eligible members.
+   * Finds all active members with valid preferred visit day and time and active recurring subscriptions,
+   * generating missing visits across the 90-day rolling horizon.
+   */
+  public static async reconcileAllEligibleMembers(options?: {
+    force?: boolean;
+    horizonDays?: number;
+    actorUserId?: string;
+  }): Promise<ReconcileResult> {
+    const now = Date.now();
+    // Cache reconciliation for 5 minutes unless forced
+    if (!options?.force && this.lastReconcileTimestamp && (now - this.lastReconcileTimestamp < 5 * 60 * 1000)) {
+      return {
+        success: true,
+        throttled: true,
+        totalEligibleMembers: 0,
+        totalVisitsGenerated: 0,
+        totalVisitsSkipped: 0,
+        errors: [],
+        details: [],
+      };
+    }
+
+    if (this.reconcilePromise) {
+      return this.reconcilePromise;
+    }
+
+    this.reconcilePromise = (async () => {
+      try {
+        const currentDb = getSchedulerDb();
+        const profiles = await currentDb.memberProfile.findMany({
+          where: {
+            preferredVisitDay: { not: null },
+            preferredVisitTime: { not: null },
+          },
+          include: {
+            user: {
+              include: {
+                elders: true,
+                subscriptions: {
+                  where: { status: "ACTIVE" },
+                  include: {
+                    carePlan: {
+                      include: {
+                        variants: {
+                          include: {
+                            services: true,
+                          },
+                        },
+                      },
+                    },
+                    plan: true,
+                    customPlan: true,
+                    careCases: true,
+                  },
+                  orderBy: { createdAt: "desc" },
+                },
+              },
+            },
+          },
+        });
+
+        let totalVisitsGenerated = 0;
+        let totalVisitsSkipped = 0;
+        const details: Array<{
+          memberId: string | null;
+          profileId: string;
+          name: string;
+          preferredDay: string;
+          preferredTime: string;
+          frequency: string;
+          pattern?: string | null;
+          generated: number;
+          skipped: number;
+        }> = [];
+        const errors: Array<{ memberId?: string; profileId: string; error: string }> = [];
+        let eligibleCount = 0;
+
+        for (const profile of profiles) {
+          if (!profile.preferredVisitDay || !profile.preferredVisitTime) continue;
+          if (profile.preferredVisitDay.trim() === "" || profile.preferredVisitTime.trim() === "") continue;
+
+          const activeSub = profile.user?.subscriptions?.[0];
+          if (!activeSub) continue;
+
+          const eligibility = this.isSubscriptionEligibleForVisits(activeSub);
+          if (!eligibility.eligible) continue;
+
+          eligibleCount++;
+
+          try {
+            const genResult = await this.generateRecurringVisitsForMember({
+              memberProfileId: profile.id,
+              horizonDays: options?.horizonDays || 90,
+              actorUserId: options?.actorUserId,
+            });
+
+            if (genResult.success) {
+              totalVisitsGenerated += genResult.generated;
+              totalVisitsSkipped += genResult.skipped;
+              details.push({
+                memberId: profile.memberId || null,
+                profileId: profile.id,
+                name: `${profile.firstName || ""} ${profile.lastName || ""}`.trim(),
+                preferredDay: profile.preferredVisitDay,
+                preferredTime: profile.preferredVisitTime,
+                frequency: profile.preferredVisitFrequency || "WEEKLY",
+                pattern: profile.preferredVisitFortnightlyPattern || null,
+                generated: genResult.generated,
+                skipped: genResult.skipped,
+              });
+            } else {
+              errors.push({
+                memberId: profile.memberId || undefined,
+                profileId: profile.id,
+                error: genResult.reason || "Failed to generate visits",
+              });
+            }
+          } catch (err: any) {
+            errors.push({
+              memberId: profile.memberId || undefined,
+              profileId: profile.id,
+              error: err.message || String(err),
+            });
+          }
+        }
+
+        this.lastReconcileTimestamp = Date.now();
+        return {
+          success: errors.length === 0,
+          totalEligibleMembers: eligibleCount,
+          totalVisitsGenerated,
+          totalVisitsSkipped,
+          errors,
+          details,
+        };
+      } finally {
+        this.reconcilePromise = null;
+      }
+    })();
+
+    return this.reconcilePromise;
   }
 
   /**

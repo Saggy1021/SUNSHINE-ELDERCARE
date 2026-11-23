@@ -19,6 +19,8 @@
  * 15. Membership expiry and eligibility checks.
  * 16. Correct IST date and time handling.
  * 17. Concurrent scheduling operations.
+ * 18. Safe backfill and reconciliation for existing members across 90-day horizon.
+ * 19. Reconciliation idempotence on repeated runs and throttle caching.
  */
 
 import assert from "node:assert/strict";
@@ -34,7 +36,7 @@ import {
 import { PREFERRED_VISIT_DAYS } from "../../lib/services/preferred-schedule";
 
 console.log("================================================================================");
-console.log("🧪 RUNNING AUTOMATED RECURRING CARE VISIT SCHEDULER TEST SUITE (17 SCENARIOS)");
+console.log("🧪 RUNNING AUTOMATED RECURRING CARE VISIT SCHEDULER TEST SUITE (19 SCENARIOS)");
 console.log("================================================================================\n");
 
 // In-Memory Mock Database Factory for High-Speed, Isolated Scheduler Verification
@@ -82,6 +84,34 @@ function createMockSchedulerDb() {
       },
       findUnique: async ({ where, include }: any) => {
         return mockDb.memberProfile.findFirst({ where, include });
+      },
+      findMany: async ({ where, include }: any) => {
+        let list = [...memberProfiles];
+        if (where?.preferredVisitDay?.not === null) {
+          list = list.filter((p) => p.preferredVisitDay !== null && p.preferredVisitDay !== undefined);
+        }
+        if (where?.preferredVisitTime?.not === null) {
+          list = list.filter((p) => p.preferredVisitTime !== null && p.preferredVisitTime !== undefined);
+        }
+        return list.map((p) => {
+          const res = { ...p };
+          if (include?.user) {
+            const user = p.user || users.find((u) => u.id === p.userId) || { id: p.userId, elders: [], subscriptions: [] };
+            const userCopy = { ...user };
+            let subs = user.subscriptions && user.subscriptions.length > 0 ? user.subscriptions : subscriptions.filter((s: any) => s.userId === p.userId);
+            if (include.user.include?.subscriptions?.where?.status) {
+              subs = subs.filter((s: any) => s.status === include.user.include.subscriptions.where.status);
+            }
+            userCopy.subscriptions = subs.map((s: any) => {
+              const sCases = s.careCases && s.careCases.length > 0 ? s.careCases : careCases.filter((c: any) => c.subscriptionId === s.id);
+              return { ...s, careCases: sCases };
+            });
+            const userElders = user.elders && user.elders.length > 0 ? user.elders : elders.filter((e: any) => e.userId === p.userId);
+            userCopy.elders = userElders;
+            res.user = userCopy;
+          }
+          return res;
+        });
       },
       create: async ({ data }: any) => {
         const item = { id: `prof-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`, ...data };
@@ -152,6 +182,25 @@ function createMockSchedulerDb() {
         };
         careVisits.push(item);
         return item;
+      },
+      createMany: async ({ data }: any) => {
+        const items = Array.isArray(data) ? data : [data];
+        for (const item of items) {
+          careVisits.push({
+            id: `visit-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            status: "SCHEDULED",
+            occurrenceType: "RECURRING",
+            isIndividuallyRescheduled: false,
+            actualStart: null,
+            actualEnd: null,
+            cancellationReason: null,
+            originalVisitId: null,
+            ...item,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+        }
+        return { count: items.length };
       },
       update: async ({ where, data }: any) => {
         const idx = careVisits.findIndex((v) => v.id === where.id);
@@ -1034,6 +1083,239 @@ async function runAllTests() {
     }
 
     assert(createdVisits.length > 0, "Visits must be created");
+  });
+
+  // -------------------------------------------------------------------------
+  // Scenario 18: Safe Backfill and Reconciliation for Existing Members
+  // -------------------------------------------------------------------------
+  await runTest("18. Safe backfill and reconciliation for existing members across 90-day horizon", async () => {
+    const mockDb = createMockSchedulerDb();
+    setSchedulerDb(mockDb);
+    RecurringSchedulerService.resetReconcileThrottle();
+
+    // Member A: Shield Shine (Active), Saturday 1:30 PM, Weekly. Has 1 pre-existing visit
+    const userA = { id: "user-a-1001", name: "PRABIR CHAKRAVERTY" };
+    mockDb._state.users.push(userA);
+    const subA = {
+      id: "sub-a-1001",
+      userId: userA.id,
+      status: "ACTIVE",
+      plan: { slug: "shield-shine", name: "Shield Shine" },
+      startDate: new Date("2026-11-01T00:00:00.000Z"),
+      endDate: new Date("2027-11-01T00:00:00.000Z"),
+    };
+    mockDb._state.subscriptions.push(subA);
+    const caseA = {
+      id: "case-a-1001",
+      subscriptionId: subA.id,
+      elderId: "elder-a",
+      status: "ACTIVE",
+    };
+    mockDb._state.careCases.push(caseA);
+    const profA = {
+      id: "prof-a-1001",
+      userId: userA.id,
+      memberId: "SECD1001PRTY",
+      firstName: "PRABIR",
+      lastName: "CHAKRAVERTY",
+      preferredVisitDay: "Saturday",
+      preferredVisitTime: "1:30 PM",
+      preferredVisitFrequency: "WEEKLY",
+      preferredVisitFortnightlyPattern: null,
+    };
+    mockDb._state.memberProfiles.push(profA);
+
+    // Add 1 pre-existing visit for Member A on 2026-11-28 (Saturday)
+    const existingVisitA = {
+      id: "visit-a-existing",
+      careCaseId: caseA.id,
+      scheduledStart: new Date("2026-11-28T08:00:00.000Z"), // 1:30 PM IST
+      scheduledEnd: new Date("2026-11-28T09:00:00.000Z"),
+      status: "SCHEDULED",
+      occurrenceType: "RECURRING",
+      operationalNotes: "Pre-existing scheduled visit",
+      isIndividuallyRescheduled: false,
+    };
+    mockDb._state.careVisits.push(existingVisitA);
+
+    // Member B: Shield Shine (Active), Monday 8:45 AM, Weekly. 0 visits initially
+    const userB = { id: "user-b-1002", name: "BASUDEB KUNDU" };
+    mockDb._state.users.push(userB);
+    const subB = {
+      id: "sub-b-1002",
+      userId: userB.id,
+      status: "ACTIVE",
+      plan: { slug: "shield-shine", name: "Shield Shine" },
+      startDate: new Date("2026-11-01T00:00:00.000Z"),
+      endDate: new Date("2027-11-01T00:00:00.000Z"),
+    };
+    mockDb._state.subscriptions.push(subB);
+    const caseB = {
+      id: "case-b-1002",
+      subscriptionId: subB.id,
+      elderId: "elder-b",
+      status: "ACTIVE",
+    };
+    mockDb._state.careCases.push(caseB);
+    const profB = {
+      id: "prof-b-1002",
+      userId: userB.id,
+      memberId: "SECD1002BADU",
+      firstName: "BASUDEB",
+      lastName: "KUNDU",
+      preferredVisitDay: "Monday",
+      preferredVisitTime: "8:45 AM",
+      preferredVisitFrequency: "WEEKLY",
+      preferredVisitFortnightlyPattern: null,
+    };
+    mockDb._state.memberProfiles.push(profB);
+
+    // Member C: Semi Shield Shine (Active), Tuesday 10:00 AM, Fortnightly (WEEK_1_3). 0 visits initially
+    const userC = { id: "user-c-1015", name: "ASHOK DATTA" };
+    mockDb._state.users.push(userC);
+    const subC = {
+      id: "sub-c-1015",
+      userId: userC.id,
+      status: "ACTIVE",
+      plan: { slug: "semi-shield-shine", name: "Semi Shield Shine" },
+      startDate: new Date("2026-11-01T00:00:00.000Z"),
+      endDate: new Date("2027-11-01T00:00:00.000Z"),
+    };
+    mockDb._state.subscriptions.push(subC);
+    const caseC = {
+      id: "case-c-1015",
+      subscriptionId: subC.id,
+      elderId: "elder-c",
+      status: "ACTIVE",
+    };
+    mockDb._state.careCases.push(caseC);
+    const profC = {
+      id: "prof-c-1015",
+      userId: userC.id,
+      memberId: "SECD1015ASTA",
+      firstName: "ASHOK",
+      lastName: "DATTA",
+      preferredVisitDay: "Tuesday",
+      preferredVisitTime: "10:00 AM",
+      preferredVisitFrequency: "FORTNIGHTLY",
+      preferredVisitFortnightlyPattern: "WEEK_1_3",
+    };
+    mockDb._state.memberProfiles.push(profC);
+
+    // Member D: Life Line Care (Active) - Ineligible package! Should NOT have visits generated
+    const userD = { id: "user-d-1003", name: "INDRANI GUPTA" };
+    mockDb._state.users.push(userD);
+    const subD = {
+      id: "sub-d-1003",
+      userId: userD.id,
+      status: "ACTIVE",
+      plan: { slug: "life-line-care", name: "Life Line Care" },
+      startDate: new Date("2026-11-01T00:00:00.000Z"),
+      endDate: new Date("2027-11-01T00:00:00.000Z"),
+    };
+    mockDb._state.subscriptions.push(subD);
+    const profD = {
+      id: "prof-d-1003",
+      userId: userD.id,
+      memberId: "SECS1003INTA",
+      firstName: "INDRANI",
+      lastName: "GUPTA",
+      preferredVisitDay: "Friday",
+      preferredVisitTime: "10:00 AM",
+      preferredVisitFrequency: "WEEKLY",
+      preferredVisitFortnightlyPattern: null,
+    };
+    mockDb._state.memberProfiles.push(profD);
+
+    // Member E: Shield Shine (Active) but preferredVisitDay is NULL - Should NOT have visits generated
+    const userE = { id: "user-e-1000", name: "Tanish Alam" };
+    mockDb._state.users.push(userE);
+    const subE = {
+      id: "sub-e-1000",
+      userId: userE.id,
+      status: "ACTIVE",
+      plan: { slug: "shield-shine", name: "Shield Shine" },
+      startDate: new Date("2026-11-01T00:00:00.000Z"),
+      endDate: new Date("2027-11-01T00:00:00.000Z"),
+    };
+    mockDb._state.subscriptions.push(subE);
+    const profE = {
+      id: "prof-e-1000",
+      userId: userE.id,
+      memberId: "SECD1000TAAM",
+      firstName: "Tanish",
+      lastName: "Alam",
+      preferredVisitDay: null,
+      preferredVisitTime: null,
+    };
+    mockDb._state.memberProfiles.push(profE);
+
+    // Execute safe backfill
+    const result = await RecurringSchedulerService.reconcileAllEligibleMembers({
+      force: true,
+      horizonDays: 90,
+    });
+
+    assert(result.success, "Reconciliation must succeed");
+    assert.equal(result.totalEligibleMembers, 3, "Only 3 members (A, B, C) are eligible");
+
+    // Member A: Should skip 1 existing visit, generate ~12 new visits
+    const visitsA = mockDb._state.careVisits.filter((v: any) => v.careCaseId === caseA.id);
+    const detailA = result.details.find((d) => d.memberId === "SECD1001PRTY");
+    assert(detailA, "Member A detail must exist");
+    assert.equal(detailA.skipped, 1, "Member A must have skipped 1 pre-existing visit");
+    assert(detailA.generated >= 11, "Member A must have generated missing visits");
+    assert.equal(visitsA.length, detailA.generated + 1, "Member A total visits must equal generated + 1 existing");
+
+    // Pre-existing visit must NOT have been overwritten
+    const preservedVisitA = visitsA.find((v: any) => v.id === "visit-a-existing");
+    assert(preservedVisitA, "Pre-existing visit A must be preserved");
+    assert.equal(preservedVisitA.operationalNotes, "Pre-existing scheduled visit");
+
+    // Member B: Should generate ~13 visits, 0 skipped
+    const visitsB = mockDb._state.careVisits.filter((v: any) => v.careCaseId === caseB.id);
+    const detailB = result.details.find((d) => d.memberId === "SECD1002BADU");
+    assert(detailB, "Member B detail must exist");
+    assert.equal(detailB.skipped, 0, "Member B had 0 existing visits");
+    assert(detailB.generated >= 12, "Member B must have ~12-13 weekly visits");
+    assert.equal(visitsB.length, detailB.generated, "Member B visits count must match");
+
+    // Member C: Fortnightly Week 1 & 3 should generate ~6-7 visits
+    const visitsC = mockDb._state.careVisits.filter((v: any) => v.careCaseId === caseC.id);
+    const detailC = result.details.find((d) => d.memberId === "SECD1015ASTA");
+    assert(detailC, "Member C detail must exist");
+    assert(detailC.generated >= 5 && detailC.generated <= 8, "Member C must have fortnightly visits");
+    assert.equal(visitsC.length, detailC.generated, "Member C visits count must match");
+
+    // Member D (Life Line Care): 0 visits generated
+    const visitsD = mockDb._state.careVisits.filter((v: any) => v.careCaseId === "case-d-1003");
+    assert.equal(visitsD.length, 0, "Life Line Care package must have 0 visits");
+
+    // Member E (No schedule set): 0 visits generated
+    const visitsE = mockDb._state.careVisits.filter((v: any) => v.careCaseId === "case-e-1000");
+    assert.equal(visitsE.length, 0, "Member with no preferred day must have 0 visits");
+  });
+
+  // -------------------------------------------------------------------------
+  // Scenario 19: Reconciliation Idempotence on Repeated Runs
+  // -------------------------------------------------------------------------
+  await runTest("19. Reconciliation idempotence on repeated runs and throttle caching", async () => {
+    // Re-running reconciliation immediately with force=true must find 0 visits to generate
+    const secondRun = await RecurringSchedulerService.reconcileAllEligibleMembers({
+      force: true,
+      horizonDays: 90,
+    });
+
+    assert(secondRun.success, "Second run must succeed");
+    assert.equal(secondRun.totalVisitsGenerated, 0, "Second run must generate EXACTLY 0 visits (idempotent)");
+    assert(secondRun.totalVisitsSkipped > 0, "All existing visits must be skipped without duplication");
+
+    // Running without force immediately after must return throttled
+    const throttledRun = await RecurringSchedulerService.reconcileAllEligibleMembers({
+      force: false,
+    });
+    assert.equal(throttledRun.throttled, true, "Call within 5 minutes without force must be throttled");
+    assert.equal(throttledRun.totalVisitsGenerated, 0);
   });
 
   // -------------------------------------------------------------------------

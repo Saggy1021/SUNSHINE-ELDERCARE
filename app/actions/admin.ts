@@ -1295,23 +1295,6 @@ export async function adminUpdateMemberCore(
         memberProfileId = createdProfile.id;
       }
 
-      // Automatically sync or generate recurring visits when care visit preferences are touched
-      if (
-        input.preferredVisitDay !== undefined ||
-        input.preferredVisitTime !== undefined ||
-        input.preferredVisitFrequency !== undefined ||
-        input.preferredVisitFortnightlyPattern !== undefined
-      ) {
-        await RecurringSchedulerService.syncRecurringVisitsOnPreferenceChange({
-          memberProfileId,
-          newPreferredDay: profileData.preferredVisitDay,
-          newPreferredTime: profileData.preferredVisitTime,
-          newFrequency: profileData.preferredVisitFrequency,
-          newFortnightlyPattern: profileData.preferredVisitFortnightlyPattern,
-          actorUserId,
-        });
-      }
-
       // 5. Update Subscription Dates & Plan if provided
       const sub = currentUser.subscriptions?.[0];
       if (sub) {
@@ -1334,6 +1317,26 @@ export async function adminUpdateMemberCore(
             data: subData,
           });
         }
+      }
+
+      // Automatically sync or generate recurring visits when care visit preferences or subscription parameters are touched
+      if (
+        input.preferredVisitDay !== undefined ||
+        input.preferredVisitTime !== undefined ||
+        input.preferredVisitFrequency !== undefined ||
+        input.preferredVisitFortnightlyPattern !== undefined ||
+        input.carePlanId !== undefined ||
+        input.startDate !== undefined ||
+        input.endDate !== undefined
+      ) {
+        await RecurringSchedulerService.syncRecurringVisitsOnPreferenceChange({
+          memberProfileId,
+          newPreferredDay: profileData.preferredVisitDay,
+          newPreferredTime: profileData.preferredVisitTime,
+          newFrequency: profileData.preferredVisitFrequency,
+          newFortnightlyPattern: profileData.preferredVisitFortnightlyPattern,
+          actorUserId,
+        });
       }
 
       // 6. Emergency Contact
