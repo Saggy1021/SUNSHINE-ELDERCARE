@@ -34,6 +34,7 @@ import {
 import { SearchableMemberSelect } from "./SearchableMemberSelect";
 import { SearchableEmployeeSelect } from "./SearchableEmployeeSelect";
 import { BirthdayCalendarView } from "./BirthdayCalendarView";
+import { VisitStatusIndicator } from "./VisitStatusIndicator";
 import {
   BirthdayCalendarPayload,
   BirthdayEntry,
@@ -618,7 +619,7 @@ export function VisitScheduleCalendar({
     }
 
     if (visit.status === "CANCELLED") {
-      return "border border-slate-200 bg-slate-50/80 opacity-60";
+      return "border border-rose-200 bg-rose-50/30 hover:border-rose-300 text-slate-800 shadow-2xs";
     }
 
     // Scheduled / Confirmed normal visits: retain existing styling
@@ -642,6 +643,10 @@ export function VisitScheduleCalendar({
 
     if (visit.status === "IN_PROGRESS") {
       return "bg-purple-50 text-purple-800 border border-purple-300 font-medium";
+    }
+
+    if (visit.status === "CANCELLED") {
+      return "bg-rose-50 text-rose-800 border border-rose-200 font-medium";
     }
 
     return "bg-slate-100 text-slate-800 border border-slate-200 font-medium";
@@ -1038,25 +1043,27 @@ export function VisitScheduleCalendar({
                             <div
                               key={visit.id}
                               onClick={() => setSelectedVisit(visit)}
-                              className={`p-3.5 rounded-xl transition-all cursor-pointer space-y-2.5 text-left group ${getVisitCardBorderClasses(
+                              className={`p-3.5 rounded-xl transition-all cursor-pointer space-y-2.5 text-left group relative ${getVisitCardBorderClasses(
                                 visit
                               )}`}
                             >
+                              {/* Top-Right Status Indicator */}
+                              <div className="absolute top-3 right-3 shrink-0">
+                                <VisitStatusIndicator status={visit.status} size="md" />
+                              </div>
+
                               {/* Badges row */}
-                              <div className="flex items-center justify-between gap-1 flex-wrap">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  {renderCategoryBadge(visit)}
-                                  {isEmergency && visit.emergencyIncidentNumber && (
-                                    <span className="font-mono text-[10px] font-bold text-red-700 bg-red-100/90 border border-red-200 px-1 rounded">
-                                      {visit.emergencyIncidentNumber}
-                                    </span>
-                                  )}
-                                </div>
-                                {renderStatusBadge(visit.status)}
+                              <div className="flex items-center gap-1.5 flex-wrap pr-7">
+                                {renderCategoryBadge(visit)}
+                                {isEmergency && visit.emergencyIncidentNumber && (
+                                  <span className="font-mono text-[10px] font-bold text-red-700 bg-red-100/90 border border-red-200 px-1 rounded">
+                                    {visit.emergencyIncidentNumber}
+                                  </span>
+                                )}
                               </div>
 
                               {/* Recipient & Member */}
-                              <div>
+                              <div className="pr-7">
                                 <p className="text-xs font-bold text-slate-900 group-hover:text-[#091329] line-clamp-1">
                                   {visit.elder.firstName} {visit.elder.lastName}
                                 </p>
@@ -1200,11 +1207,16 @@ export function VisitScheduleCalendar({
                     <div
                       key={visit.id}
                       onClick={() => setSelectedVisit(visit)}
-                      className={`p-4 rounded-xl transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${getVisitCardBorderClasses(
+                      className={`p-4 rounded-xl transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative ${getVisitCardBorderClasses(
                         visit
                       )}`}
                     >
-                      <div className="space-y-1.5 flex-1">
+                      {/* Top-Right Status Indicator */}
+                      <div className="absolute top-3.5 right-3.5 shrink-0">
+                        <VisitStatusIndicator status={visit.status} size="md" />
+                      </div>
+
+                      <div className="space-y-1.5 flex-1 pr-8 sm:pr-10">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold text-sm text-[#091329]">
                             {visit.elder.firstName} {visit.elder.lastName}
@@ -1220,7 +1232,6 @@ export function VisitScheduleCalendar({
                             </span>
                           )}
                           {renderCategoryBadge(visit)}
-                          {renderStatusBadge(visit.status)}
                         </div>
                         <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
                           <span className="flex items-center gap-1 font-medium text-slate-700">
@@ -1364,10 +1375,15 @@ export function VisitScheduleCalendar({
                       {cellVisits.slice(0, 2).map((v) => (
                         <div
                           key={v.id}
-                          className={`text-[10px] truncate px-1.5 py-0.5 rounded ${getMonthPillClasses(v)}`}
+                          className={`text-[10px] truncate px-1.5 py-0.5 rounded flex items-center justify-between gap-1 ${getMonthPillClasses(
+                            v
+                          )}`}
                         >
-                          {v.isEmergency && <span className="font-bold text-red-600 mr-1">SOS</span>}
-                          {formatTimeIST(v.scheduledStart)} · {v.elder.firstName}
+                          <span className="truncate">
+                            {v.isEmergency && <span className="font-bold text-red-600 mr-1">SOS</span>}
+                            {formatTimeIST(v.scheduledStart)} · {v.elder.firstName}
+                          </span>
+                          <VisitStatusIndicator status={v.status} size="xs" />
                         </div>
                       ))}
                       {cellVisits.length > 2 && (
@@ -1438,7 +1454,10 @@ export function VisitScheduleCalendar({
                       {selectedVisit.emergencyIncidentNumber}
                     </span>
                   )}
-                  {renderStatusBadge(selectedVisit.status)}
+                  <div className="flex items-center gap-1.5">
+                    <VisitStatusIndicator status={selectedVisit.status} size="sm" />
+                    {renderStatusBadge(selectedVisit.status)}
+                  </div>
                 </div>
                 <span className="text-xs font-medium text-slate-500">
                   Plan: <span className="font-semibold text-slate-800">{selectedVisit.carePlanName}</span>
