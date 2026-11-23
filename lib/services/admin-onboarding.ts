@@ -265,6 +265,8 @@ export async function executeAdminOnboardMember(
           // Preferred Care Visit Schedule (Optional)
           preferredVisitDay: validatedData.preferredVisitDay || null,
           preferredVisitTime: normalize12HourTime(validatedData.preferredVisitTime),
+          preferredVisitFrequency: validatedData.preferredVisitFrequency || "WEEKLY",
+          preferredVisitFortnightlyPattern: validatedData.preferredVisitFortnightlyPattern || null,
         }
       })
       

@@ -4,6 +4,8 @@ import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
+import { normalize12HourTime } from "@/lib/services/preferred-schedule"
+import { RecurringSchedulerService } from "@/lib/services/recurring-scheduler"
 
 const updateProfileSchema = z.object({
   salutation: z.string().optional(),
@@ -13,6 +15,10 @@ const updateProfileSchema = z.object({
   alternateNumber: z.string().optional(),
   serviceAddress: z.string().min(10, "Service address must be complete"),
   nearestLandmark: z.string().optional(),
+  preferredVisitDay: z.string().optional(),
+  preferredVisitTime: z.string().optional(),
+  preferredVisitFrequency: z.string().optional(),
+  preferredVisitFortnightlyPattern: z.string().optional(),
 })
 
 import { RateLimitService } from "@/lib/services/rate-limit"
@@ -36,7 +42,18 @@ export async function updateMemberProfile(formData: FormData) {
     return { success: false, error: validationResult.error.issues[0].message }
   }
 
-  const { firstName, lastName, mobileNumber, alternateNumber, serviceAddress, nearestLandmark } = validationResult.data
+  const {
+    firstName,
+    lastName,
+    mobileNumber,
+    alternateNumber,
+    serviceAddress,
+    nearestLandmark,
+    preferredVisitDay,
+    preferredVisitTime,
+    preferredVisitFrequency,
+    preferredVisitFortnightlyPattern,
+  } = validationResult.data
 
   const profile = await db.memberProfile.findUnique({
     where: { userId: session.user.id }
@@ -48,17 +65,32 @@ export async function updateMemberProfile(formData: FormData) {
 
   const salutation = (validationResult.data.salutation || "").trim() || (profile.salutation || "Mr")
 
+  const profileUpdateData: any = {
+    salutation,
+    firstName,
+    lastName,
+    mobileNumber,
+    alternateNumber: alternateNumber || null,
+    serviceAddress,
+    nearestLandmark: nearestLandmark || null,
+  }
+
+  if (preferredVisitDay !== undefined) {
+    profileUpdateData.preferredVisitDay = preferredVisitDay?.trim() || null
+  }
+  if (preferredVisitTime !== undefined) {
+    profileUpdateData.preferredVisitTime = normalize12HourTime(preferredVisitTime)
+  }
+  if (preferredVisitFrequency !== undefined) {
+    profileUpdateData.preferredVisitFrequency = preferredVisitFrequency?.trim() || "WEEKLY"
+  }
+  if (preferredVisitFortnightlyPattern !== undefined) {
+    profileUpdateData.preferredVisitFortnightlyPattern = preferredVisitFortnightlyPattern?.trim() || null
+  }
+
   await db.memberProfile.update({
     where: { id: profile.id },
-    data: {
-      salutation,
-      firstName,
-      lastName,
-      mobileNumber,
-      alternateNumber: alternateNumber || null,
-      serviceAddress,
-      nearestLandmark: nearestLandmark || null,
-    }
+    data: profileUpdateData,
   })
 
   await db.user.update({
@@ -68,6 +100,23 @@ export async function updateMemberProfile(formData: FormData) {
     }
   })
 
+  // Synchronize recurring care visit schedule if preferences were provided
+  if (
+    preferredVisitDay !== undefined ||
+    preferredVisitTime !== undefined ||
+    preferredVisitFrequency !== undefined ||
+    preferredVisitFortnightlyPattern !== undefined
+  ) {
+    await RecurringSchedulerService.syncRecurringVisitsOnPreferenceChange({
+      memberProfileId: profile.id,
+      newPreferredDay: profileUpdateData.preferredVisitDay,
+      newPreferredTime: profileUpdateData.preferredVisitTime,
+      newFrequency: profileUpdateData.preferredVisitFrequency,
+      newFortnightlyPattern: profileUpdateData.preferredVisitFortnightlyPattern,
+      actorUserId: session.user.id,
+    })
+  }
+
   // Log the update
   await db.auditLog.create({
     data: {
@@ -76,12 +125,13 @@ export async function updateMemberProfile(formData: FormData) {
       entityType: 'MEMBER_PROFILE',
       entityId: profile.id,
       metadata: { 
-        fieldsUpdated: ['firstName', 'lastName', 'mobileNumber', 'alternateNumber', 'serviceAddress', 'nearestLandmark'] 
+        fieldsUpdated: Object.keys(profileUpdateData) 
       }
     }
   })
 
   revalidatePath('/dashboard/profile')
+  revalidatePath('/admin/schedule')
   return { success: true }
 }
 

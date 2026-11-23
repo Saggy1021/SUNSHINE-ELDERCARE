@@ -93,6 +93,8 @@ export const memberRegistrationSchema = z.object({
     "Sunday",
   ]).optional().or(z.literal('')),
   preferredVisitTime: z.string().trim().optional().or(z.literal('')),
+  preferredVisitFrequency: z.enum(["WEEKLY", "FORTNIGHTLY"]).optional().or(z.literal('')),
+  preferredVisitFortnightlyPattern: z.enum(["WEEK_1_3", "WEEK_2_4"]).optional().or(z.literal('')),
 });
 
 export type MemberRegistrationInput = z.infer<typeof memberRegistrationSchema>;

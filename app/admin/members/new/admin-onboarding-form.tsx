@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Check, AlertCircle, CalendarDays, Clock, Info, RotateCcw } from 'lucide-react'
 import { PREFERRED_VISIT_DAYS, normalize12HourTime } from '@/lib/services/preferred-schedule'
+import RecurringCareScheduleSelector from '@/components/admin/members/RecurringCareScheduleSelector'
 
 function calculateClientEndDateIso(startDateStr: string, durationMonths: number): string {
   if (!startDateStr || !durationMonths) return ""
@@ -69,7 +70,10 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
   const [startDateStr, setStartDateStr] = useState<string>(initialStart)
   const [endDateStr, setEndDateStr] = useState<string>(() => calculateClientEndDateIso(initialStart, 1))
   const [isManualEndDate, setIsManualEndDate] = useState<boolean>(false)
+  const [preferredDay, setPreferredDay] = useState<string>('')
   const [preferredVisitTime, setPreferredVisitTime] = useState<string>('')
+  const [preferredFrequency, setPreferredFrequency] = useState<'WEEKLY' | 'FORTNIGHTLY'>('WEEKLY')
+  const [preferredPattern, setPreferredPattern] = useState<'WEEK_1_3' | 'WEEK_2_4'>('WEEK_1_3')
 
   const selectedPlan = plans.find(p => p.id === selectedPlanId)
   const isCouplePlan = selectedPlan?.variantType === 'COUPLE'
@@ -185,6 +189,8 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
       bloodGroup: formData.get('bloodGroup') || undefined,
       preferredVisitDay: formData.get('preferredVisitDay') || undefined,
       preferredVisitTime: formData.get('preferredVisitTime') || undefined,
+      preferredVisitFrequency: formData.get('preferredVisitFrequency') || undefined,
+      preferredVisitFortnightlyPattern: formData.get('preferredVisitFortnightlyPattern') || undefined,
     }
 
     const submissionData = new FormData()
@@ -718,48 +724,26 @@ export function AdminOnboardingForm({ plans, addOns }: { plans: any[], addOns: a
           </span>
         </div>
         <p className="text-xs text-slate-500">
-          Optionally designate the member&apos;s preferred weekly care-visit day and time.
+          Set the member&apos;s recurring care visit frequency, day, and time. When an active plan with visit entitlements is assigned, visits are automatically generated.
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground/80">
-              Preferred Visit Day
-            </label>
-            <select
-              name="preferredVisitDay"
-              className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-            >
-              <option value="">No preference / Not specified</option>
-              {PREFERRED_VISIT_DAYS.map((day) => (
-                <option key={day} value={day}>
-                  {day}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground/80">
-              Preferred Visit Time (IST)
-            </label>
-            <input
-              name="preferredVisitTime"
-              type="time"
-              value={preferredVisitTime}
-              onChange={(e) => setPreferredVisitTime(e.target.value)}
-              className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-            />
-            {preferredVisitTime && (
-              <p className="text-xs text-indigo-700 font-semibold mt-1 flex items-center gap-1">
-                <Clock className="h-3.5 w-3.5 text-indigo-600" />
-                12-Hour Display: {normalize12HourTime(preferredVisitTime)} (IST)
-              </p>
-            )}
-          </div>
+
+        <div className="pt-2">
+          <RecurringCareScheduleSelector
+            frequency={preferredFrequency}
+            onFrequencyChange={setPreferredFrequency}
+            fortnightlyPattern={preferredPattern}
+            onPatternChange={setPreferredPattern}
+            preferredDay={preferredDay}
+            onDayChange={setPreferredDay}
+            preferredTime={preferredVisitTime}
+            onTimeChange={setPreferredVisitTime}
+          />
         </div>
-        <div className="mt-2 p-3 bg-amber-50/80 border border-amber-200/80 rounded-lg flex items-start gap-2.5 text-xs text-amber-900 leading-relaxed">
-          <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+
+        <div className="mt-2 p-3 bg-indigo-50/80 border border-indigo-200/80 rounded-lg flex items-start gap-2.5 text-xs text-indigo-950 leading-relaxed">
+          <Info className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
           <span>
-            This is a recurring care visit preference and does not auto-generate calendar appointments. Confirmed visits must be scheduled in Visit Schedule.
+            Automated Scheduling: Once onboarding is complete with an active care package, recurring visits are automatically populated across the rolling 90-day horizon in Visit Schedule.
           </span>
         </div>
       </div>

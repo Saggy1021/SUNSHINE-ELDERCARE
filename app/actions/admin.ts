@@ -12,6 +12,7 @@ import { RateLimitService } from "@/lib/services/rate-limit"
 import { calculateMembershipEndDate } from "@/lib/services/dates"
 import { formatFullMembershipName } from "@/lib/utils/format-membership"
 import { formatPreferredSchedule, normalize12HourTime } from "@/lib/services/preferred-schedule"
+import { RecurringSchedulerService } from "@/lib/services/recurring-scheduler"
 import { EXCLUDED_MEMBER_EMAILS, ADMIN_DISPLAY_EMAILS, DASHBOARD_EXCLUDED_EMAILS } from "@/lib/constants/members"
 
 // --- Authorization Helper ---
@@ -1094,6 +1095,8 @@ export interface AdminUpdateMemberInput {
   // Preferred Care Visit Schedule
   preferredVisitDay?: string | null;
   preferredVisitTime?: string | null;
+  preferredVisitFrequency?: string | null;
+  preferredVisitFortnightlyPattern?: string | null;
 }
 
 export async function adminUpdateMemberCore(
@@ -1268,6 +1271,12 @@ export async function adminUpdateMemberCore(
       if (input.preferredVisitTime !== undefined) {
         profileData.preferredVisitTime = normalize12HourTime(input.preferredVisitTime);
       }
+      if (input.preferredVisitFrequency !== undefined) {
+        profileData.preferredVisitFrequency = input.preferredVisitFrequency?.trim() || "WEEKLY";
+      }
+      if (input.preferredVisitFortnightlyPattern !== undefined) {
+        profileData.preferredVisitFortnightlyPattern = input.preferredVisitFortnightlyPattern?.trim() || null;
+      }
 
       let memberProfileId: string;
       if (currentUser.memberProfile) {
@@ -1284,6 +1293,23 @@ export async function adminUpdateMemberCore(
           }
         });
         memberProfileId = createdProfile.id;
+      }
+
+      // Automatically sync or generate recurring visits when care visit preferences are touched
+      if (
+        input.preferredVisitDay !== undefined ||
+        input.preferredVisitTime !== undefined ||
+        input.preferredVisitFrequency !== undefined ||
+        input.preferredVisitFortnightlyPattern !== undefined
+      ) {
+        await RecurringSchedulerService.syncRecurringVisitsOnPreferenceChange({
+          memberProfileId,
+          newPreferredDay: profileData.preferredVisitDay,
+          newPreferredTime: profileData.preferredVisitTime,
+          newFrequency: profileData.preferredVisitFrequency,
+          newFortnightlyPattern: profileData.preferredVisitFortnightlyPattern,
+          actorUserId,
+        });
       }
 
       // 5. Update Subscription Dates & Plan if provided
@@ -1505,6 +1531,8 @@ export async function adminUpdateMember(formData: FormData) {
 
   const preferredVisitDay = formData.has("preferredVisitDay") ? (formData.get("preferredVisitDay") as string) : undefined;
   const preferredVisitTime = formData.has("preferredVisitTime") ? (formData.get("preferredVisitTime") as string) : undefined;
+  const preferredVisitFrequency = formData.has("preferredVisitFrequency") ? (formData.get("preferredVisitFrequency") as string) : undefined;
+  const preferredVisitFortnightlyPattern = formData.has("preferredVisitFortnightlyPattern") ? (formData.get("preferredVisitFortnightlyPattern") as string) : undefined;
 
   const input: AdminUpdateMemberInput = {
     userId,
@@ -1564,6 +1592,8 @@ export async function adminUpdateMember(formData: FormData) {
 
     preferredVisitDay: preferredVisitDay !== undefined ? (preferredVisitDay.trim() || null) : undefined,
     preferredVisitTime: preferredVisitTime !== undefined ? (preferredVisitTime.trim() || null) : undefined,
+    preferredVisitFrequency: preferredVisitFrequency !== undefined ? (preferredVisitFrequency.trim() || null) : undefined,
+    preferredVisitFortnightlyPattern: preferredVisitFortnightlyPattern !== undefined ? (preferredVisitFortnightlyPattern.trim() || null) : undefined,
   };
 
   const result = await adminUpdateMemberCore(input, sessionUser, db, hasSensitiveView);
@@ -1572,6 +1602,7 @@ export async function adminUpdateMember(formData: FormData) {
     revalidatePath("/admin/members");
     revalidatePath(`/admin/members/${result.userId}`);
     revalidatePath(`/admin/members/${result.userId}/edit`);
+    revalidatePath("/admin/schedule");
   }
   return result;
 }

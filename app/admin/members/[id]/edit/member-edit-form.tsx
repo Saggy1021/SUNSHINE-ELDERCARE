@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Check, AlertCircle, CalendarDays, Loader2, User, Users, Shield, Activity, HeartPulse, PhoneCall, Building2, Clock, Calendar, X, Info, RotateCcw } from 'lucide-react'
 import { adminUpdateMember } from '@/app/actions/admin'
 import { PREFERRED_VISIT_DAYS, to24HourTime, normalize12HourTime } from '@/lib/services/preferred-schedule'
+import RecurringCareScheduleSelector from '@/components/admin/members/RecurringCareScheduleSelector'
 import { formatFullMembershipName } from '@/lib/utils/format-membership'
 
 function formatDateForInput(date: Date | string | null | undefined): string {
@@ -69,6 +70,12 @@ export function MemberEditForm({ member, catalog }: { member: any; catalog?: any
   // Preferred visit schedule
   const [preferredDay, setPreferredDay] = useState(profile?.preferredVisitDay || "")
   const [preferredTime, setPreferredTime] = useState(to24HourTime(profile?.preferredVisitTime) || "")
+  const [preferredFrequency, setPreferredFrequency] = useState<'WEEKLY' | 'FORTNIGHTLY'>(
+    (profile?.preferredVisitFrequency as 'WEEKLY' | 'FORTNIGHTLY') || 'WEEKLY'
+  )
+  const [preferredPattern, setPreferredPattern] = useState<'WEEK_1_3' | 'WEEK_2_4'>(
+    (profile?.preferredVisitFortnightlyPattern as 'WEEK_1_3' | 'WEEK_2_4') || 'WEEK_1_3'
+  )
 
   // Name splitting fallback if firstName/lastName not explicit
   const defaultFirstName = profile?.firstName || member.name?.split(' ')[0] || ''
@@ -607,6 +614,8 @@ export function MemberEditForm({ member, catalog }: { member: any; catalog?: any
               onClick={() => {
                 setPreferredDay("")
                 setPreferredTime("")
+                setPreferredFrequency("WEEKLY")
+                setPreferredPattern("WEEK_1_3")
               }}
               className="text-xs text-rose-600 hover:text-rose-800 font-medium inline-flex items-center gap-1 transition-colors"
             >
@@ -616,53 +625,24 @@ export function MemberEditForm({ member, catalog }: { member: any; catalog?: any
         </div>
 
         <p className="text-xs text-slate-500">
-          Set the member&apos;s recurring weekly care visit day and time preference. Optional.
+          Set the member&apos;s recurring care visit frequency, weekday, and time. Updating preferences will automatically adjust future visits in Visit Schedule.
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-              Preferred Visit Day
-            </label>
-            <select
-              name="preferredVisitDay"
-              value={preferredDay}
-              onChange={(e) => setPreferredDay(e.target.value)}
-              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:border-[#091329] focus:ring-1 focus:ring-[#091329] outline-none"
-            >
-              <option value="">No preference / Not specified</option>
-              {PREFERRED_VISIT_DAYS.map((day) => (
-                <option key={day} value={day}>
-                  {day}
-                </option>
-              ))}
-            </select>
-          </div>
+        <RecurringCareScheduleSelector
+          frequency={preferredFrequency}
+          onFrequencyChange={setPreferredFrequency}
+          fortnightlyPattern={preferredPattern}
+          onPatternChange={setPreferredPattern}
+          preferredDay={preferredDay}
+          onDayChange={setPreferredDay}
+          preferredTime={preferredTime}
+          onTimeChange={setPreferredTime}
+        />
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-              Preferred Visit Time (IST)
-            </label>
-            <input
-              type="time"
-              name="preferredVisitTime"
-              value={preferredTime}
-              onChange={(e) => setPreferredTime(e.target.value)}
-              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:border-[#091329] focus:ring-1 focus:ring-[#091329] outline-none"
-            />
-            {preferredTime && (
-              <p className="text-xs text-indigo-700 font-semibold mt-1 flex items-center gap-1">
-                <Clock className="h-3.5 w-3.5 text-indigo-600" />
-                12-Hour Display: {normalize12HourTime(preferredTime)} (IST)
-              </p>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-2 p-3 bg-amber-50/80 border border-amber-200/80 rounded-lg flex items-start gap-2.5 text-xs text-amber-900 leading-relaxed">
-          <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+        <div className="mt-2 p-3 bg-indigo-50/80 border border-indigo-200/80 rounded-lg flex items-start gap-2.5 text-xs text-indigo-950 leading-relaxed">
+          <Info className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
           <span>
-            This is a recurring care visit preference and does not auto-generate or reschedule calendar bookings. Confirmed appointments must be managed in Visit Schedule.
+            Automated Calendar Sync: Saving preference changes will automatically reschedule future recurring visits in Visit Schedule. Historical, completed, cancelled, and individually rescheduled visits are strictly preserved.
           </span>
         </div>
       </div>

@@ -16,6 +16,17 @@ export const PREFERRED_VISIT_DAYS = [
 
 export type PreferredVisitDay = (typeof PREFERRED_VISIT_DAYS)[number];
 
+export const VISIT_FREQUENCIES = ["WEEKLY", "FORTNIGHTLY"] as const;
+export type VisitFrequency = (typeof VISIT_FREQUENCIES)[number];
+
+export const FORTNIGHTLY_PATTERNS = ["WEEK_1_3", "WEEK_2_4"] as const;
+export type FortnightlyPattern = (typeof FORTNIGHTLY_PATTERNS)[number];
+
+export const FORTNIGHTLY_PATTERN_LABELS: Record<string, string> = {
+  WEEK_1_3: "Week 1 and Week 3",
+  WEEK_2_4: "Week 2 and Week 4",
+};
+
 const DAY_ABBREVIATIONS: Record<string, string> = {
   Monday: "Mon",
   Tuesday: "Tue",
@@ -95,28 +106,40 @@ export function to24HourTime(timeStr?: string | null): string {
 }
 
 /**
- * Formats preferred weekly schedule into table/card display:
- * - Wednesday, 10:30 AM -> "Wed · 10:30 AM"
- * - Thursday, 11:00 AM -> "Thu · 11:00 AM"
- * - Monday, 4:30 PM -> "Mon · 4:30 PM"
- * - If only day: "Wed"
- * - If only time: "10:30 AM"
- * - If neither: "—"
+ * Formats preferred schedule into table/card display:
+ * - Wednesday, 10:30 AM, Weekly -> "Wed · 10:30 AM · Weekly"
+ * - Monday, 9:15 AM, Fortnightly, WEEK_1_3 -> "Mon · 09:15 AM · Fortnightly (W1, W3)"
+ * - Monday, 9:15 AM, Fortnightly, WEEK_2_4 -> "Mon · 09:15 AM · Fortnightly (W2, W4)"
+ * - Backwards compatible if frequency / pattern omitted.
  */
-export function formatPreferredSchedule(day?: string | null, time?: string | null): string {
+export function formatPreferredSchedule(
+  day?: string | null,
+  time?: string | null,
+  frequency?: string | null,
+  pattern?: string | null
+): string {
   const d = day?.trim();
   const normalizedTime = normalize12HourTime(time);
 
   const abbr = d ? (DAY_ABBREVIATIONS[d] || (d.length > 3 ? d.slice(0, 3) : d)) : null;
 
-  if (abbr && normalizedTime) {
-    return `${abbr} · ${normalizedTime}`;
+  let freqStr = "";
+  if (frequency === "FORTNIGHTLY") {
+    if (pattern === "WEEK_1_3") {
+      freqStr = "Fortnightly (W1, W3)";
+    } else if (pattern === "WEEK_2_4") {
+      freqStr = "Fortnightly (W2, W4)";
+    } else {
+      freqStr = "Fortnightly";
+    }
+  } else if (frequency === "WEEKLY") {
+    freqStr = "Weekly";
   }
-  if (abbr) {
-    return abbr;
-  }
-  if (normalizedTime) {
-    return normalizedTime;
-  }
-  return "—";
+
+  const parts: string[] = [];
+  if (abbr) parts.push(abbr);
+  if (normalizedTime) parts.push(normalizedTime);
+  if (freqStr) parts.push(freqStr);
+
+  return parts.length > 0 ? parts.join(" · ") : "—";
 }

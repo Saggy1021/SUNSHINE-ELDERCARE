@@ -1,12 +1,23 @@
 "use client"
 
 import { useState } from "react"
-import { UserCircle } from "lucide-react"
+import { UserCircle, Calendar } from "lucide-react"
+import { to24HourTime } from "@/lib/services/preferred-schedule"
+import RecurringCareScheduleSelector from "@/components/admin/members/RecurringCareScheduleSelector"
 
 export default function MemberProfileForm({ profile }: { profile: any }) {
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const [preferredDay, setPreferredDay] = useState<string>(profile?.preferredVisitDay || "")
+  const [preferredTime, setPreferredTime] = useState<string>(to24HourTime(profile?.preferredVisitTime) || "")
+  const [preferredFrequency, setPreferredFrequency] = useState<"WEEKLY" | "FORTNIGHTLY">(
+    (profile?.preferredVisitFrequency as "WEEKLY" | "FORTNIGHTLY") || "WEEKLY"
+  )
+  const [preferredPattern, setPreferredPattern] = useState<"WEEK_1_3" | "WEEK_2_4">(
+    (profile?.preferredVisitFortnightlyPattern as "WEEK_1_3" | "WEEK_2_4") || "WEEK_1_3"
+  )
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -119,6 +130,27 @@ export default function MemberProfileForm({ profile }: { profile: any }) {
             name="nearestLandmark" 
             defaultValue={profile.nearestLandmark || ''} 
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" 
+          />
+        </div>
+
+        {/* Care Visit Preferences */}
+        <div className="pt-4 border-t border-slate-200">
+          <h3 className="text-base font-semibold text-[#091329] dark:text-white mb-2 flex items-center gap-2">
+            <Calendar className="h-5 w-5 text-[#B08A4A]" />
+            Care Visit Preferences
+          </h3>
+          <p className="text-xs text-slate-500 mb-4">
+            Select your preferred recurring visit day, time, and frequency. Your scheduled visits in the care calendar will automatically reflect your preferences.
+          </p>
+          <RecurringCareScheduleSelector
+            frequency={preferredFrequency}
+            onFrequencyChange={setPreferredFrequency}
+            fortnightlyPattern={preferredPattern}
+            onPatternChange={setPreferredPattern}
+            preferredDay={preferredDay}
+            onDayChange={setPreferredDay}
+            preferredTime={preferredTime}
+            onTimeChange={setPreferredTime}
           />
         </div>
 

@@ -48,6 +48,8 @@ import {
   rescheduleCareVisit,
   updateCareVisitStatus,
   cancelCareVisit,
+  assignCaregiverDirectly,
+  getCancelledVisitsForCase,
   getEmployeeAvailability,
 } from "@/app/actions/care-schedule";
 import {
@@ -109,6 +111,22 @@ export function VisitScheduleCalendar({
   const [showEditModal, setShowEditModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
 
+  // Direct Assignment State in Visit Details Modal
+  const [directAssignEmpId, setDirectAssignEmpId] = useState<string>("");
+  const [directAssignLoading, setDirectAssignLoading] = useState<boolean>(false);
+  const [directAssignSuccess, setDirectAssignSuccess] = useState<boolean>(false);
+
+  // Adhoc replacement cancelled visits
+  const [caseCancelledVisits, setCaseCancelledVisits] = useState<Array<{ id: string; scheduledStart: string; cancellationReason: string | null; displayLabel: string }>>([]);
+  const [replacementOriginalVisitId, setReplacementOriginalVisitId] = useState<string>("");
+
+  useEffect(() => {
+    if (selectedVisit) {
+      setDirectAssignEmpId(selectedVisit.assignedEmployee?.id || selectedVisit.assignedCaregiver?.id || "");
+      setDirectAssignSuccess(false);
+    }
+  }, [selectedVisit]);
+
   // Form states for mutations
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
@@ -121,6 +139,16 @@ export function VisitScheduleCalendar({
   const [scheduleAssignedEmp, setScheduleAssignedEmp] = useState<string>("");
   const [scheduleEmpAvailability, setScheduleEmpAvailability] = useState<EmployeeAvailabilityItem[]>([]);
   const [scheduleAvailLoading, setScheduleAvailLoading] = useState(false);
+
+  useEffect(() => {
+    if (scheduleCaseSelectionId) {
+      getCancelledVisitsForCase(scheduleCaseSelectionId)
+        .then((v) => setCaseCancelledVisits(v))
+        .catch(() => setCaseCancelledVisits([]));
+    } else {
+      setCaseCancelledVisits([]);
+    }
+  }, [scheduleCaseSelectionId]);
 
   // Edit Modal Form & Availability State
   const [editCaseSelectionId, setEditCaseSelectionId] = useState<string>("");
@@ -386,13 +414,17 @@ export function VisitScheduleCalendar({
     setCurrentDate(new Date());
   };
 
-  // Group visits by local date key (YYYY-MM-DD in IST)
+  // Group visits by local date key (YYYY-MM-DD in IST) and strictly sort chronologically by scheduled visit time
   const visitsByDate = useMemo(() => {
     const map = new Map<string, ScheduleVisitDTO[]>();
     for (const v of visits) {
       const key = formatDateKey(v.scheduledStart);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(v);
+    }
+    // Strict chronological sort within each day based on scheduledStart
+    for (const [key, dayVisits] of map.entries()) {
+      dayVisits.sort((a, b) => new Date(a.scheduledStart).getTime() - new Date(b.scheduledStart).getTime());
     }
     return map;
   }, [visits]);
@@ -512,7 +544,7 @@ export function VisitScheduleCalendar({
     }
   };
 
-  // Category & Emergency Badge UI Helper
+  // Category & Recurrence Badge UI Helper
   const renderCategoryBadge = (visit: ScheduleVisitDTO) => {
     if (visit.isEmergency) {
       const isCodeRed = (visit.emergencyClassification || "CODE_RED") === "CODE_RED";
@@ -529,18 +561,32 @@ export function VisitScheduleCalendar({
         </span>
       );
     }
-    if (visit.category === "Ad-hoc") {
+    const isAdhoc = visit.occurrenceType === "ADHOC" || visit.category === "Ad-hoc";
+    if (isAdhoc) {
       return (
-        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
-          Ad-hoc
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-purple-100 text-purple-800 border border-purple-200">
+          ADHOC
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
-        Scheduled
+      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-800 border border-blue-200">
+        RECURRING
       </span>
     );
+  };
+
+  const renderAssignmentBadge = (visit: ScheduleVisitDTO) => {
+    if (visit.isEmergency) return null;
+    const isAssigned = Boolean(visit.assignedEmployee || visit.assignedCaregiver);
+    if (!isAssigned) {
+      return (
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
+          UNASSIGNED
+        </span>
+      );
+    }
+    return null;
   };
 
   // Status-based Card Border & Visual Styling Helper (Requirement 5 & 4)
@@ -678,9 +724,9 @@ export function VisitScheduleCalendar({
                     setScheduleModalDefaultDate(formatDateKey(new Date()));
                     setShowScheduleModal(true);
                   }}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#091329] rounded-lg hover:bg-[#162850] transition-colors shadow-2xs"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#091329] rounded-lg hover:bg-[#162850] transition-colors shadow-2xs cursor-pointer"
                 >
-                  <Plus className="h-4 w-4" /> Schedule Visit
+                  <Plus className="h-4 w-4" /> Adhoc Visit
                 </button>
               )}
             </>
@@ -1135,9 +1181,9 @@ export function VisitScheduleCalendar({
                         setScheduleModalDefaultDate(dayKey);
                         setShowScheduleModal(true);
                       }}
-                      className="mt-2 px-3 py-1.5 text-xs font-semibold bg-[#091329] text-white rounded-lg hover:bg-[#162850]"
+                      className="mt-2 px-3 py-1.5 text-xs font-semibold bg-[#091329] text-white rounded-lg hover:bg-[#162850] cursor-pointer"
                     >
-                      Schedule Visit
+                      Adhoc Visit
                     </button>
                   )}
                 </div>
@@ -1439,10 +1485,23 @@ export function VisitScheduleCalendar({
                 </div>
               </div>
 
-              {/* Timing */}
-              <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-2">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Schedule & Timing (IST)</p>
+              {/* Timing & Recurrence */}
+              <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-2.5">
                 <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Schedule & Timing (IST)</p>
+                  <div className="flex items-center gap-1.5">
+                    {selectedVisit.occurrenceType === "ADHOC" || selectedVisit.category === "Ad-hoc" ? (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                        ADHOC VISIT
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                        RECURRING VISIT
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2 text-slate-800 font-bold">
                     <CalendarIcon className="h-4 w-4 text-[#B08A4A]" />
                     {formatDateIST(selectedVisit.scheduledStart)}
@@ -1452,6 +1511,17 @@ export function VisitScheduleCalendar({
                     {formatTimeIST(selectedVisit.scheduledStart)} – {formatTimeIST(selectedVisit.scheduledEnd)}
                   </div>
                 </div>
+                {selectedVisit.member.preferredScheduleDisplay && (
+                  <div className="text-xs text-slate-600 pt-1.5 border-t border-slate-100 flex items-center justify-between flex-wrap gap-1">
+                    <span className="text-slate-500">Member Recurring Preference:</span>
+                    <span className="font-semibold text-slate-800">{selectedVisit.member.preferredScheduleDisplay}</span>
+                  </div>
+                )}
+                {selectedVisit.cancellationReason && (
+                  <div className="text-xs text-rose-700 bg-rose-50 p-2.5 rounded-lg border border-rose-200 mt-2">
+                    <span className="font-bold">Cancellation Reason:</span> {selectedVisit.cancellationReason}
+                  </div>
+                )}
               </div>
 
               {/* Actual Execution & Employee Report */}
@@ -1527,34 +1597,121 @@ export function VisitScheduleCalendar({
                 </div>
               )}
 
-              {/* Assigned Employee */}
+              {/* Assigned Employee & Direct Calendar Assignment */}
               {(() => {
                 const assignedPerson = selectedVisit.assignedEmployee || selectedVisit.assignedCaregiver;
                 return (
-                  <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-1">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Assigned Employee</p>
-                    {assignedPerson ? (
-                      <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
-                        <div>
-                          <p className="font-bold text-slate-900 text-sm">
-                            {assignedPerson.firstName} {assignedPerson.lastName}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {assignedPerson.designation} · ID: {assignedPerson.employeeId}
-                          </p>
-                        </div>
-                        {assignedPerson.contactNumber && (
-                          <a
-                            href={`tel:${assignedPerson.contactNumber}`}
-                            className="text-xs font-mono text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded inline-flex items-center gap-1 transition-colors"
+                  <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Assigned Employee</p>
+                      {renderAssignmentBadge(selectedVisit)}
+                    </div>
+
+                    {canManage && !selectedVisit.isEmergency ? (
+                      <div className="space-y-2 pt-1">
+                        <label className="block text-[11px] font-medium text-slate-600">
+                          Directly allocate, change, or unassign employee:
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={directAssignEmpId}
+                            onChange={(e) => setDirectAssignEmpId(e.target.value)}
+                            className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#091329] focus:ring-1 focus:ring-[#091329] outline-none"
                           >
-                            <Phone className="h-3 w-3 text-slate-400" />
-                            {assignedPerson.contactNumber}
-                          </a>
+                            <option value="">-- No Employee Assigned (Unassign) --</option>
+                            {initialFormData.employees.map((emp) => (
+                              <option key={emp.id} value={emp.id}>
+                                {emp.displayName}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            disabled={directAssignLoading}
+                            onClick={async () => {
+                              setDirectAssignLoading(true);
+                              setActionError(null);
+                              const targetEmpId = directAssignEmpId || null;
+                              const res = await assignCaregiverDirectly(selectedVisit.id, targetEmpId);
+                              setDirectAssignLoading(false);
+                              if (res.success) {
+                                setDirectAssignSuccess(true);
+                                const assignedEmp = initialFormData.employees.find((e) => e.id === targetEmpId);
+                                setSelectedVisit((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        assignedEmployee: assignedEmp
+                                          ? {
+                                              id: assignedEmp.id,
+                                              employeeId: assignedEmp.employeeId,
+                                              firstName: assignedEmp.firstName,
+                                              lastName: assignedEmp.lastName,
+                                              designation: assignedEmp.designation,
+                                              contactNumber: null,
+                                            }
+                                          : null,
+                                        assignedCaregiver: assignedEmp
+                                          ? {
+                                              id: assignedEmp.id,
+                                              employeeId: assignedEmp.employeeId,
+                                              firstName: assignedEmp.firstName,
+                                              lastName: assignedEmp.lastName,
+                                              designation: assignedEmp.designation,
+                                              contactNumber: null,
+                                            }
+                                          : null,
+                                      }
+                                    : null
+                                );
+                                refreshVisits();
+                                setTimeout(() => setDirectAssignSuccess(false), 3000);
+                              } else {
+                                setActionError(res.error || "Failed to update employee assignment.");
+                              }
+                            }}
+                            className="px-3.5 py-2 text-xs font-semibold text-white bg-[#091329] hover:bg-[#162850] rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1 cursor-pointer shrink-0"
+                          >
+                            {directAssignLoading ? (
+                              <RefreshCw className="h-3 w-3 animate-spin" />
+                            ) : directAssignSuccess ? (
+                              <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                            ) : null}
+                            <span>{directAssignSuccess ? "Assigned!" : "Save"}</span>
+                          </button>
+                        </div>
+                        {directAssignSuccess && (
+                          <p className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Employee assignment updated successfully.
+                          </p>
                         )}
                       </div>
                     ) : (
-                      <p className="text-xs text-amber-700 font-semibold pt-1">No employee currently assigned.</p>
+                      <div>
+                        {assignedPerson ? (
+                          <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
+                            <div>
+                              <p className="font-bold text-slate-900 text-sm">
+                                {assignedPerson.firstName} {assignedPerson.lastName}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {assignedPerson.designation} · ID: {assignedPerson.employeeId}
+                              </p>
+                            </div>
+                            {assignedPerson.contactNumber && (
+                              <a
+                                href={`tel:${assignedPerson.contactNumber}`}
+                                className="text-xs font-mono text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded inline-flex items-center gap-1 transition-colors"
+                              >
+                                <Phone className="h-3 w-3 text-slate-400" />
+                                {assignedPerson.contactNumber}
+                              </a>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-amber-700 font-semibold pt-1">No employee currently assigned.</p>
+                        )}
+                      </div>
                     )}
                   </div>
                 );
@@ -1653,16 +1810,27 @@ export function VisitScheduleCalendar({
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 2: SCHEDULE NEW VISIT MODAL                                         */}
+      {/* MODAL 2: SCHEDULE ADHOC VISIT MODAL                                       */}
       {/* ========================================================================= */}
       {showScheduleModal && canManage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-xl relative">
             <div className="px-6 py-4 bg-[#091329] text-white flex items-center justify-between rounded-t-2xl">
-              <h3 className="font-bold text-base text-white flex items-center gap-2">
-                <Plus className="h-5 w-5 text-[#B08A4A]" /> Schedule Care Visit
-              </h3>
-              <button onClick={() => setShowScheduleModal(false)} className="text-slate-300 hover:text-white">
+              <div>
+                <h3 className="font-bold text-base text-white flex items-center gap-2">
+                  <Plus className="h-5 w-5 text-[#B08A4A]" /> Schedule Adhoc Visit
+                </h3>
+                <p className="text-[11px] text-slate-300 mt-0.5">
+                  Schedule an ad-hoc visit outside the recurring plan or as a replacement for a cancelled visit.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowScheduleModal(false);
+                  setReplacementOriginalVisitId("");
+                }}
+                className="text-slate-300 hover:text-white cursor-pointer"
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -1685,16 +1853,19 @@ export function VisitScheduleCalendar({
                   startTime: scheduleStartTime,
                   endTime: scheduleEndTime,
                   assignedEmpId: (fd.get("assignedEmpId") as string) || undefined,
-                  category: (fd.get("category") as any) || "Scheduled",
+                  category: (fd.get("category") as any) || "Ad-hoc",
+                  occurrenceType: "ADHOC",
+                  originalVisitId: replacementOriginalVisitId || undefined,
                   status: (fd.get("status") as string) || "SCHEDULED",
                   operationalNotes: fd.get("notes") as string,
                 });
                 setActionLoading(false);
                 if (res.success) {
                   setShowScheduleModal(false);
+                  setReplacementOriginalVisitId("");
                   refreshVisits();
                 } else {
-                  setActionError(res.error || "Failed to schedule visit.");
+                  setActionError(res.error || "Failed to schedule adhoc visit.");
                 }
               }}
               className="p-6 space-y-4 text-xs"
@@ -1702,10 +1873,41 @@ export function VisitScheduleCalendar({
               <SearchableMemberSelect
                 name="caseSelectionId"
                 value={scheduleCaseSelectionId}
-                onChange={(m) => setScheduleCaseSelectionId(m?.id || "")}
+                onChange={(m) => {
+                  setScheduleCaseSelectionId(m?.id || "");
+                  setReplacementOriginalVisitId("");
+                }}
                 initialCases={initialFormData.cases}
                 required
               />
+
+              {/* Optional Replacement for Cancelled Visit */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Replacement for Cancelled Visit <span className="font-normal text-slate-400">(Optional)</span>
+                </label>
+                <select
+                  value={replacementOriginalVisitId}
+                  onChange={(e) => setReplacementOriginalVisitId(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white text-slate-800"
+                >
+                  <option value="">-- None (New standalone adhoc visit) --</option>
+                  {caseCancelledVisits.map((cv) => (
+                    <option key={cv.id} value={cv.id}>
+                      {cv.displayLabel}
+                    </option>
+                  ))}
+                </select>
+                {replacementOriginalVisitId ? (
+                  <p className="text-[11px] text-amber-700 mt-1 flex items-center gap-1 font-medium">
+                    <AlertCircle className="h-3 w-3 inline text-amber-600" /> This adhoc visit will be linked as a replacement for the selected cancelled occurrence.
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    Select a previous cancelled visit if this visit is compensating for it.
+                  </p>
+                )}
+              </div>
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
@@ -1746,14 +1948,14 @@ export function VisitScheduleCalendar({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Category</label>
-                  <select name="category" defaultValue="Scheduled" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs">
+                  <select name="category" defaultValue="Ad-hoc" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white">
+                    <option value="Ad-hoc">Ad-hoc (Additional)</option>
                     <option value="Scheduled">Scheduled</option>
-                    <option value="Ad-hoc">Ad-hoc</option>
                   </select>
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Initial Status</label>
-                  <select name="status" defaultValue="SCHEDULED" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs">
+                  <select name="status" defaultValue="SCHEDULED" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white">
                     <option value="SCHEDULED">Scheduled</option>
                     <option value="CONFIRMED">Confirmed</option>
                     <option value="WAITLISTED">Waitlisted</option>
@@ -1777,16 +1979,26 @@ export function VisitScheduleCalendar({
                 <textarea
                   name="notes"
                   rows={2}
-                  placeholder="Details of care tasks, special instructions, or medical notes..."
+                  placeholder="Reason for ad-hoc visit, special instructions, or medical notes..."
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
                 />
               </div>
 
+              {actionError && (
+                <div className="p-3 bg-red-50 text-red-700 border border-red-200 rounded-lg text-xs flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{actionError}</span>
+                </div>
+              )}
+
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setShowScheduleModal(false)}
-                  className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-semibold"
+                  onClick={() => {
+                    setShowScheduleModal(false);
+                    setReplacementOriginalVisitId("");
+                  }}
+                  className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -1800,9 +2012,9 @@ export function VisitScheduleCalendar({
                       scheduleEmpAvailability.find((a) => a.employeeId === scheduleAssignedEmp)?.available === false
                     )
                   }
-                  className="px-5 py-2 bg-[#091329] text-white font-semibold rounded-lg hover:bg-[#162850] disabled:opacity-50"
+                  className="px-5 py-2 bg-[#091329] text-white font-semibold rounded-lg hover:bg-[#162850] disabled:opacity-50 cursor-pointer shadow-xs"
                 >
-                  {actionLoading ? "Scheduling..." : "Confirm Schedule"}
+                  {actionLoading ? "Scheduling..." : "Create Adhoc Visit"}
                 </button>
               </div>
             </form>

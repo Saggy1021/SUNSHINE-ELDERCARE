@@ -610,8 +610,10 @@ model MemberProfile {
   enrollmentDate          DateTime?
 
   // Preferred Care Visit Schedule
-  preferredVisitDay       String?
-  preferredVisitTime      String?
+  preferredVisitDay                String?
+  preferredVisitTime               String?
+  preferredVisitFrequency          String?   @default("WEEKLY") // "WEEKLY" | "FORTNIGHTLY"
+  preferredVisitFortnightlyPattern String?   // "WEEK_1_3" | "WEEK_2_4"
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -927,6 +929,14 @@ model CareVisit {
 
   createdById String?
 
+  // Occurrence & Recurrence Tracking
+  occurrenceType            String     @default("RECURRING") // "RECURRING" | "ADHOC"
+  isIndividuallyRescheduled Boolean    @default(false)
+  cancellationReason        String?    @db.Text
+  originalVisitId           String?
+  originalVisit             CareVisit? @relation("ReplacementVisits", fields: [originalVisitId], references: [id], onDelete: SetNull)
+  replacementVisits         CareVisit[] @relation("ReplacementVisits")
+
   careCase    CareCase   @relation(fields: [careCaseId], references: [id], onDelete: Cascade)
   assignedEmp Employee?  @relation(fields: [assignedEmpId], references: [id], onDelete: SetNull)
   tasks       CareTask[]
@@ -939,6 +949,8 @@ model CareVisit {
   @@index([scheduledStart])
   @@index([assignedEmpId])
   @@index([careCaseId])
+  @@index([occurrenceType])
+  @@index([originalVisitId])
 }
 
 model CareTask {

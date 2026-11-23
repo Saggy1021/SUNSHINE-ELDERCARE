@@ -12,6 +12,7 @@ import {
   formatPlanDisplay,
 } from "@/components/admin/schedule/schedule-date-utils";
 import { formatPreferredSchedule } from "@/lib/services/preferred-schedule";
+import { RecurringSchedulerService } from "@/lib/services/recurring-scheduler";
 import {
   BirthdayCalendarService,
   BirthdayCalendarPayload,
@@ -34,6 +35,10 @@ export interface ScheduleVisitDTO {
   actualDurationDisplay?: string | null;
   status: string;
   category: "Scheduled" | "Ad-hoc";
+  occurrenceType?: "RECURRING" | "ADHOC";
+  cancellationReason?: string | null;
+  originalVisitId?: string | null;
+  isIndividuallyRescheduled?: boolean;
   operationalNotes?: string | null;
 
   member: {
@@ -45,6 +50,8 @@ export interface ScheduleVisitDTO {
     mobileNumber: string | null;
     preferredVisitDay?: string | null;
     preferredVisitTime?: string | null;
+    preferredVisitFrequency?: string | null;
+    preferredVisitFortnightlyPattern?: string | null;
     preferredScheduleDisplay?: string;
   };
   elder: {
@@ -95,6 +102,8 @@ export interface ScheduleMemberSearchResult {
   label: string; // Compact display label
   preferredVisitDay?: string | null;
   preferredVisitTime?: string | null;
+  preferredVisitFrequency?: string | null;
+  preferredVisitFortnightlyPattern?: string | null;
   preferredScheduleDisplay?: string;
 }
 
@@ -125,6 +134,8 @@ export interface CareScheduleFormData {
     subscribedPlan?: string | null;
     preferredVisitDay?: string | null;
     preferredVisitTime?: string | null;
+    preferredVisitFrequency?: string | null;
+    preferredVisitFortnightlyPattern?: string | null;
     preferredScheduleDisplay?: string;
   }>;
   employees: Array<{
@@ -411,6 +422,10 @@ export async function getScheduleVisits(filters: {
           cv."completedById",
           cv."careCaseId",
           cv."assignedEmpId",
+          cv."occurrenceType",
+          cv."cancellationReason",
+          cv."originalVisitId",
+          cv."isIndividuallyRescheduled",
           e.id AS "elderId",
           e."firstName" AS "elderFirstName",
           e."lastName" AS "elderLastName",
@@ -429,6 +444,8 @@ export async function getScheduleVisits(filters: {
           mp."mobileNumber" AS "profileMobileNumber",
           mp."preferredVisitDay" AS "preferredVisitDay",
           mp."preferredVisitTime" AS "preferredVisitTime",
+          mp."preferredVisitFrequency" AS "preferredVisitFrequency",
+          mp."preferredVisitFortnightlyPattern" AS "preferredVisitFortnightlyPattern",
           cp.name AS "carePlanName",
           emp.id AS "empId",
           emp."employeeId" AS "empEmployeeId",
@@ -600,6 +617,10 @@ export async function getScheduleVisits(filters: {
           actualDurationDisplay: durationDisplay,
           status: v.status,
           category: parsedCat.category,
+          occurrenceType: (v.occurrenceType as "RECURRING" | "ADHOC") || (parsedCat.category === "Ad-hoc" ? "ADHOC" : "RECURRING"),
+          cancellationReason: v.cancellationReason || null,
+          originalVisitId: v.originalVisitId || null,
+          isIndividuallyRescheduled: Boolean(v.isIndividuallyRescheduled),
           operationalNotes: parsedCat.cleanNotes || v.operationalNotes,
           member: {
             userId: v.userId || "",
@@ -610,7 +631,14 @@ export async function getScheduleVisits(filters: {
             mobileNumber: v.profileMobileNumber || v.elderContactNumber || null,
             preferredVisitDay: v.preferredVisitDay || null,
             preferredVisitTime: v.preferredVisitTime || null,
-            preferredScheduleDisplay: formatPreferredSchedule(v.preferredVisitDay, v.preferredVisitTime),
+            preferredVisitFrequency: v.preferredVisitFrequency || null,
+            preferredVisitFortnightlyPattern: v.preferredVisitFortnightlyPattern || null,
+            preferredScheduleDisplay: formatPreferredSchedule(
+              v.preferredVisitDay,
+              v.preferredVisitTime,
+              v.preferredVisitFrequency,
+              v.preferredVisitFortnightlyPattern
+            ),
           },
           elder: {
             id: v.elderId || "",
@@ -764,6 +792,10 @@ export async function getScheduleVisits(filters: {
       actualDurationDisplay: durationDisplay,
       status: v.status,
       category: parsedCat.category,
+      occurrenceType: (v.occurrenceType as "RECURRING" | "ADHOC") || (parsedCat.category === "Ad-hoc" ? "ADHOC" : "RECURRING"),
+      cancellationReason: v.cancellationReason || null,
+      originalVisitId: v.originalVisitId || null,
+      isIndividuallyRescheduled: Boolean(v.isIndividuallyRescheduled),
       operationalNotes: parsedCat.cleanNotes || v.operationalNotes,
       member: {
         userId: memberUser?.id || "",
@@ -774,7 +806,14 @@ export async function getScheduleVisits(filters: {
         mobileNumber: profile?.mobileNumber || elder?.contactNumber || null,
         preferredVisitDay: profile?.preferredVisitDay || null,
         preferredVisitTime: profile?.preferredVisitTime || null,
-        preferredScheduleDisplay: formatPreferredSchedule(profile?.preferredVisitDay, profile?.preferredVisitTime),
+        preferredVisitFrequency: profile?.preferredVisitFrequency || null,
+        preferredVisitFortnightlyPattern: profile?.preferredVisitFortnightlyPattern || null,
+        preferredScheduleDisplay: formatPreferredSchedule(
+          profile?.preferredVisitDay,
+          profile?.preferredVisitTime,
+          profile?.preferredVisitFrequency,
+          profile?.preferredVisitFortnightlyPattern
+        ),
       },
       elder: {
         id: elder?.id || "",
@@ -1029,6 +1068,8 @@ export async function searchScheduleMembers(query: string = ""): Promise<Schedul
         mp."mobileNumber" AS "profileMobile",
         mp."preferredVisitDay" AS "preferredVisitDay",
         mp."preferredVisitTime" AS "preferredVisitTime",
+        mp."preferredVisitFrequency" AS "preferredVisitFrequency",
+        mp."preferredVisitFortnightlyPattern" AS "preferredVisitFortnightlyPattern",
         sub.id AS "subscriptionId",
         sub."durationMonths" AS "subDurationMonths",
         sub."startDate" AS "subStartDate",
@@ -1066,6 +1107,8 @@ export async function searchScheduleMembers(query: string = ""): Promise<Schedul
         mp."mobileNumber" AS "profileMobile",
         mp."preferredVisitDay" AS "preferredVisitDay",
         mp."preferredVisitTime" AS "preferredVisitTime",
+        mp."preferredVisitFrequency" AS "preferredVisitFrequency",
+        mp."preferredVisitFortnightlyPattern" AS "preferredVisitFortnightlyPattern",
         s.id AS "subscriptionId",
         s."durationMonths" AS "subDurationMonths",
         s."startDate" AS "subStartDate",
@@ -1114,7 +1157,14 @@ export async function searchScheduleMembers(query: string = ""): Promise<Schedul
 
     const preferredVisitDay = r.preferredVisitDay || null;
     const preferredVisitTime = r.preferredVisitTime || null;
-    const preferredScheduleDisplay = formatPreferredSchedule(preferredVisitDay, preferredVisitTime);
+    const preferredVisitFrequency = r.preferredVisitFrequency || null;
+    const preferredVisitFortnightlyPattern = r.preferredVisitFortnightlyPattern || null;
+    const preferredScheduleDisplay = formatPreferredSchedule(
+      preferredVisitDay,
+      preferredVisitTime,
+      preferredVisitFrequency,
+      preferredVisitFortnightlyPattern
+    );
 
     return {
       id: r.id,
@@ -1129,6 +1179,8 @@ export async function searchScheduleMembers(query: string = ""): Promise<Schedul
       label,
       preferredVisitDay,
       preferredVisitTime,
+      preferredVisitFrequency,
+      preferredVisitFortnightlyPattern,
       preferredScheduleDisplay,
     };
   });
@@ -1280,6 +1332,8 @@ export async function createScheduleVisit(input: {
   endTime: string; // HH:mm
   assignedEmpId?: string;
   category?: "Scheduled" | "Ad-hoc";
+  occurrenceType?: "RECURRING" | "ADHOC";
+  originalVisitId?: string | null;
   operationalNotes?: string;
   status?: string;
 }): Promise<{ success: boolean; visitId?: string; error?: string }> {
@@ -1341,8 +1395,13 @@ export async function createScheduleVisit(input: {
       resolvedCaseId = newCase.id;
     }
 
-    const category = input.category || "Scheduled";
-    const formattedNotes = formatNotesWithCategory(category, input.operationalNotes);
+    const category = input.category || "Ad-hoc";
+    const occurrenceType = input.occurrenceType || (category === "Scheduled" ? "RECURRING" : "ADHOC");
+    let rawNotes = input.operationalNotes || "";
+    if (input.originalVisitId && !rawNotes.includes("[Replacement")) {
+      rawNotes = `[Replacement for cancelled visit] ${rawNotes}`.trim();
+    }
+    const formattedNotes = formatNotesWithCategory(category, rawNotes);
     const visitStatus = input.status || "SCHEDULED";
 
     const visit = await db.$transaction(async (tx) => {
@@ -1383,6 +1442,8 @@ export async function createScheduleVisit(input: {
           scheduledStart,
           scheduledEnd,
           status: visitStatus,
+          occurrenceType,
+          originalVisitId: input.originalVisitId || null,
           operationalNotes: formattedNotes,
           createdById: admin.userId,
           ...(input.assignedEmpId
@@ -1800,7 +1861,56 @@ export async function updateCareVisitStatus(
 }
 
 /**
+ * Assigns or reassigns an employee directly to a care visit from the calendar modal.
+ */
+export async function assignCaregiverDirectly(
+  visitId: string,
+  employeeId: string | null
+): Promise<{ success: boolean; error?: string }> {
+  const admin = await requireSchedulePermission(true);
+  const res = await RecurringSchedulerService.assignEmployeeToVisit({
+    visitId,
+    employeeId,
+    actorUserId: admin.userId,
+  });
+
+  if (res.success) {
+    revalidatePath("/admin/schedule");
+    revalidatePath("/admin/care");
+  }
+
+  return res;
+}
+
+/**
+ * Returns recently cancelled visits for a member case to allow referencing in an Adhoc replacement visit.
+ */
+export async function getCancelledVisitsForCase(
+  caseSelectionId: string
+): Promise<Array<{ id: string; scheduledStart: string; cancellationReason: string | null; displayLabel: string }>> {
+  await requireSchedulePermission(false);
+  if (!caseSelectionId || caseSelectionId.startsWith("new_sub_")) return [];
+
+  const cancelledVisits = await db.careVisit.findMany({
+    where: {
+      careCaseId: caseSelectionId,
+      status: "CANCELLED",
+    },
+    orderBy: { scheduledStart: "desc" },
+    take: 10,
+  });
+
+  return cancelledVisits.map((v) => ({
+    id: v.id,
+    scheduledStart: v.scheduledStart.toISOString(),
+    cancellationReason: v.cancellationReason,
+    displayLabel: `${formatTimeIST(v.scheduledStart)} (${v.cancellationReason || "Cancelled occurrence"})`,
+  }));
+}
+
+/**
  * Cancels a visit with audit reason.
+ * Crucial: Cancelling an occurrence records the reason and preserves the rest of the recurring series.
  */
 export async function cancelCareVisit(
   visitId: string,
@@ -1811,9 +1921,8 @@ export async function cancelCareVisit(
   const existing = await db.careVisit.findUnique({ where: { id: visitId } });
   if (!existing) return { success: false, error: "Visit not found." };
 
-  const updatedNotes = cancellationReason
-    ? `${existing.operationalNotes || ""}\n[Cancelled: ${cancellationReason}]`.trim()
-    : existing.operationalNotes;
+  const reason = cancellationReason?.trim() || "Administrative cancellation";
+  const updatedNotes = `${existing.operationalNotes || ""}\n[Cancelled: ${reason}]`.trim();
 
   try {
     await db.$transaction(async (tx) => {
@@ -1821,6 +1930,7 @@ export async function cancelCareVisit(
         where: { id: visitId },
         data: {
           status: "CANCELLED",
+          cancellationReason: reason,
           operationalNotes: updatedNotes,
         },
       });
@@ -1833,7 +1943,8 @@ export async function cancelCareVisit(
           entityId: visitId,
           metadata: {
             previousStatus: existing.status,
-            reason: cancellationReason || "Administrative cancellation",
+            reason,
+            occurrenceType: existing.occurrenceType,
           },
         },
       });
