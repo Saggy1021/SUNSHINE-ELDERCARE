@@ -44,7 +44,7 @@ import {
 import { parseISTDateTimeToUTC, formatDateKey } from "../../components/admin/schedule/schedule-date-utils";
 
 console.log("================================================================================");
-console.log("🧪 RUNNING MONTHLY FINAL EXCESS CARE HOURS STATEMENT TEST SUITE (13 SCENARIOS)");
+console.log("🧪 RUNNING MONTHLY FINAL EXCESS CARE HOURS STATEMENT TEST SUITE (17 SCENARIOS)");
 console.log("================================================================================\n");
 
 // In-Memory Mock Database Factory for Statement Verification
@@ -68,6 +68,77 @@ function createMockMonthlyHoursDb() {
       careVisits,
       monthlyReports,
       monthlyReportItems,
+    },
+    careVisit: {
+      findMany: async (args?: any) => {
+        return careVisits
+          .filter((v) => {
+            if (args?.where?.status?.in && !args.where.status.in.includes(v.status)) {
+              return false;
+            }
+            if (args?.where?.OR) {
+              const matchesOr = args.where.OR.some((cond: any) => {
+                if (cond.scheduledStart) {
+                  const t = v.scheduledStart ? new Date(v.scheduledStart).getTime() : 0;
+                  return t >= cond.scheduledStart.gte.getTime() && t <= cond.scheduledStart.lte.getTime();
+                }
+                if (cond.actualStart) {
+                  const t = v.actualStart ? new Date(v.actualStart).getTime() : 0;
+                  return t >= cond.actualStart.gte.getTime() && t <= cond.actualStart.lte.getTime();
+                }
+                if (cond.completedAt) {
+                  const t = v.completedAt ? new Date(v.completedAt).getTime() : 0;
+                  return t >= cond.completedAt.gte.getTime() && t <= cond.completedAt.lte.getTime();
+                }
+                return false;
+              });
+              if (!matchesOr) return false;
+            }
+            return true;
+          })
+          .map((v) => {
+            const careCase = careCases.find((c) => c.id === v.careCaseId);
+            const elder = careCase ? elders.find((e) => e.id === careCase.elderId) : null;
+            const elderUser = elder ? users.find((u) => u.id === elder.userId) : null;
+            const elderProfile = elderUser ? memberProfiles.find((p) => p.userId === elderUser.id) : null;
+            const sub = careCase ? subscriptions.find((s) => s.id === careCase.subscriptionId) : null;
+            const subUser = sub ? users.find((u) => u.id === sub.userId) : null;
+            const subProfile = subUser ? memberProfiles.find((p) => p.userId === subUser.id) : null;
+
+            return {
+              ...v,
+              assignedEmp: v.assignedEmp || null,
+              careCase: careCase
+                ? {
+                    ...careCase,
+                    elder: elder
+                      ? {
+                          ...elder,
+                          user: elderUser
+                            ? {
+                                ...elderUser,
+                                memberProfile: elderProfile || null,
+                              }
+                            : null,
+                        }
+                      : null,
+                    subscription: sub
+                      ? {
+                          ...sub,
+                          carePlan: sub.carePlan,
+                          user: subUser
+                            ? {
+                                ...subUser,
+                                memberProfile: subProfile || null,
+                              }
+                            : null,
+                        }
+                      : null,
+                  }
+                : null,
+            };
+          });
+      },
     },
     memberProfile: {
       findMany: async (args?: any) => {
@@ -557,6 +628,259 @@ async function main() {
     assert.ok(csv.includes('"SEC/1001/RAH","Ashok Chandra","Shield Shine","10.0","12.5","0.0","2.5","4","November 2026","EXCEEDED"'));
     assert.ok(csv.includes('"SEC/1002/SEN","Subhasree Sen","Semi Shield Shine","5.0","4.0","1.0","0.0","2","November 2026","WITHIN ENTITLEMENT"'));
     assert.ok(csv.includes("Strictly for management monitoring & review. Not an invoice or billing document."));
+  });
+
+  // Scenario 14: Exact reproduction test for Mrs BELA MISRA (SECS1013BERA)
+  await runTest("14. Exact production bug reproduction: Mrs BELA MISRA (SECS1013BERA) completed visit", async () => {
+    const mockDb = createMockMonthlyHoursDb();
+    setMonthlyHoursDb(mockDb);
+
+    const userId = "u_bela";
+    const elderId = "e_bela";
+    const caseId = "c_bela";
+    const subId = "s_bela";
+
+    mockDb._data.users.push({ id: userId, email: "bela.misra@example.com" });
+    mockDb._data.memberProfiles.push({
+      id: "p_bela",
+      userId,
+      memberId: "SECS1013BERA",
+      salutation: "Mrs",
+      firstName: "BELA",
+      lastName: "MISRA",
+    });
+    mockDb._data.elders.push({ id: elderId, userId, firstName: "BELA", lastName: "MISRA" });
+    mockDb._data.subscriptions.push({
+      id: subId,
+      userId,
+      status: "ACTIVE",
+      carePlan: { slug: "shield-shine", name: "Shield Shine" }, // 10.0 hrs entitlement
+    });
+    mockDb._data.careCases.push({ id: caseId, elderId, subscriptionId: subId });
+
+    // Completed ADHOC visit on 24 November 2026: 9:30 AM to 12:30 PM (3 hours duration)
+    // "Medicine purchase"
+    mockDb._data.careVisits.push({
+      id: "cmwtr57to001853ggrpbsqyqg",
+      careCaseId: caseId,
+      status: "COMPLETED",
+      occurrenceType: "ADHOC",
+      scheduledStart: parseISTDateTimeToUTC("2026-11-24", "09:30"),
+      scheduledEnd: parseISTDateTimeToUTC("2026-11-24", "12:30"),
+      actualStart: parseISTDateTimeToUTC("2026-11-24", "09:30"),
+      actualEnd: parseISTDateTimeToUTC("2026-11-24", "12:30"),
+      completedAt: new Date("2026-11-23T21:08:54.982Z"),
+      workDescription: "Medicine purchase",
+    });
+
+    const report = await MonthlyExcessHoursService.calculateLiveMonthlyStatement("2026-11");
+    assert.equal(report.items.length, 1, "Must contain exactly 1 member item");
+
+    const belaItem = report.items[0];
+    assert.equal(belaItem.memberId, "SECS1013BERA", "Member ID must be SECS1013BERA");
+    assert.equal(belaItem.memberName, "Mrs BELA MISRA", "Member Name must be Mrs BELA MISRA");
+    assert.equal(belaItem.packageName, "Shield Shine", "Package must be Shield Shine");
+    assert.equal(belaItem.monthlyEntitlement, 10.0, "Monthly entitlement must be 10.0 hrs");
+    assert.equal(belaItem.totalHoursUsed, 3.0, "Total hours used must be 3.0 hrs from actual 9:30-12:30 visit");
+    assert.equal(belaItem.remainingHours, 7.0, "Remaining hours must be 7.0 hrs (10 - 3)");
+    assert.equal(belaItem.excessHours, 0.0, "Excess hours must be 0.0 hrs");
+    assert.equal(belaItem.completedVisits, 1, "Completed visits must be 1");
+    assert.equal(belaItem.hasExcess, false, "Must be within entitlement");
+    assert.equal(belaItem.visits.length, 1);
+    assert.equal(belaItem.visits[0].workDescription, "Medicine purchase");
+    assert.equal(belaItem.visits[0].occurrenceType, "ADHOC");
+    assert.equal(belaItem.visits[0].durationHours, 3.0);
+  });
+
+  // Scenario 15: Support for all visit types: RECURRING, ADHOC, and REPLACEMENT
+  await runTest("15. All eligible visit types (RECURRING, ADHOC, REPLACEMENT) are aggregated into care hours", async () => {
+    const mockDb = createMockMonthlyHoursDb();
+    setMonthlyHoursDb(mockDb);
+
+    const userId = "u_mixed";
+    const elderId = "e_mixed";
+    const caseId = "c_mixed";
+    const subId = "s_mixed";
+
+    mockDb._data.users.push({ id: userId, email: "mixed@example.com" });
+    mockDb._data.memberProfiles.push({
+      id: "p_mixed",
+      userId,
+      memberId: "SEC/MIXED/01",
+      firstName: "Rajesh",
+      lastName: "Sen",
+    });
+    mockDb._data.elders.push({ id: elderId, userId, firstName: "Rajesh", lastName: "Sen" });
+    mockDb._data.subscriptions.push({
+      id: subId,
+      userId,
+      status: "ACTIVE",
+      carePlan: { slug: "shield-shine", name: "Shield Shine" },
+    });
+    mockDb._data.careCases.push({ id: caseId, elderId, subscriptionId: subId });
+
+    // 1. RECURRING visit (2 hours)
+    mockDb._data.careVisits.push({
+      id: "v_rec",
+      careCaseId: caseId,
+      status: "COMPLETED",
+      occurrenceType: "RECURRING",
+      scheduledStart: parseISTDateTimeToUTC("2026-11-04", "10:00"),
+      scheduledEnd: parseISTDateTimeToUTC("2026-11-04", "12:00"),
+      actualStart: parseISTDateTimeToUTC("2026-11-04", "10:00"),
+      actualEnd: parseISTDateTimeToUTC("2026-11-04", "12:00"),
+    });
+
+    // 2. ADHOC visit (1.5 hours)
+    mockDb._data.careVisits.push({
+      id: "v_adhoc",
+      careCaseId: caseId,
+      status: "COMPLETED",
+      occurrenceType: "ADHOC",
+      scheduledStart: parseISTDateTimeToUTC("2026-11-10", "14:00"),
+      scheduledEnd: parseISTDateTimeToUTC("2026-11-10", "15:30"),
+      actualStart: parseISTDateTimeToUTC("2026-11-10", "14:00"),
+      actualEnd: parseISTDateTimeToUTC("2026-11-10", "15:30"),
+    });
+
+    // 3. REPLACEMENT visit (1.5 hours)
+    mockDb._data.careVisits.push({
+      id: "v_rep",
+      careCaseId: caseId,
+      status: "COMPLETED",
+      occurrenceType: "RECURRING",
+      originalVisitId: "v_orig_cancelled",
+      scheduledStart: parseISTDateTimeToUTC("2026-11-18", "11:00"),
+      scheduledEnd: parseISTDateTimeToUTC("2026-11-18", "12:30"),
+      actualStart: parseISTDateTimeToUTC("2026-11-18", "11:00"),
+      actualEnd: parseISTDateTimeToUTC("2026-11-18", "12:30"),
+    });
+
+    const report = await MonthlyExcessHoursService.calculateLiveMonthlyStatement("2026-11");
+    const item = report.items[0];
+
+    // Total used = 2.0 + 1.5 + 1.5 = 5.0 hrs
+    assert.equal(item.completedVisits, 3, "All 3 completed visits must be counted");
+    assert.equal(item.totalHoursUsed, 5.0, "Total hours used must be exactly 5.0 hrs");
+    assert.equal(item.monthlyEntitlement, 10.0);
+    assert.equal(item.remainingHours, 5.0);
+    assert.equal(item.excessHours, 0.0);
+  });
+
+  // Scenario 16: Strict isolation of CODE RED and Emergency visits
+  await runTest("16. CODE RED and Emergency visits are strictly excluded from standard monthly care hours", async () => {
+    const mockDb = createMockMonthlyHoursDb();
+    setMonthlyHoursDb(mockDb);
+
+    const userId = "u_emg";
+    const elderId = "e_emg";
+    const caseId = "c_emg";
+    const subId = "s_emg";
+
+    mockDb._data.users.push({ id: userId, email: "emergency@example.com" });
+    mockDb._data.memberProfiles.push({
+      id: "p_emg",
+      userId,
+      memberId: "SEC/EMG/01",
+      firstName: "Kalyan",
+      lastName: "Ghosh",
+    });
+    mockDb._data.elders.push({ id: elderId, userId, firstName: "Kalyan", lastName: "Ghosh" });
+    mockDb._data.subscriptions.push({
+      id: subId,
+      userId,
+      status: "ACTIVE",
+      carePlan: { slug: "shield-shine", name: "Shield Shine" },
+    });
+    mockDb._data.careCases.push({ id: caseId, elderId, subscriptionId: subId });
+
+    // Regular care visit: 2.0 hrs
+    mockDb._data.careVisits.push({
+      id: "v_reg",
+      careCaseId: caseId,
+      status: "COMPLETED",
+      occurrenceType: "RECURRING",
+      scheduledStart: parseISTDateTimeToUTC("2026-11-08", "10:00"),
+      scheduledEnd: parseISTDateTimeToUTC("2026-11-08", "12:00"),
+      actualStart: parseISTDateTimeToUTC("2026-11-08", "10:00"),
+      actualEnd: parseISTDateTimeToUTC("2026-11-08", "12:00"),
+    });
+
+    // CODE RED visit (3.0 hrs): must NOT consume care entitlement
+    mockDb._data.careVisits.push({
+      id: "v_codered",
+      careCaseId: caseId,
+      status: "COMPLETED",
+      occurrenceType: "EMERGENCY",
+      operationalNotes: "[CODE RED] Severe chest pain dispatched",
+      scheduledStart: parseISTDateTimeToUTC("2026-11-15", "03:00"),
+      scheduledEnd: parseISTDateTimeToUTC("2026-11-15", "06:00"),
+      actualStart: parseISTDateTimeToUTC("2026-11-15", "03:00"),
+      actualEnd: parseISTDateTimeToUTC("2026-11-15", "06:00"),
+    });
+
+    const report = await MonthlyExcessHoursService.calculateLiveMonthlyStatement("2026-11");
+    const item = report.items[0];
+
+    assert.equal(item.completedVisits, 1, "Only regular care visit must be counted");
+    assert.equal(item.totalHoursUsed, 2.0, "CODE RED visit must not consume monthly care hours");
+    assert.equal(item.remainingHours, 8.0);
+  });
+
+  // Scenario 17: Automatic open-month reconciliation vs finalized historical preservation
+  await runTest("17. Automatic open-month reconciliation dynamically updates saved monthly report snapshot", async () => {
+    const mockDb = createMockMonthlyHoursDb();
+    setMonthlyHoursDb(mockDb);
+
+    const userId = "u_recon";
+    const elderId = "e_recon";
+    const caseId = "c_recon";
+    const subId = "s_recon";
+
+    mockDb._data.users.push({ id: userId, email: "recon@example.com" });
+    mockDb._data.memberProfiles.push({
+      id: "p_recon",
+      userId,
+      memberId: "SEC/RECON/01",
+      firstName: "Sunita",
+      lastName: "Roy",
+    });
+    mockDb._data.elders.push({ id: elderId, userId, firstName: "Sunita", lastName: "Roy" });
+    mockDb._data.subscriptions.push({
+      id: subId,
+      userId,
+      status: "ACTIVE",
+      carePlan: { slug: "shield-shine", name: "Shield Shine" }, // 10.0 hrs
+    });
+    mockDb._data.careCases.push({ id: caseId, elderId, subscriptionId: subId });
+
+    // Step 1: Initial report generated with 0 visits
+    const initialReport = await MonthlyExcessHoursService.getOrGenerateMonthlyReport("2026-11", { forceRefresh: true });
+    assert.equal(initialReport.items[0].completedVisits, 0);
+    assert.equal(initialReport.items[0].totalHoursUsed, 0.0);
+
+    // Step 2: Employee completes a visit
+    const visitDate = parseISTDateTimeToUTC("2026-11-20", "10:00");
+    mockDb._data.careVisits.push({
+      id: "v_recon_completed",
+      careCaseId: caseId,
+      status: "COMPLETED",
+      occurrenceType: "ADHOC",
+      scheduledStart: visitDate,
+      scheduledEnd: parseISTDateTimeToUTC("2026-11-20", "12:30"),
+      actualStart: visitDate,
+      actualEnd: parseISTDateTimeToUTC("2026-11-20", "12:30"), // 2.5 hrs
+    });
+
+    // Step 3: Trigger auto-reconciliation
+    await MonthlyExcessHoursService.reconcileVisitMonth(visitDate);
+
+    // Step 4: Verify report in database is updated automatically without forceRefresh!
+    const refreshedReport = await MonthlyExcessHoursService.getOrGenerateMonthlyReport("2026-11", { forceRefresh: false });
+    const reconItem = refreshedReport.items[0];
+    assert.equal(reconItem.completedVisits, 1, "Report must automatically reflect completed visit");
+    assert.equal(reconItem.totalHoursUsed, 2.5, "Total hours used must automatically update to 2.5 hrs");
+    assert.equal(reconItem.remainingHours, 7.5, "Remaining hours must automatically update to 7.5 hrs");
   });
 
   console.log("\n================================================================================");

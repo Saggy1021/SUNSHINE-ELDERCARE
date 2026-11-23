@@ -9,13 +9,15 @@
  * 5. Deterministic remaining care hours calculation: Math.max(0, Monthly Entitlement - Total Hours Used).
  * 6. Historical statement preservation: snapshots stored in MonthlyCareHoursReport & MonthlyCareHoursStatementItem
  *    so management can revisit previous months without retroactively altering past statements.
- * 7. Live continuous monitoring throughout the month.
- * 8. One-click CSV and PDF-ready formatting.
- * 9. Non-billing enforcement: strictly for management review, zero automated invoicing or payment requests.
+ * 7. Automatic open-month reconciliation when visits are completed by employees or updated by admins.
+ * 8. Comprehensive support for all visit types: RECURRING, ADHOC, and replacement visits.
+ * 9. Strict exclusion of CODE RED / Emergency visits from regular included care hour quotas.
+ * 10. One-click CSV and PDF-ready formatting.
+ * 11. Non-billing enforcement: strictly for management review, zero automated invoicing or payment requests.
  */
 
 import { db as defaultDb } from "@/lib/db";
-import { parseISTDateTimeToUTC, formatDateKey, formatTimeIST } from "@/components/admin/schedule/schedule-date-utils";
+import { parseISTDateTimeToUTC, formatDateKey, formatTimeIST, getKolkataDateParts } from "@/components/admin/schedule/schedule-date-utils";
 
 let activeDb: any = defaultDb;
 
@@ -29,6 +31,7 @@ export function getMonthlyHoursDb(): typeof defaultDb {
 
 export interface VisitDrilldownItem {
   visitId: string;
+  occurrenceType: string; // "RECURRING" | "ADHOC" | "REPLACEMENT"
   dateKey: string;
   scheduledTime: string;
   actualArrival: string | null;
@@ -98,13 +101,12 @@ export function getMonthBoundsIST(monthKey: string): {
   }
 
   const startDayStr = `${year}-${String(month).padStart(2, "0")}-01`;
-  // Determine days in month
   const daysInMonth = new Date(year, month, 0).getDate();
   const endDayStr = `${year}-${String(month).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`;
 
   // Start of month at 00:00:00 IST
   const startUTC = parseISTDateTimeToUTC(startDayStr, "00:00");
-  // End of month at 23:59:59.999 IST (23:59 IST + 59.999s)
+  // End of month at 23:59:59.999 IST
   const endUTCMidnight = parseISTDateTimeToUTC(endDayStr, "23:59");
   const endUTC = new Date(endUTCMidnight.getTime() + 59 * 1000 + 999);
 
@@ -121,8 +123,8 @@ export function getMonthBoundsIST(monthKey: string): {
 
 /**
  * Resolves standard care package monthly entitlement hours.
+ * - Semi Shield Shine: 5 hrs (checked first)
  * - Shield Shine: 10 hrs
- * - Semi Shield Shine: 5 hrs
  * - Life Line Care: 0 hrs
  * - Custom Plans: parsed from metadata or description, or 0.
  */
@@ -188,7 +190,6 @@ export function resolvePackageEntitlement(params: {
     }
   }
 
-  // Default fallback
   return {
     entitlementHours: 0.0,
     packageName: rawName || "General Membership",
@@ -234,7 +235,7 @@ export function calculateVisitActualDuration(visit: {
   if (startMs !== null && endMs !== null && endMs > startMs) {
     const diffMs = endMs - startMs;
     const durationMinutes = Math.round(diffMs / 60000);
-    // Round to 1 decimal place (e.g. 1.5 hrs, 2.5 hrs)
+    // Round to 1 decimal place (e.g. 1.5 hrs, 2.5 hrs, 3.0 hrs)
     const durationHours = Math.round((diffMs / 3600000) * 10) / 10;
     return { durationMinutes, durationHours };
   }
@@ -251,12 +252,109 @@ export function calculateVisitActualDuration(visit: {
 export class MonthlyExcessHoursService {
   /**
    * Calculates live statement data across all members for a given month.
+   * Pulls all completed care visits directly from the database and maps them
+   * accurately to members via elder and subscription relations.
    */
   public static async calculateLiveMonthlyStatement(monthKey: string): Promise<MonthlyReportSummary> {
     const db = getMonthlyHoursDb();
     const { startUTC, endUTC, year, month, monthLabel } = getMonthBoundsIST(monthKey);
 
-    // 1. Fetch all members with their profiles, user, elders, cases, and subscriptions
+    // 1. Fetch all completed visits within the month window
+    const completedVisits = await db.careVisit.findMany({
+      where: {
+        status: { in: ["COMPLETED", "RESOLVED"] },
+        OR: [
+          { scheduledStart: { gte: startUTC, lte: endUTC } },
+          { actualStart: { gte: startUTC, lte: endUTC } },
+          { completedAt: { gte: startUTC, lte: endUTC } },
+        ],
+      },
+      include: {
+        assignedEmp: true,
+        careCase: {
+          include: {
+            elder: {
+              include: {
+                user: {
+                  include: { memberProfile: true },
+                },
+              },
+            },
+            subscription: {
+              include: {
+                user: {
+                  include: { memberProfile: true },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { scheduledStart: "asc" },
+    });
+
+    // 2. Index completed visits by Member ID and User ID
+    // Map: memberKey -> VisitDrilldownItem[]
+    const memberVisitsMap = new Map<string, VisitDrilldownItem[]>();
+    const seenVisitIds = new Set<string>();
+
+    for (const v of completedVisits) {
+      if (seenVisitIds.has(v.id)) continue;
+      seenVisitIds.add(v.id);
+
+      // Business Rule: CODE RED and Emergency visits must follow their separate entitlement treatment.
+      const isEmergency =
+        v.occurrenceType === "EMERGENCY" ||
+        v.operationalNotes?.includes("[CODE RED]") ||
+        v.operationalNotes?.includes("[Emergency]") ||
+        (v as any).isEmergency === true;
+
+      if (isEmergency) continue;
+
+      const duration = calculateVisitActualDuration(v);
+      if (duration.durationHours <= 0) continue;
+
+      const schedIST = formatTimeIST(v.scheduledStart);
+      const arrivalIST = v.actualStart ? formatTimeIST(v.actualStart) : null;
+      const departureIST = v.actualEnd ? formatTimeIST(v.actualEnd) : null;
+
+      const elder = v.careCase?.elder;
+      const elderUser = elder?.user;
+      const subUser = v.careCase?.subscription?.user;
+
+      const elderName = elder ? `${elder.firstName} ${elder.lastName}`.trim() : "Member";
+
+      const drilldownItem: VisitDrilldownItem = {
+        visitId: v.id,
+        occurrenceType: v.originalVisitId ? "REPLACEMENT" : (v.occurrenceType || "RECURRING"),
+        dateKey: formatDateKey(v.scheduledStart),
+        scheduledTime: schedIST,
+        actualArrival: arrivalIST,
+        actualDeparture: departureIST,
+        durationMinutes: duration.durationMinutes,
+        durationHours: duration.durationHours,
+        caregiver: v.assignedEmp ? `${v.assignedEmp.firstName} ${v.assignedEmp.lastName}` : "Unassigned Staff",
+        elderName,
+        status: v.status,
+        workDescription: v.workDescription,
+      };
+
+      // Match keys
+      const keysToRegister = new Set<string>();
+      if (elder?.userId) keysToRegister.add(elder.userId);
+      if (v.careCase?.subscription?.userId) keysToRegister.add(v.careCase.subscription.userId);
+      if (elderUser?.memberProfile?.memberId) keysToRegister.add(elderUser.memberProfile.memberId);
+      if (subUser?.memberProfile?.memberId) keysToRegister.add(subUser.memberProfile.memberId);
+      if (elderUser?.id) keysToRegister.add(elderUser.id);
+      if (subUser?.id) keysToRegister.add(subUser.id);
+
+      for (const k of keysToRegister) {
+        if (!memberVisitsMap.has(k)) memberVisitsMap.set(k, []);
+        memberVisitsMap.get(k)!.push(drilldownItem);
+      }
+    }
+
+    // 3. Fetch all enrolled member profiles with active subscriptions
     const members = await db.memberProfile.findMany({
       include: {
         user: {
@@ -278,27 +376,9 @@ export class MonthlyExcessHoursService {
                         customPlan: true,
                       },
                     },
-                    visits: {
-                      where: {
-                        status: { in: ["COMPLETED", "RESOLVED"] },
-                        OR: [
-                          { scheduledStart: { gte: startUTC, lte: endUTC } },
-                          { actualStart: { gte: startUTC, lte: endUTC } },
-                          { completedAt: { gte: startUTC, lte: endUTC } },
-                        ],
-                      },
-                      include: {
-                        assignedEmp: true,
-                        careCase: {
-                          include: { elder: true },
-                        },
-                      },
-                      orderBy: { scheduledStart: "asc" },
-                    },
                   },
                 },
               },
-              orderBy: { createdAt: "asc" },
             },
             subscriptions: {
               where: {
@@ -337,7 +417,6 @@ export class MonthlyExcessHoursService {
       // Resolve applicable active subscription
       let activeSub = user?.subscriptions?.[0] || null;
 
-      // If user has care cases with subscriptions, check those as well
       if (!activeSub && user?.elders) {
         for (const elder of user.elders) {
           for (const c of elder.cases) {
@@ -359,37 +438,16 @@ export class MonthlyExcessHoursService {
         customMetadata: activeSub?.customPlan?.metadata || null,
       });
 
-      // Collect all completed visits for this member in this month
+      // Retrieve matched visits for this member (by memberId or userId)
+      const matchedVisitsRaw = memberVisitsMap.get(memberId) || (user?.id ? memberVisitsMap.get(user.id) : null) || [];
+
+      // Deduplicate visits by visitId
       const memberVisits: VisitDrilldownItem[] = [];
-      const seenVisitIds = new Set<string>();
-
-      if (user?.elders) {
-        for (const elder of user.elders) {
-          for (const c of elder.cases) {
-            for (const v of c.visits) {
-              if (seenVisitIds.has(v.id)) continue;
-              seenVisitIds.add(v.id);
-
-              const duration = calculateVisitActualDuration(v);
-              const schedIST = formatTimeIST(v.scheduledStart);
-              const arrivalIST = v.actualStart ? formatTimeIST(v.actualStart) : null;
-              const departureIST = v.actualEnd ? formatTimeIST(v.actualEnd) : null;
-
-              memberVisits.push({
-                visitId: v.id,
-                dateKey: formatDateKey(v.scheduledStart),
-                scheduledTime: schedIST,
-                actualArrival: arrivalIST,
-                actualDeparture: departureIST,
-                durationMinutes: duration.durationMinutes,
-                durationHours: duration.durationHours,
-                caregiver: v.assignedEmp ? `${v.assignedEmp.firstName} ${v.assignedEmp.lastName}` : "Unassigned Staff",
-                elderName: `${elder.firstName} ${elder.lastName}`.trim(),
-                status: v.status,
-                workDescription: v.workDescription,
-              });
-            }
-          }
+      const seenMemberVisitIds = new Set<string>();
+      for (const mv of matchedVisitsRaw) {
+        if (!seenMemberVisitIds.has(mv.visitId)) {
+          seenMemberVisitIds.add(mv.visitId);
+          memberVisits.push(mv);
         }
       }
 
@@ -461,6 +519,7 @@ export class MonthlyExcessHoursService {
 
   /**
    * Retrieves preserved monthly report from database, or generates live if not yet saved.
+   * If it is the current open month, automatically recalculates with latest completed visits.
    */
   public static async getOrGenerateMonthlyReport(
     monthKey: string,
@@ -468,6 +527,11 @@ export class MonthlyExcessHoursService {
   ): Promise<MonthlyReportSummary> {
     const db = getMonthlyHoursDb();
     const { forceRefresh = false, saveSnapshot = false } = options;
+
+    const now = new Date();
+    const nowParts = getKolkataDateParts(now);
+    const currentMonthKey = `${nowParts.year}-${String(nowParts.month).padStart(2, "0")}`;
+    const isOpenMonth = monthKey === currentMonthKey;
 
     // Check for existing saved report in database
     const existing = await db.monthlyCareHoursReport.findUnique({
@@ -482,8 +546,9 @@ export class MonthlyExcessHoursService {
       },
     });
 
-    // If report exists and we are not forcing refresh, return preserved report!
-    if (existing && !forceRefresh) {
+    // If it is a past closed month (not open month) and not forcing refresh:
+    // Return the preserved historical snapshot!
+    if (existing && !isOpenMonth && !forceRefresh) {
       const items: MemberMonthlyStatementData[] = existing.items.map((item: any) => ({
         memberId: item.memberId,
         memberName: item.memberName,
@@ -522,13 +587,13 @@ export class MonthlyExcessHoursService {
       };
     }
 
-    // Calculate live data
+    // For current open month OR if no snapshot exists OR if forceRefresh requested:
+    // Calculate live statement from actual completed visits!
     const liveReport = await this.calculateLiveMonthlyStatement(monthKey);
 
-    // Save snapshot if requested or if past month
-    if (saveSnapshot || (existing && forceRefresh)) {
-      await this.saveMonthlyReportSnapshot(liveReport, existing?.status === "FINALIZED" ? "FINALIZED" : "ACTIVE");
-    }
+    // Save/update snapshot in database so data is always synchronized
+    const targetStatus = isOpenMonth ? "ACTIVE" : (existing?.status === "FINALIZED" ? "FINALIZED" : "ACTIVE");
+    await this.saveMonthlyReportSnapshot(liveReport, targetStatus);
 
     return liveReport;
   }
@@ -609,6 +674,39 @@ export class MonthlyExcessHoursService {
   }
 
   /**
+   * Automatically reconciles the monthly statement when a visit is completed or modified.
+   * Idempotent and concurrency-safe.
+   */
+  public static async reconcileVisitMonth(visitDate: Date | string): Promise<void> {
+    const d = typeof visitDate === "string" ? new Date(visitDate) : visitDate;
+    if (isNaN(d.getTime())) return;
+
+    const { year, month } = getKolkataDateParts(d);
+    const monthKey = `${year}-${String(month).padStart(2, "0")}`;
+
+    const now = new Date();
+    const { year: curYear, month: curMonth } = getKolkataDateParts(now);
+    const currentMonthKey = `${curYear}-${String(curMonth).padStart(2, "0")}`;
+
+    const db = getMonthlyHoursDb();
+    const existing = await db.monthlyCareHoursReport.findUnique({
+      where: { monthKey },
+      select: { id: true, status: true },
+    });
+
+    // Reconcile if it is current open month, OR if report does not exist, OR if status is ACTIVE
+    const canReconcile = monthKey === currentMonthKey || !existing || existing.status !== "FINALIZED";
+
+    if (canReconcile) {
+      const liveReport = await this.calculateLiveMonthlyStatement(monthKey);
+      await this.saveMonthlyReportSnapshot(
+        liveReport,
+        existing?.status === "FINALIZED" && monthKey !== currentMonthKey ? "FINALIZED" : "ACTIVE"
+      );
+    }
+  }
+
+  /**
    * Finalizes a monthly statement (end of month consolidation).
    */
   public static async finalizeMonthlyStatement(monthKey: string, adminUserId?: string): Promise<MonthlyReportSummary> {
@@ -653,7 +751,6 @@ export class MonthlyExcessHoursService {
       escapeCell(item.hasExcess ? "EXCEEDED" : "WITHIN ENTITLEMENT"),
     ]);
 
-    // Add summary banner at bottom
     const summaryRows = [
       [],
       ["SUMMARY STATISTICS", "", "", "", "", "", "", "", "", ""],
@@ -692,7 +789,6 @@ export class MonthlyExcessHoursService {
     const now = new Date();
     const months: Array<{ monthKey: string; monthLabel: string; isSaved: boolean; status?: string }> = [];
 
-    // Last 12 months up to current
     for (let i = 0; i < 12; i++) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const year = d.getFullYear();

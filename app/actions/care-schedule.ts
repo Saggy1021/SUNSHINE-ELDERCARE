@@ -18,6 +18,7 @@ import {
   BirthdayCalendarPayload,
   BirthdayEntry,
 } from "@/lib/services/birthday-calendar";
+import { MonthlyExcessHoursService } from "@/lib/services/monthly-excess-hours";
 
 export interface ScheduleVisitDTO {
   id: string;
@@ -1663,6 +1664,15 @@ export async function updateCareVisitDetails(
 
     revalidatePath("/admin/schedule");
     revalidatePath("/admin/care");
+
+    // Automatically reconcile monthly excess care hours statement
+    if (dataToUpdate.status === "COMPLETED" || existing.status === "COMPLETED") {
+      const targetDate = dataToUpdate.scheduledStart || existing.scheduledStart || dataToUpdate.actualStart || existing.actualStart || new Date();
+      await MonthlyExcessHoursService.reconcileVisitMonth(targetDate).catch((e) => {
+        console.error("[updateCareVisitDetails] MonthlyExcessHours reconciliation error:", e);
+      });
+    }
+
     return { success: true };
   } catch (err: any) {
     console.error("[updateCareVisitDetails] Error:", err);
@@ -1797,6 +1807,15 @@ export async function rescheduleCareVisit(
 
     revalidatePath("/admin/schedule");
     revalidatePath("/admin/care");
+
+    // Automatically reconcile monthly excess care hours statement
+    if (existing.status === "COMPLETED") {
+      const targetDate = start || existing.scheduledStart || existing.actualStart || new Date();
+      await MonthlyExcessHoursService.reconcileVisitMonth(targetDate).catch((e) => {
+        console.error("[rescheduleCareVisit] MonthlyExcessHours reconciliation error:", e);
+      });
+    }
+
     return { success: true };
   } catch (err: any) {
     console.error("[rescheduleCareVisit] Error:", err);
@@ -1860,6 +1879,15 @@ export async function updateCareVisitStatus(
 
     revalidatePath("/admin/schedule");
     revalidatePath("/admin/care");
+
+    // Automatically reconcile monthly excess care hours statement
+    if (newStatus === "COMPLETED" || existing.status === "COMPLETED") {
+      const targetDate = dataToUpdate.scheduledStart || existing.scheduledStart || dataToUpdate.actualStart || existing.actualStart || new Date();
+      await MonthlyExcessHoursService.reconcileVisitMonth(targetDate).catch((e) => {
+        console.error("[updateCareVisitStatus] MonthlyExcessHours reconciliation error:", e);
+      });
+    }
+
     return { success: true };
   } catch (err: any) {
     console.error("[updateCareVisitStatus] Error:", err);
@@ -1959,6 +1987,15 @@ export async function cancelCareVisit(
 
     revalidatePath("/admin/schedule");
     revalidatePath("/admin/care");
+
+    // Automatically reconcile monthly excess care hours statement if a completed visit is cancelled
+    if (existing.status === "COMPLETED") {
+      const targetDate = existing.scheduledStart || existing.actualStart || new Date();
+      await MonthlyExcessHoursService.reconcileVisitMonth(targetDate).catch((e) => {
+        console.error("[cancelCareVisit] MonthlyExcessHours reconciliation error:", e);
+      });
+    }
+
     return { success: true };
   } catch (err: any) {
     console.error("[cancelCareVisit] Error:", err);

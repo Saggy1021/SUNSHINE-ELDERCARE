@@ -7,6 +7,7 @@ import {
   formatTime12HourIST,
   formatDateIST,
 } from "@/lib/services/employee-visit-formatter";
+import { MonthlyExcessHoursService } from "@/lib/services/monthly-excess-hours";
 
 function parseToDate(input: string, baseDate: Date): Date | null {
   if (!input) return null;
@@ -153,6 +154,13 @@ export async function PATCH(
       data: dataToUpdate,
       include: careVisitEmployeeIncludes,
     });
+
+    if (updated.status === "COMPLETED" || visit.status === "COMPLETED") {
+      const targetDate = updated.scheduledStart || updated.actualStart || new Date();
+      await MonthlyExcessHoursService.reconcileVisitMonth(targetDate).catch((e) => {
+        console.error("[update-actual-time] MonthlyExcessHours reconciliation error:", e);
+      });
+    }
 
     return NextResponse.json({
       success: true,
